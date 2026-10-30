@@ -1,0 +1,74 @@
+# M7 UI 打磨记录
+
+> 日期：2026-10-31 · 结论：**完成**。图标、空态、动效、密度与文案统一到系统风格；视觉判断仍需人眼，自动化只能守住"不跑偏"的底线。
+> 对应策划：`doc/策划.md` §12 M7。
+
+---
+
+## 1. 图标
+
+系统图标库（`@deepseek-ai/dsh-client-ui-primitives`）里有 `IconPlayOutlineRegular`、`IconStopFillRegular`、`IconRefreshOutlineRegular`、`IconWarningOutlineRegular`，但**没有直接 import**：
+
+- 我们的客户端是懒 CJS，顶层 `require` 一旦在某运行时里解析不到，整个 bundle 都会挂（`defineTool` 那边已经吃过一次"解析不到"的亏）。
+- `dsh-better-sidebar` 对库里没有的字形也是自己画 SVG，沿用同一做法风险最低。
+
+`src/client/icons.js` 手绘了四个 16px 字形：播放、停止、刷新、警告。统一 1.5 描边、`currentColor`、`aria-hidden`，与系统图标同一套视觉语言。将来要换成官方图标，只需替换这一个文件。
+
+## 2. 空态与骨架
+
+| 位置 | 之前 | 现在 |
+|---|---|---|
+| 浮层首扫 | 一行"正在扫描…" | 三条灰条骨架 + 提示 |
+| 详情页无工程 | 一行文字 | 骨架（扫描中）或说明（扫完没找到） |
+| 日志标签加载中 | 空 `<pre>` | 骨架 + "正在读取日志…" |
+
+骨架用 `--dsw-alias-interactive-bg-hover` 铺底，不写死任何色值。
+
+## 3. 动效
+
+- 浮层：`translateY(-4px) → 0` 淡入，120ms。
+- 运行状态点：`opacity 1 → .45 → 1` 呼吸，1.6s；只在"有实例在跑"时挂 `data-pulse="true"`。
+- 按钮/选项：背景、文字、描边 120ms 过渡。
+- `@media (prefers-reduced-motion: reduce)` 里全部关掉（动画与过渡）。
+
+## 4. 密度与文案
+
+- 胶囊目标名在窄窗口截断，完整路径留在 tooltip。
+- 徽标高度 20、按钮 24、选项行 22，与系统控件标尺一致。
+- 文案去内部术语：
+  - "推测" → **未验证**（tooltip 写"按 loader 惯例推测，尚未验证"）
+  - "暂未看到就绪标记" → **还没看到启动信号，可能仍在构建**
+  - 警告列表改为图标 + 文本，不再用 `·` 开头。
+
+## 5. 验证
+
+```
+node --test "test/*.test.js"   → 49 passed
+```
+
+其中样式护栏（`test/styles.test.js`）继续守住"颜色必须引用 `--dsw-*`、字号必须引用 `--dsw-font-*`"；新增的动画/骨架/过渡没有引入任何字面色值。
+
+运行时冒烟（m0test profile）：
+
+```
+[mcdev] client: apply {}
+[mcdev] client: capsule.registered {}
+[mcdev] client: tab.type.registered {}
+[mcdev] client: detail.body.registered {}
+[mcdev] client: logs.body.registered {}
+[mcdev] client: capsule.mounted {}
+[mcdev] projects.scan C:\Projects\minecraft-dev-starter\test → 6 个工程（8 个目录）
+```
+
+没有 `factory.error`，说明新增模块与图标不影响加载。
+
+## 6. 已知限制
+
+1. **视觉判断只能靠人眼**：本轮只做了结构性的统一，配色/间距是否符合你的审美，需要你看一眼。
+2. **没有动画的"进入/退出"不对称**：浮层关闭是瞬间消失。做退出动画要维护卸载状态，成本比收益高，先不做。
+3. **图标是自绘的**：字形与系统图标在细节笔画上可能略有差异（比如播放三角的圆角）。
+
+## 7. 后续（可选）
+
+- M6 通用启动器（HMCL 实例库 + 直启 java）。
+- 挂到 desktop profile 真机验证（需重启 DSH，会中断当前会话）。

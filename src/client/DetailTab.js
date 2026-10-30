@@ -8,7 +8,9 @@
 import { useEffect } from 'react'
 import { h } from './h.js'
 import { kindLabel, loaderLabel, projectSubtitle, projectTitle, text } from './format.js'
+import { IconWarning } from './icons.js'
 import { capsuleText, selectedTarget } from './selection.js'
+import { Skeleton } from './Skeleton.js'
 import { openLogTab } from './runtime.js'
 import {
   loadScan,
@@ -43,7 +45,9 @@ export function DetailTab() {
       'div',
       { className: 'mcdev-detail' },
       h('div', { className: 'mcdev-title' }, 'MC 工程'),
-      h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, state.loading ? '正在扫描工作区…' : '当前工作区没有识别到 MC 工程'),
+      state.loading
+        ? h(Skeleton, { rows: 4, hint: '正在扫描工作区…' })
+        : h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, '当前工作区没有识别到 MC 工程'),
       state.error === undefined ? undefined : h('div', { className: 'mcdev-error', style: { marginTop: 8 } }, state.error),
     )
   }
@@ -106,7 +110,7 @@ export function DetailTab() {
           ]
         : [
             row('实例', `${running.id} · ${running.taskPath}`),
-            row('状态', `${running.status === 'starting' ? '启动中' : '运行中'}${running.readyTimedOut === true ? '（暂未看到就绪标记）' : ''}`),
+            row('状态', `${running.status === 'starting' ? '启动中' : '运行中'}${running.readyTimedOut === true ? '（还没看到启动信号，可能仍在构建）' : ''}`),
             row('PID', text(running.pid)),
             h(
               'div',
@@ -180,7 +184,14 @@ export function DetailTab() {
     warnings.length === 0 && conflicts.length === 0
       ? undefined
       : section('提示', [
-          ...warnings.map((warning, index) => h('div', { key: `w${index}`, className: 'mcdev-warn' }, `· ${warning}`)),
+          ...warnings.map((warning, index) =>
+            h(
+              'div',
+              { key: `w${index}`, className: 'mcdev-warn mcdev-icon-text' },
+              h('span', { className: 'mcdev-icon' }, h(IconWarning, undefined)),
+              warning,
+            ),
+          ),
           ...conflicts.map((conflict, index) => h('div', { key: `c${index}`, className: 'mcdev-error' }, `· ${conflict}`)),
         ]),
 

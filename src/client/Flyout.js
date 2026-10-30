@@ -8,7 +8,9 @@
 
 import { h } from './h.js'
 import { kindLabel, projectSubtitle, projectTitle } from './format.js'
+import { IconRefresh } from './icons.js'
 import { groupByModule, selectedTarget, targetKey } from './selection.js'
+import { Skeleton } from './Skeleton.js'
 import { activeLaunchFor, loadScan, selectTarget, store, useLaunches, useStoreState } from './state.js'
 import { openDetailTab } from './runtime.js'
 
@@ -24,13 +26,20 @@ export function Flyout() {
       'div',
       { className: 'mcdev-row', style: { justifyContent: 'space-between', alignItems: 'center' } },
       h('span', { className: 'mcdev-title' }, '工作区 MC 工程'),
-      h('button', { type: 'button', className: 'mcdev-link', onClick: () => loadScan({ refresh: true }) }, state.loading ? '扫描中…' : '刷新'),
+      h(
+        'button',
+        { type: 'button', className: 'mcdev-link mcdev-icon-text', onClick: () => loadScan({ refresh: true }) },
+        h('span', { className: 'mcdev-icon' }, h(IconRefresh, undefined)),
+        state.loading ? '扫描中…' : '刷新',
+      ),
     ),
     h('div', { className: 'mcdev-muted mcdev-code' }, state.scan?.root ?? '—'),
     state.error === undefined ? undefined : h('div', { className: 'mcdev-error', style: { marginTop: 6 } }, state.error),
     launches.error === undefined ? undefined : h('div', { className: 'mcdev-error', style: { marginTop: 6 } }, launches.error),
     projects.length === 0 && state.error === undefined
-      ? h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, state.loading ? '正在扫描…' : '没有找到 Gradle 工程')
+      ? state.loading
+        ? h(Skeleton, { rows: 3, hint: '正在扫描工作区…' })
+        : h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, '没有找到 Gradle 工程')
       : undefined,
     projects.map((project) => h(ProjectBlock, { key: project.root, project, launches, selection: state.selection })),
     state.scan?.truncated === true ? h('div', { className: 'mcdev-warn', style: { marginTop: 8 } }, '扫描超出预算，结果可能不全') : undefined,
@@ -66,7 +75,12 @@ function ProjectBlock({ project, launches, selection }) {
     h('div', { className: 'mcdev-sub' }, projectSubtitle(project)),
     running === undefined
       ? undefined
-      : h('div', { className: 'mcdev-status' }, `● ${running.label} ${running.status === 'starting' ? '启动中' : '运行中'} · ${elapsed(running.startedAt)}`),
+      : h(
+          'div',
+          { className: 'mcdev-status' },
+          h('span', { className: 'mcdev-dot', 'data-state': 'ok', 'data-pulse': 'true' }),
+          ` ${running.label} ${running.status === 'starting' ? '启动中' : '运行中'} · ${elapsed(running.startedAt)}`,
+        ),
     targets.length === 0
       ? h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '没有找到可运行目标')
       : h(
@@ -95,7 +109,7 @@ function ProjectBlock({ project, launches, selection }) {
                     onChange: () => selectTarget(project.root, targetKey(target)),
                   }),
                   h('span', { className: 'mcdev-option-label' }, target.label),
-                  target.guessed === true ? h('span', { className: 'mcdev-badge', 'data-guessed': 'true' }, '推测') : undefined,
+                  target.guessed === true ? h('span', { className: 'mcdev-badge', 'data-guessed': 'true', title: '按 loader 惯例推测，尚未验证' }, '未验证') : undefined,
                 )
               }),
             ),

@@ -208,6 +208,45 @@ export const CSS = `
 
 .mcdev-detail { padding: 12px; font: var(--dsw-font-xxs-12); color: var(--dsw-alias-label-primary); }
 .mcdev-stack { display: flex; flex-direction: column; gap: 4px; }
+.mcdev-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.mcdev-icon-text { display: inline-flex; align-items: center; gap: 4px; }
+
+/* 动效：短、克制；系统开了"减少动态效果"就全部关掉 */
+@keyframes mcdev-pop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes mcdev-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.mcdev-flyout { animation: mcdev-pop-in 120ms ease-out; }
+.mcdev-dot[data-pulse="true"] { animation: mcdev-pulse 1.6s ease-in-out infinite; }
+.mcdev-pill,
+.mcdev-run,
+.mcdev-option,
+.mcdev-link { transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease; }
+
+/* 骨架：扫描/加载中的占位，避免一片空白 */
+.mcdev-skeleton { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.mcdev-skeleton-row {
+  height: 10px;
+  border-radius: 3px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  animation: mcdev-pulse 1.4s ease-in-out infinite;
+}
+.mcdev-skeleton-row:nth-child(2) { width: 72%; }
+.mcdev-skeleton-row:nth-child(3) { width: 46%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mcdev-flyout,
+  .mcdev-dot[data-pulse="true"],
+  .mcdev-skeleton-row { animation: none; }
+  .mcdev-pill,
+  .mcdev-run,
+  .mcdev-option,
+  .mcdev-link { transition: none; }
+}
 `
 
 /** 注入一次；重复调用无副作用。 */

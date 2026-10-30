@@ -8,6 +8,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { call } from './api.js'
 import { h } from './h.js'
+import { IconWarning } from './icons.js'
+import { Skeleton } from './Skeleton.js'
 import { loadLaunches, selectedProject, useLaunches } from './state.js'
 
 /** 关掉标签再打开时，尽量回到上次看的那条。 */
@@ -114,11 +116,18 @@ export function LogTab() {
       : h(
           'div',
           { className: 'mcdev-diagnosis' },
-          h('div', { className: 'mcdev-diagnosis-hint' }, log.diagnosis.hint),
+          h(
+            'div',
+            { className: 'mcdev-diagnosis-hint mcdev-icon-text' },
+            h('span', { className: 'mcdev-icon' }, h(IconWarning, undefined)),
+            log.diagnosis.hint,
+          ),
           h('div', { className: 'mcdev-hint mcdev-code' }, log.diagnosis.line),
         ),
     log?.error === undefined
-      ? h('pre', { ref: body, className: 'mcdev-logs mcdev-logs-full' }, (log?.lines ?? []).join('\n') || '（还没有输出）')
+      ? log === undefined && running
+        ? h(Skeleton, { rows: 4, hint: '正在读取日志…' })
+        : h('pre', { ref: body, className: 'mcdev-logs mcdev-logs-full' }, (log?.lines ?? []).join('\n') || '（还没有输出）')
       : h('div', { className: 'mcdev-error', style: { marginTop: 8 } }, log.error),
     h(
       'div',

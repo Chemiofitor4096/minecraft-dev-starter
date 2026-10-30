@@ -7,6 +7,7 @@
 
 import { useEffect, useRef } from 'react'
 import { h } from './h.js'
+import { IconPlay, IconStop } from './icons.js'
 import { report } from './debug.js'
 import { capsuleText, selectedTarget } from './selection.js'
 import {
@@ -66,7 +67,7 @@ export function Capsule() {
       h(
         'button',
         { type: 'button', className: 'mcdev-pill', title, onClick: () => store.set({ flyoutOpen: !state.flyoutOpen }) },
-        h('span', { className: 'mcdev-dot', 'data-state': tone }),
+        h('span', { className: 'mcdev-dot', 'data-state': tone, 'data-pulse': running === undefined ? 'false' : 'true' }),
         h('span', { className: 'mcdev-pill-text' }, label),
       ),
       running === undefined
@@ -81,7 +82,7 @@ export function Capsule() {
                 if (project !== undefined && target !== undefined) void startTarget(project, target)
               },
             },
-            '▶',
+            h('span', { className: 'mcdev-icon' }, h(IconPlay, undefined)),
           )
         : h(
             'button',
@@ -93,7 +94,7 @@ export function Capsule() {
               title: `停止 ${running.taskPath}`,
               onClick: () => void stopLaunch(running.id),
             },
-            '⏹',
+            h('span', { className: 'mcdev-icon' }, h(IconStop, undefined)),
           ),
     ),
     state.flyoutOpen ? h(Flyout) : undefined,
