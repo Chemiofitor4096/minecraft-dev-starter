@@ -51,6 +51,7 @@ export const CSS = `
   background: var(--dsw-alias-label-tertiary);
 }
 .mcdev-dot[data-state="ok"] { background: var(--dsw-alias-state-success-primary); }
+.mcdev-dot[data-state="warn"] { background: var(--dsw-alias-state-warn-primary); }
 .mcdev-dot[data-state="error"] { background: var(--dsw-alias-state-error-primary); }
 
 /* 浮层：三层结构（表头 / 列表 / 选择区），选工程时列表高度不变 */

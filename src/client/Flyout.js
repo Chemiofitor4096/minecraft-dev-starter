@@ -99,8 +99,12 @@ export function Flyout() {
                   : h(
                       'span',
                       { className: 'mcdev-inline-status' },
-                      h('span', { className: 'mcdev-dot', 'data-state': 'ok', 'data-pulse': 'true' }),
-                      `${running.label} 运行中 · ${elapsed(running.startedAt)}`,
+                      h('span', {
+                        className: 'mcdev-dot',
+                        'data-state': running.status === 'starting' ? 'warn' : 'ok',
+                        'data-pulse': 'true',
+                      }),
+                      `${running.label} ${running.status === 'starting' ? '启动中' : '运行中'} · ${elapsed(running.startedAt)}`,
                     ),
               ),
               h(

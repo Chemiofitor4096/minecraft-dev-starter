@@ -50,7 +50,15 @@ export function Capsule() {
   const busy = launches.busy !== undefined
   const multipleProjects = (state.scan?.projects?.length ?? 0) > 1
 
-  const tone = running !== undefined ? 'ok' : state.error !== undefined || launches.error !== undefined ? 'error' : project === undefined ? 'idle' : 'ok'
+  // 四种状态：错误（红）、启动中（黄，呼吸）、运行中（绿，呼吸）、空闲（灰）
+  const tone =
+    state.error !== undefined || launches.error !== undefined
+      ? 'error'
+      : running === undefined
+        ? (project === undefined ? 'idle' : 'ok')
+        : running.status === 'starting'
+          ? 'warn'
+          : 'ok'
   const parts = capsuleParts(project, target, { multipleProjects })
   const runningLabel = running === undefined ? undefined : running.label
   const title =

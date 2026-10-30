@@ -81,7 +81,14 @@ export function LogTab() {
   }
 
   const running = log?.status === 'starting' || log?.status === 'running'
-  const tone = log?.error !== undefined ? 'error' : running ? 'ok' : log?.outcome === 'normal' ? 'idle' : 'error'
+  const tone =
+    log?.error !== undefined
+      ? 'error'
+      : running
+        ? (log?.status === 'starting' ? 'warn' : 'ok')
+        : log?.outcome === 'normal'
+          ? 'idle'
+          : 'error'
 
   return h(
     'div',

@@ -32,19 +32,20 @@ async function waitForSettle(api, launchId, timeoutMs, signal) {
 }
 
 /**
- * @param {Record<string, any>} scan
+ * 注意：这里渲染的是工具的**输出值**（紧凑形状，字段是 `targets`），
+ * 不是工程画像（字段是 `runTargets`）。早期版本读错字段，导致"0 个目标"。
+ * @param {{ root: string, projects: Array<Record<string, any>> }} value
  * @returns {string}
  */
-function renderProjects(scan) {
-  const projects = /** @type {Array<Record<string, any>>} */ (scan.projects ?? [])
-  if (projects.length === 0) return `工作区 ${scan.root} 里没有识别到 Minecraft 工程。`
-  const lines = [`工作区 ${scan.root}：${projects.length} 个工程`]
+function renderProjects(value) {
+  const projects = /** @type {Array<Record<string, any>>} */ (value.projects ?? [])
+  if (projects.length === 0) return `工作区 ${value.root} 里没有识别到 Minecraft 工程。`
+  const lines = [`工作区 ${value.root}：${projects.length} 个工程`]
   for (const project of projects) {
-    const targets = /** @type {Array<Record<string, any>>} */ (project.runTargets ?? [])
-    const targetText = targets.length === 0
-      ? '无可运行目标'
-      : targets.map((target) => `${target.module === '.' ? '' : `${target.module}:`}${target.taskPath}${target.guessed === true ? '(推测)' : ''}`).join(', ')
-    lines.push(`- ${project.name} · ${project.loader} ${project.minecraftVersion ?? '?'} · ${targets.length} 个目标：${targetText}`)
+    const targets = /** @type {string[]} */ (project.targets ?? [])
+    lines.push(
+      `- ${project.name} · ${project.loader} ${project.minecraftVersion ?? '?'} · ${targets.length} 个目标：${targets.length === 0 ? '无可运行目标' : targets.join(', ')}`,
+    )
   }
   return lines.join('\n')
 }
@@ -103,7 +104,7 @@ export function applyTools(ctx, deps) {
             root: project.root,
             loader: project.loader,
             minecraftVersion: project.minecraftVersion ?? '',
-            targets: (project.runTargets ?? []).map((target) => target.taskPath),
+            targets: (project.runTargets ?? []).map((target) => `${target.taskPath}${target.guessed === true ? ' (推测)' : ''}`),
           })),
         }
       },
