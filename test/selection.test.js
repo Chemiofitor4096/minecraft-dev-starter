@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { capsuleParts, capsuleSummary, capsuleText, groupByModule, selectedTarget, targetKey } from '../src/client/selection.js'
+import { capsuleParts, capsuleSummary, capsuleText, groupByModule, launchStatusText, pickLogTarget, selectedTarget, targetKey } from '../src/client/selection.js'
 
 const project = {
   root: 'C:\\Projects\\rationality',
@@ -82,4 +82,38 @@ test('胶囊分段：窄的时候省略工程名，目标名保持完整', () =>
     project: undefined,
     target: '未检测到 MC 工程',
   })
+})
+
+// ── 日志标签的跟随 ────────────────────────────────────────────────────
+
+const launches = [
+  { id: 'launch-3', status: 'exited', outcome: 'normal' },
+  { id: 'launch-2', status: 'running', outcome: null },
+  { id: 'launch-1', status: 'exited', outcome: 'killed' },
+]
+
+test('有实例在跑时，日志标签跟它（哪怕用户之前选了旧的）', () => {
+  assert.equal(pickLogTarget(launches, 'launch-1', true), 'launch-2')
+  assert.equal(pickLogTarget(launches, 'launch-3', false), 'launch-2')
+})
+
+test('没有实例在跑：手动选过的保持不变', () => {
+  const idle = launches.filter((entry) => entry.status !== 'running')
+  assert.equal(pickLogTarget(idle, 'launch-1', true), 'launch-1')
+})
+
+test('没有实例在跑且没手动选：保持当前，当前没了就跟最新', () => {
+  const idle = launches.filter((entry) => entry.status !== 'running')
+  assert.equal(pickLogTarget(idle, 'launch-3', false), 'launch-3')
+  assert.equal(pickLogTarget(idle, 'launch-9', false), 'launch-3')
+  assert.equal(pickLogTarget([], undefined, false), undefined)
+})
+
+test('实例状态的中文标签', () => {
+  assert.equal(launchStatusText({ status: 'starting' }), '启动中')
+  assert.equal(launchStatusText({ status: 'running' }), '运行中')
+  assert.equal(launchStatusText({ status: 'unknown' }), '状态未知')
+  assert.equal(launchStatusText({ status: 'exited', outcome: 'killed' }), '已停止')
+  assert.equal(launchStatusText({ status: 'exited', outcome: 'normal' }), '已退出')
+  assert.equal(launchStatusText({ status: 'exited', outcome: 'crashed', exitCode: 1 }), '已退出(1)')
 })

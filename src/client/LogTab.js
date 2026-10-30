@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import { call } from './api.js'
 import { h } from './h.js'
 import { IconRefresh, IconWarning } from './icons.js'
+import { launchStatusText, pickLogTarget } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { loadLaunches, selectedProject, useLaunches } from './state.js'
 
@@ -21,6 +22,7 @@ export function LogTab() {
   const [logId, setLogId] = useState(/** @type {string | undefined} */ (lastLogId))
   const [log, setLog] = useState(/** @type {any} */ (undefined))
   const [follow, setFollow] = useState(true)
+  const [pinned, setPinned] = useState(false)
   const body = useRef(/** @type {HTMLPreElement | null} */ (null))
 
   // 历史按当前工程过滤；工程还没识别出来时退回全部
@@ -28,16 +30,18 @@ export function LogTab() {
   const scoped = launches.list.filter((entry) => projectRoot === undefined || String(entry.root).toLowerCase() === projectRoot)
   const history = scoped.length > 0 ? scoped : launches.list
 
-  // 没有选中时：优先当前运行中的实例，否则最近一条
+  // 跟随：有实例在跑就跟它；用户手动选过就保持；否则跟当前/最新
+  const target = pickLogTarget(history, logId, pinned)
   useEffect(() => {
-    if (logId !== undefined) return
-    const running = history.find((entry) => entry.status === 'starting' || entry.status === 'running')
-    const next = running?.id ?? history[0]?.id
-    if (next !== undefined) {
-      lastLogId = next
-      setLogId(next)
+    if (target === undefined || target === logId) return
+    lastLogId = target
+    setLogId(target)
+    setLog(undefined)
+    // 新实例跑起来时解除手动固定
+    if (history.some((entry) => entry.id === target && (entry.status === 'starting' || entry.status === 'running'))) {
+      setPinned(false)
     }
-  }, [history, logId])
+  }, [target, logId, history])
 
   // 拉日志：运行中的实例每 1.5s 刷一次，结束的不再轮询
   useEffect(() => {
@@ -102,6 +106,8 @@ export function LogTab() {
           className: 'mcdev-select',
           value: logId ?? '',
           onChange: (event) => {
+            // 手动选过就固定住，等下一次有新实例跑起来再自动跟随
+            setPinned(true)
             lastLogId = event.target.value
             setLogId(event.target.value)
             setLog(undefined)
@@ -158,8 +164,8 @@ function optionLabel(entry) {
   const clock = Number.isNaN(time.getTime())
     ? '--:--'
     : `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
-  const state = entry.status === 'running' || entry.status === 'starting' ? '●' : entry.outcome === 'normal' ? '○' : '✕'
-  return `${state} ${entry.label} · ${clock} · ${entry.status}`
+  const mark = entry.status === 'running' || entry.status === 'starting' ? '●' : entry.outcome === 'normal' ? '○' : '✕'
+  return `${mark} ${entry.label} · ${clock} · ${launchStatusText(entry)}`
 }
 
 /**
@@ -169,9 +175,6 @@ function optionLabel(entry) {
  */
 function statusText(log, running) {
   if (log === undefined) return '加载中…'
-  if (log.status === 'starting') return '启动中'
-  if (running) return '运行中'
-  if (log.outcome === 'killed') return '已停止'
-  if (log.outcome === 'normal') return '已退出'
-  return `已退出${log.exitCode === null ? '' : `（退出码 ${log.exitCode}）`}`
+  void running
+  return launchStatusText({ status: log.status, outcome: log.outcome, exitCode: log.exitCode })
 }

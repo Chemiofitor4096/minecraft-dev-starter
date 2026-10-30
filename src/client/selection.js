@@ -88,6 +88,43 @@ export function writeSelection(selection) {
 }
 
 /**
+ * 日志标签应该看哪一条实例。
+ *
+ * 规则（按优先级）：
+ *   1. 有正在跑/启动中的实例 → 永远跟它（点 ▶ 之后最想看的就是这次）；
+ *   2. 用户手动选过（pinned）→ 保持他的选择；
+ *   3. 否则跟当前、再否则跟最新一条。
+ *
+ * 早期版本只在"没选过"时挑一次，于是新启动的实例不会顶上来——
+ * 面板会一直停在旧实例（哪怕它是 0 字节的失败记录）。
+ * @param {Array<Record<string, any>>} history
+ * @param {string | undefined} currentId
+ * @param {boolean} pinned
+ * @returns {string | undefined}
+ */
+export function pickLogTarget(history, currentId, pinned) {
+  const active = history.find((entry) => entry.status === 'starting' || entry.status === 'running')
+  if (active !== undefined) return active.id
+  if (pinned && currentId !== undefined) return currentId
+  if (currentId !== undefined && history.some((entry) => entry.id === currentId)) return currentId
+  return history[0]?.id
+}
+
+/**
+ * 实例状态的中文标签。
+ * @param {Record<string, any>} entry
+ * @returns {string}
+ */
+export function launchStatusText(entry) {
+  if (entry.status === 'starting') return '启动中'
+  if (entry.status === 'running') return '运行中'
+  if (entry.status === 'unknown') return '状态未知'
+  if (entry.outcome === 'killed') return '已停止'
+  if (entry.outcome === 'normal') return '已退出'
+  return entry.exitCode === null || entry.exitCode === undefined ? '已退出' : `已退出(${entry.exitCode})`
+}
+
+/**
  * 胶囊的两段文案。窄的时候应该让"工程名"省略，而不是把目标名截掉——
  * 目标名才是可操作的那部分，工程名只是上下文。
  * @param {Record<string, any> | undefined} project

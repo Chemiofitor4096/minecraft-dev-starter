@@ -32,6 +32,24 @@ async function waitForSettle(api, launchId, timeoutMs, signal) {
 }
 
 /**
+ * mc_launch 的输出值：只放存在的字段（`pid` 可能是 null），保证无损 JSON。
+ * @param {Record<string, any>} record
+ * @param {boolean} timedOut
+ */
+function launchValue(record, timedOut) {
+  /** @type {Record<string, any>} */
+  const value = {
+    id: record.id,
+    status: record.status,
+    taskPath: record.taskPath,
+    logPath: record.logPath,
+    timedOut,
+  }
+  if (typeof record.pid === 'number') value.pid = record.pid
+  return value
+}
+
+/**
  * 注意：这里渲染的是工具的**输出值**（紧凑形状，字段是 `targets`），
  * 不是工程画像（字段是 `runTargets`）。早期版本读错字段，导致"0 个目标"。
  * @param {{ root: string, projects: Array<Record<string, any>> }} value
@@ -149,21 +167,11 @@ export function applyTools(ctx, deps) {
       async execute(args, exec) {
         const record = await api['launch.start']({ root: args.root, taskPath: args.taskPath })
         if (args.wait === 'detach') {
-          return { id: record.id, status: record.status, taskPath: record.taskPath, pid: record.pid ?? undefined, logPath: record.logPath, timedOut: false }
+          return launchValue(record, false)
         }
         const timeoutMs = Number.isFinite(args.timeoutMs) ? Number(args.timeoutMs) : 60_000
         const settled = await waitForSettle(api, record.id, timeoutMs, exec.signal)
-        if (settled === undefined) {
-          return { id: record.id, status: record.status, taskPath: record.taskPath, pid: record.pid ?? undefined, logPath: record.logPath, timedOut: true }
-        }
-        return {
-          id: settled.id,
-          status: settled.status,
-          taskPath: settled.taskPath,
-          pid: settled.pid ?? undefined,
-          logPath: settled.logPath,
-          timedOut: false,
-        }
+        return launchValue(settled ?? record, settled === undefined)
       },
     }),
   )
@@ -214,15 +222,18 @@ export function applyTools(ctx, deps) {
           offset: Number.isFinite(args.offset) ? Number(args.offset) : 0,
           limit: Number.isFinite(args.limit) ? Number(args.limit) : 200,
         })
-        return {
+        // 只放存在字段：工具结果必须是"无损 JSON"，带 undefined 会被注册器整条拒掉
+        /** @type {Record<string, any>} */
+        const value = {
           launchId: result.launchId,
           status: result.status,
-          outcome: result.outcome ?? undefined,
-          exitCode: result.exitCode ?? undefined,
           lines: result.lines ?? [],
           total: result.total ?? 0,
-          diagnosis: result.diagnosis?.hint,
         }
+        if (result.outcome !== null && result.outcome !== undefined) value.outcome = result.outcome
+        if (typeof result.exitCode === 'number') value.exitCode = result.exitCode
+        if (result.diagnosis?.hint !== undefined) value.diagnosis = result.diagnosis.hint
+        return value
       },
     }),
   )
@@ -255,7 +266,10 @@ export function applyTools(ctx, deps) {
           id = current.id
         }
         const record = await api['launch.stop']({ id })
-        return { id: record.id, status: record.status, outcome: record.outcome ?? undefined }
+        /** @type {Record<string, any>} */
+        const value = { id: record.id, status: record.status }
+        if (record.outcome !== null && record.outcome !== undefined) value.outcome = record.outcome
+        return value
       },
     }),
   )
