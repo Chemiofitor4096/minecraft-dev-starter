@@ -28,5 +28,8 @@
     "build": "node scripts/build-client.mjs",
     "build:client": "node scripts/build-client.mjs"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
 }

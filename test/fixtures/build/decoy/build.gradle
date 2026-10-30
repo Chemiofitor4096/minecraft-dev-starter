@@ -1,0 +1,5 @@
+plugins {
+    id 'fabric-loom'
+}
+
+// 这个是干扰项：位于 build/ 下，扫描必须剪掉

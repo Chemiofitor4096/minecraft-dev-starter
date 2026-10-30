@@ -1,0 +1,11 @@
+architectury {
+    platformSetupLoomIde()
+    forge()
+}
+
+loom {
+    accessWidenerPath = project(":common").loom.accessWidenerPath
+    forge {
+        convertAccessWideners = true
+    }
+}

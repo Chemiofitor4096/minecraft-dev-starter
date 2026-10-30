@@ -1,24 +1,23 @@
 /**
- * M0 探针（宿主半边）：证明插件能被 profile 加载、HTTP 路由能被客户端取到，
- * 并且能收回客户端上报的激活结果（不用肉眼看截图也能验证）。
- * 正式实现会在这里挂 ProjectScanner / LaunchService，见 doc/策划.md §5。
+ * 宿主入口：挂 `/mcdev/api` 路由，把请求交给方法表。
+ *
+ * 工作区根从"最近一个活跃会话的 cwd"取——HTTP 请求本身不带会话，
+ * 而模型工具那条路径有 `exec.agent.session.header.cwd`；两条路径最终都落到同一个扫描器。
  * @module minecraft-dev-starter
  */
+
+import { createApi } from './lib/api.js'
 
 /** Cordis 插件名。 */
 export const name = 'mcdev-host'
 
-/** 需要宿主提供 Web 服务（dsh-host-webserver）。 */
-export const inject = ['webServer']
+/** 依赖的宿主服务。 */
+export const inject = ['webServer', 'sessions']
 
-/** 探针版本，客户端会把它显示出来，用来确认两边是同一份代码。 */
-const VERSION = '0.0.1-m0'
-
-/** 客户端上报的最近若干条记录（M0 验证用，正式实现不需要）。 */
-const reports = []
+/** 插件版本；客户端会显示，用来确认两边同一份代码。 */
+const VERSION = '0.1.0'
 
 /**
- * 读请求体（限长）。
  * @param {import('node:http').IncomingMessage} req
  * @returns {Promise<unknown>}
  */
@@ -28,10 +27,10 @@ function readJsonBody(req) {
     req.setEncoding('utf8')
     req.on('data', (chunk) => {
       raw += chunk
-      if (raw.length > 64 * 1024) reject(new Error('body too large'))
+      if (raw.length > 1024 * 1024) reject(new Error('body too large'))
     })
     req.on('end', () => {
-      if (raw.length === 0) return resolve(undefined)
+      if (raw.trim() === '') return resolve(undefined)
       try {
         resolve(JSON.parse(raw))
       } catch (error) {
@@ -43,7 +42,6 @@ function readJsonBody(req) {
 }
 
 /**
- * 写一个 JSON 响应。
  * @param {import('node:http').ServerResponse} res
  * @param {number} status
  * @param {unknown} value
@@ -59,10 +57,31 @@ function writeJson(res, status, value) {
 }
 
 /**
- * 注册探针路由。
+ * 最近一个活跃会话的工作目录。
+ * @param {import('@deepseek-ai/cordis').Context} ctx
+ * @returns {Promise<string | undefined>}
+ */
+async function resolveWorkspaceRoot(ctx) {
+  try {
+    const sessions = ctx.sessions.list()
+    const last = sessions.at(-1)
+    const cwd = last?.header?.cwd
+    if (typeof cwd === 'string' && cwd !== '') return cwd
+  } catch {
+    /* 没有会话服务时退回进程 cwd */
+  }
+  return process.cwd()
+}
+
+/**
  * @param {import('@deepseek-ai/cordis').Context} ctx
  */
 export function apply(ctx) {
+  const api = createApi({
+    version: VERSION,
+    resolveRoot: () => resolveWorkspaceRoot(ctx),
+  })
+
   ctx.effect(
     () =>
       ctx.webServer.register({
@@ -72,34 +91,38 @@ export function apply(ctx) {
           const { pathname } = new URL(req.url ?? '/', 'http://dsh.internal')
 
           if (req.method === 'GET' && pathname === '/mcdev/api/ping') {
-            writeJson(res, 200, {
-              ok: true,
-              version: VERSION,
-              pid: process.pid,
-              at: new Date().toISOString(),
-            })
+            writeJson(res, 200, { ok: true, version: VERSION, pid: process.pid })
+            return
+          }
+          if (req.method !== 'POST') {
+            writeJson(res, 405, { ok: false, error: { code: 'method', message: 'use POST' } })
             return
           }
 
-          // M0 专用：客户端把激活/注册结果回传。
-          if (req.method === 'POST' && pathname === '/mcdev/api/report') {
-            const body = await readJsonBody(req)
-            reports.push({ at: new Date().toISOString(), body })
-            if (reports.length > 20) reports.shift()
-            console.log('[mcdev] client report:', JSON.stringify(body))
-            writeJson(res, 200, { ok: true, stored: reports.length })
+          const method = pathname.startsWith('/mcdev/api/') ? pathname.slice('/mcdev/api/'.length) : ''
+          if (method === '' || method.includes('/')) {
+            writeJson(res, 404, { ok: false, error: { code: 'not-found', message: `unknown method "${method}"` } })
+            return
+          }
+          const handler = Object.hasOwn(api, method) ? api[method] : undefined
+          if (typeof handler !== 'function') {
+            writeJson(res, 404, { ok: false, error: { code: 'not-found', message: `unknown method "${method}"` } })
             return
           }
 
-          if (req.method === 'GET' && pathname === '/mcdev/api/reports') {
-            writeJson(res, 200, { ok: true, reports })
-            return
+          try {
+            const payload = await readJsonBody(req)
+            const result = await handler(payload)
+            writeJson(res, 200, { ok: true, result })
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            console.warn(`[mcdev] ${method} failed: ${message}`)
+            writeJson(res, 500, { ok: false, error: { code: 'internal', message } })
           }
-
-          writeJson(res, 404, { ok: false, error: 'not-found', path: pathname })
         },
       }),
     'mcdev: /mcdev/api routes',
   )
-  console.log(`[mcdev] host half ready (${VERSION}) — GET /mcdev/api/ping`)
+
+  console.log(`[mcdev] host ready (${VERSION}) — /mcdev/api/{projects.scan,projects.detail,state.info}`)
 }

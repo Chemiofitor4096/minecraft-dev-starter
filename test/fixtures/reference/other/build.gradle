@@ -1,0 +1,5 @@
+plugins {
+    id 'net.neoforged.moddev'
+}
+
+// 干扰项：位于 reference/ 下（别人家的参考源码），扫描必须剪掉
