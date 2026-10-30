@@ -27,6 +27,8 @@ export const store = createStore({
   selection: readSelection(),
   /** @type {{ autoOpenLogTab?: boolean }} 宿主下发的部署配置 */
   config: { autoOpenLogTab: true },
+  /** @type {string | undefined} 当前会话的工作区（由胶囊从会话上下文注入） */
+  workspaceRoot: undefined,
 })
 
 /**
@@ -54,16 +56,29 @@ export function selectTarget(root, key) {
 
 /** @type {Promise<unknown> | undefined} */
 let inFlight
+/** @type {string | undefined} */
+let inFlightRoot
 
 /**
- * 拉一次扫描结果。并发调用会复用在途请求。
- * @param {{ refresh?: boolean }} [options]
+ * 拉一次扫描结果。
+ *
+ * `root` 默认取当前会话的工作区（由胶囊从会话上下文里读出来再塞进 store）。
+ * 切会话时 `root` 变了，必须清掉旧结果，否则胶囊会短暂显示上一个工作区的工程。
+ * @param {{ root?: string, refresh?: boolean }} [options]
  * @returns {Promise<void>}
  */
 export async function loadScan(options = {}) {
-  if (inFlight !== undefined) return inFlight
+  const root = options.root ?? store.get().workspaceRoot
+  if (inFlight !== undefined) {
+    if (root === inFlightRoot) return inFlight
+    await inFlight.catch(() => {})
+  }
+  inFlightRoot = root
   store.set({ loading: true, error: undefined })
-  inFlight = call('projects.scan', options.refresh === true ? { refresh: true } : {})
+  inFlight = call('projects.scan', {
+    ...(root === undefined ? {} : { root }),
+    ...(options.refresh === true ? { refresh: true } : {}),
+  })
     .then((result) => {
       const scan = /** @type {NonNullable<ReturnType<typeof store.get>['scan']>} */ (result)
       const current = store.get().selectedRoot
@@ -71,6 +86,7 @@ export async function loadScan(options = {}) {
       store.set({
         loading: false,
         scan,
+        workspaceRoot: scan.root,
         error: undefined,
         selectedRoot: stillThere ? current : scan.projects[0]?.root,
       })
@@ -80,6 +96,7 @@ export async function loadScan(options = {}) {
     })
     .finally(() => {
       inFlight = undefined
+      inFlightRoot = undefined
     })
   return inFlight
 }

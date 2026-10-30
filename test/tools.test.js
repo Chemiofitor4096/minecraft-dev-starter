@@ -17,8 +17,8 @@ function fakeCtx() {
 
 function fakeApi(overrides = {}) {
   return {
-    'projects.scan': async () => ({
-      root: 'C:/p',
+    'projects.scan': async (payload) => ({
+      root: payload?.root ?? 'C:/p',
       truncated: false,
       projects: [
         {
@@ -128,4 +128,32 @@ test('没有活跃实例时给可读错误', async () => {
   const { byName } = build({ 'launch.current': async () => null })
   await assert.rejects(() => byName.mc_launch_logs.execute({}, {}), /没有运行中的实例/)
   await assert.rejects(() => byName.mc_launch_stop.execute({}, {}), /没有运行中的实例/)
+})
+
+// ── 会话工作区 ────────────────────────────────────────────────────────
+
+test('mc_projects 用调用会话的 cwd 当工作区', async () => {
+  const { byName } = build()
+  const value = await byName.mc_projects.execute({}, { agent: { session: { header: { cwd: 'C:/agent' } } } })
+  assert.equal(value.root, 'C:/agent')
+})
+
+test('显式 root 优先于会话 cwd', async () => {
+  const { byName } = build()
+  const value = await byName.mc_projects.execute({ root: 'C:/explicit' }, { agent: { session: { header: { cwd: 'C:/agent' } } } })
+  assert.equal(value.root, 'C:/explicit')
+})
+
+test('省略 id 的工具把会话 cwd 传给宿主', async () => {
+  const seen = []
+  const { byName } = build({
+    'launch.current': async (payload) => {
+      seen.push(payload)
+      return { id: 'launch-1' }
+    },
+  })
+  const exec = { agent: { session: { header: { cwd: 'C:/agent' } } } }
+  await byName.mc_launch_logs.execute({}, exec)
+  await byName.mc_launch_stop.execute({}, exec)
+  assert.deepEqual(seen.map((payload) => payload.root), ['C:/agent', 'C:/agent'])
 })

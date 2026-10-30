@@ -11,6 +11,21 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 
 /**
+ * 工具的工作区根：调用参数优先，其次取**调用它的那个会话**的 cwd。
+ *
+ * 宿主里可能有多个会话、各自的 cwd 不同；用"最近一个会话"当默认会把
+ * 别的会话的工程当成当前工作区。
+ * @param {{ root?: string }} args
+ * @param {{ agent?: any } | undefined} exec
+ * @returns {string | undefined}
+ */
+function agentRoot(args, exec) {
+  if (typeof args.root === 'string' && args.root !== '') return args.root
+  const cwd = exec?.agent?.session?.header?.cwd
+  return typeof cwd === 'string' && cwd !== '' ? cwd : undefined
+}
+
+/**
  * 等实例进入 running 或结束。
  * @param {{ 'launch.list': (payload?: unknown) => Promise<any> }} api
  * @param {string} launchId
@@ -112,8 +127,8 @@ export function applyTools(ctx, deps) {
         },
         render: (_args, value) => [{ type: 'text', text: renderProjects(value) }],
       },
-      async execute(args) {
-        const scan = await api['projects.scan']({ root: args.root, refresh: args.refresh === true })
+      async execute(args, exec) {
+        const scan = await api['projects.scan']({ root: agentRoot(args, exec), refresh: args.refresh === true })
         return {
           root: scan.root,
           truncated: scan.truncated === true,
@@ -165,7 +180,7 @@ export function applyTools(ctx, deps) {
         ],
       },
       async execute(args, exec) {
-        const record = await api['launch.start']({ root: args.root, taskPath: args.taskPath })
+        const record = await api['launch.start']({ root: agentRoot(args, exec), taskPath: args.taskPath })
         if (args.wait === 'detach') {
           return launchValue(record, false)
         }
@@ -210,10 +225,10 @@ export function applyTools(ctx, deps) {
           },
         ],
       },
-      async execute(args) {
+      async execute(args, exec) {
         let id = args.id
         if (id === undefined || id === '') {
-          const current = await api['launch.current']({ root: args.root })
+          const current = await api['launch.current']({ root: agentRoot(args, exec) })
           if (current === null || current === undefined) throw new Error('当前工程没有运行中的实例；请传 id')
           id = current.id
         }
@@ -258,10 +273,10 @@ export function applyTools(ctx, deps) {
         },
         render: (_args, value) => [{ type: 'text', text: `已停止 ${value.id}：${value.status}${value.outcome === undefined ? '' : `/${value.outcome}`}` }],
       },
-      async execute(args) {
+      async execute(args, exec) {
         let id = args.id
         if (id === undefined || id === '') {
-          const current = await api['launch.current']({ root: args.root })
+          const current = await api['launch.current']({ root: agentRoot(args, exec) })
           if (current === null || current === undefined) throw new Error('当前工程没有运行中的实例；请传 id')
           id = current.id
         }

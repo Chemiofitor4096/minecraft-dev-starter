@@ -59,24 +59,37 @@ function writeJson(res, status, value) {
 }
 
 /**
- * 最近一个活跃会话的工作目录。
+ * 活跃会话的工作目录清单。
  *
- * `MCDEV_WORKSPACE` 是测试/固定工作区的逃生门：没有会话、或想把面板钉在某个目录时用它。
+ * 面板切会话时由客户端把 cwd 显式传下来；这里是"没传时"的兜底与启动校验的依据。
+ * `MCDEV_WORKSPACE` 是测试/固定工作区的逃生门。
  * @param {import('@deepseek-ai/cordis').Context} ctx
- * @returns {Promise<string | undefined>}
+ * @returns {string[]}
  */
-async function resolveWorkspaceRoot(ctx) {
+function sessionCwds(ctx) {
   const pinned = process.env.MCDEV_WORKSPACE
-  if (typeof pinned === 'string' && pinned !== '') return pinned
+  if (typeof pinned === 'string' && pinned !== '') return [pinned]
+  /** @type {string[]} */
+  const roots = []
   try {
-    const sessions = ctx.sessions.list()
-    const last = sessions.at(-1)
-    const cwd = last?.header?.cwd
-    if (typeof cwd === 'string' && cwd !== '') return cwd
+    for (const session of ctx.sessions.list()) {
+      const cwd = session?.header?.cwd
+      if (typeof cwd === 'string' && cwd !== '' && !roots.includes(cwd)) roots.push(cwd)
+    }
   } catch {
     /* 没有会话服务时退回进程 cwd */
   }
-  return process.cwd()
+  if (roots.length === 0) roots.push(process.cwd())
+  return roots
+}
+
+/**
+ * 最近一个活跃会话的工作目录（扫描默认值）。
+ * @param {import('@deepseek-ai/cordis').Context} ctx
+ * @returns {string | undefined}
+ */
+function resolveWorkspaceRoot(ctx) {
+  return sessionCwds(ctx).at(-1)
 }
 
 /** 部署配置默认值；patch 行的 `config` 会覆盖同名项。 */
@@ -95,6 +108,7 @@ export function apply(ctx, config = {}) {
   const api = createApi({
     version: VERSION,
     resolveRoot: () => resolveWorkspaceRoot(ctx),
+    resolveRoots: () => sessionCwds(ctx),
     config: { autoOpenLogTab: settings.autoOpenLogTab !== false },
     launchService: createLaunchService({
       readyTimeoutMs: Number(settings.readyTimeoutMs) || DEFAULTS.readyTimeoutMs,

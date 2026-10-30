@@ -1,7 +1,9 @@
 /**
  * 标题栏胶囊：状态点 + 选中目标名 + 一个启停按钮。点名字展开浮层选目标。
  *
- * 只做三件事——告诉人现在选的是哪个目标、它跑没跑、点了会不会动。
+ * 工作区跟着**当前会话**走：会话头 slot 会把 `sessionId` 与 `useSessions` 传给组件，
+ * 我们从中取 cwd 再让宿主按这个目录扫描。早期版本只在挂载时扫一次、且宿主用的是
+ * "最近创建的会话"，于是切会话后胶囊不会同步。
  * @module minecraft-dev-starter/client/Capsule
  */
 
@@ -23,16 +25,50 @@ import {
 } from './state.js'
 import { Flyout } from './Flyout.js'
 
-export function Capsule() {
+/**
+ * 入口：有会话标准工具（sessionId + useSessions）就按会话取 cwd，否则退回宿主默认。
+ * @param {{ sessionId?: string, useSessions?: any }} [props]
+ */
+export function Capsule(props) {
+  if (props?.useSessions === undefined) return h(CapsuleBody, { cwd: undefined })
+  return h(SessionCapsule, props)
+}
+
+/**
+ * 订阅当前会话的 cwd；会话切换时这里会重渲染，把新 root 交给下面的 body。
+ * @param {{ sessionId?: string, useSessions: any }} props
+ */
+function SessionCapsule(props) {
+  const cwd = props.useSessions((state) => state.byId?.[props.sessionId]?.cwd)
+  return h(CapsuleBody, { cwd: typeof cwd === 'string' && cwd !== '' ? cwd : undefined })
+}
+
+/**
+ * @param {{ cwd?: string }} props
+ */
+function CapsuleBody({ cwd }) {
   const state = useStoreState()
   const launches = useLaunches(5000)
   const anchor = useRef(/** @type {HTMLDivElement | null} */ (null))
+  const lastRoot = useRef(/** @type {string | undefined} */ (undefined))
 
   useEffect(() => {
     report('capsule.mounted')
     void loadStateInfo()
-    loadScan()
   }, [])
+
+  // 会话切换 = 工作区切换：清掉上一个工作区的扫描结果再重新扫
+  useEffect(() => {
+    if (cwd === undefined) {
+      if (lastRoot.current === undefined) void loadScan()
+      return
+    }
+    if (lastRoot.current === cwd) return
+    lastRoot.current = cwd
+    store.set({ workspaceRoot: cwd, scan: undefined, selectedRoot: undefined, error: undefined })
+    report('workspace.changed', { root: cwd })
+    void loadScan({ root: cwd, refresh: true })
+  }, [cwd])
 
   useEffect(() => {
     if (!state.flyoutOpen) return undefined
@@ -65,7 +101,7 @@ export function Capsule() {
     launches.error ??
     state.error ??
     (project === undefined
-      ? '没有识别到 MC 工程'
+      ? `没有识别到 MC 工程\n${state.workspaceRoot ?? ''}`
       : `${project.modName ?? project.name}\n${project.root}\n${target === undefined ? '没有可运行目标' : target.taskPath}`)
 
   return h(
