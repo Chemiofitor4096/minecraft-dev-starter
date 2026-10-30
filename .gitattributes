@@ -1,0 +1,8 @@
+* text=auto
+*.md text eol=lf
+*.js text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+.* text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

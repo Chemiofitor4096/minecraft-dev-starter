@@ -1,0 +1,20 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 运行产物
+logs/
+*.log
+.dsh/mc-dev-starter.json
+
+# 测试与临时文件
+coverage/
+.tmp/
+*.tsbuildinfo
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+desktop.ini
