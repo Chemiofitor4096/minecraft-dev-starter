@@ -6,23 +6,36 @@
  * @module minecraft-dev-starter/client/runtime
  */
 
-/** 右侧栏详情标签的 kind；与 index.js 的注册保持同一常量。 */
+/** 右侧栏「MC 工程」详情标签的 kind。 */
 export const DETAIL_KIND = 'mcdev.detail'
+
+/** 右侧栏「运行日志」标签的 kind。 */
+export const LOG_KIND = 'mcdev.logs'
 
 /** @type {{ ctx?: any }} */
 export const runtime = {}
 
 /**
- * 打开右侧栏的工程详情标签（openTab 会顺带展开面板）。
- * @returns {boolean} 是否成功调用
+ * @param {string} kind
+ * @returns {boolean}
  */
-export function openDetailTab() {
+function open(kind) {
   const sidebar = runtime.ctx?.sidebarRight
   if (sidebar === undefined) return false
   try {
-    sidebar.openTab(DETAIL_KIND)
+    sidebar.openTab(kind)
     return true
   } catch {
     return false
   }
+}
+
+/** 打开工程详情标签（openTab 会顺带展开面板）。 */
+export function openDetailTab() {
+  return open(DETAIL_KIND)
+}
+
+/** 打开运行日志标签。 */
+export function openLogTab() {
+  return open(LOG_KIND)
 }

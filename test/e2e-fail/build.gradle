@@ -1,0 +1,12 @@
+plugins {
+    id 'fabric-loom' version '1.10-SNAPSHOT'
+}
+
+// 用来验证崩溃归因：故意构建失败。
+loom {
+    runs {
+        client {
+            client()
+        }
+    }
+}

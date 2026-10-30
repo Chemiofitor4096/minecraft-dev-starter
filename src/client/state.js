@@ -8,6 +8,8 @@
 
 import { useEffect, useState } from 'react'
 import { call } from './api.js'
+import { openLogTab } from './runtime.js'
+import { readSelection, writeSelection } from './selection.js'
 import { createStore } from './store.js'
 
 /** @typedef {{ store: ReturnType<typeof createStore> }} Never */
@@ -21,7 +23,34 @@ export const store = createStore({
   /** @type {string | undefined} */
   selectedRoot: undefined,
   flyoutOpen: false,
+  /** @type {Record<string, string>} 每个工程记住的目标 key */
+  selection: readSelection(),
+  /** @type {{ autoOpenLogTab?: boolean }} 宿主下发的部署配置 */
+  config: { autoOpenLogTab: true },
 })
+
+/**
+ * 拉一次宿主配置（启动时自动打开日志标签等），只取一次。
+ */
+export async function loadStateInfo() {
+  try {
+    const info = await call('state.info', {})
+    store.set({ config: { autoOpenLogTab: true, ...(info?.config ?? {}) } })
+  } catch {
+    /* 拉不到就用默认值 */
+  }
+}
+
+/**
+ * 记住某个工程选中的目标。
+ * @param {string} root
+ * @param {string} key
+ */
+export function selectTarget(root, key) {
+  const selection = { ...store.get().selection, [root]: key }
+  writeSelection(selection)
+  store.set({ selection })
+}
 
 /** @type {Promise<unknown> | undefined} */
 let inFlight
@@ -125,6 +154,8 @@ export async function startTarget(project, target) {
       kind: target.kind,
       module: target.module,
     })
+    // 启动成功就把日志摆到人眼前（部署配置可关）
+    if (store.get().config.autoOpenLogTab !== false) openLogTab()
   } catch (error) {
     launchStore.set({ error: error instanceof Error ? error.message : String(error) })
   } finally {

@@ -13,6 +13,7 @@ export const STYLE_ID = 'mcdev-styles'
 
 export const CSS = `
 .mcdev-anchor { position: relative; display: inline-flex; }
+.mcdev-capsule { display: inline-flex; align-items: center; gap: 4px; }
 
 /* 标题栏胶囊：与系统控件同高同圆角，默认无底色 */
 .mcdev-pill {
@@ -30,6 +31,7 @@ export const CSS = `
   cursor: pointer;
 }
 .mcdev-pill:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.mcdev-pill-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .mcdev-dot {
   width: 7px;
@@ -114,6 +116,25 @@ export const CSS = `
 .mcdev-run:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
 .mcdev-run:disabled { opacity: 0.4; cursor: default; }
 .mcdev-run[data-tone="stop"] { color: var(--dsw-alias-danger); border-color: var(--dsw-alias-danger); }
+.mcdev-run-icon { width: 24px; padding: 0; justify-content: center; }
+
+/* 目标单选列表：一行一个，模块名做小标题 */
+.mcdev-options { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.mcdev-option-group { display: flex; flex-direction: column; gap: 2px; }
+.mcdev-option-module { margin-top: 4px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+.mcdev-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.mcdev-option:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.mcdev-option.is-disabled { opacity: 0.5; cursor: default; }
+.mcdev-radio { margin: 0; accent-color: var(--dsw-alias-accent); }
+.mcdev-option-label { font: var(--dsw-font-xxs-12); }
 
 .mcdev-status { margin-top: 6px; color: var(--dsw-alias-state-success-primary); font: var(--dsw-font-xxxs-11); }
 
@@ -132,6 +153,30 @@ export const CSS = `
   line-height: 1.5;
   white-space: pre-wrap;
 }
+
+/* 运行日志标签：顶部一条控制带，下面是整块日志 */
+.mcdev-logtab { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 8px 10px 10px; }
+.mcdev-log-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 8px; }
+.mcdev-select {
+  height: 24px;
+  max-width: 220px;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxxs-11);
+}
+.mcdev-follow { display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+.mcdev-diagnosis {
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid var(--dsw-alias-state-error-primary);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+.mcdev-diagnosis-hint { color: var(--dsw-alias-state-error-primary); font: var(--dsw-font-xxs-strong-12); }
+.mcdev-logs-full { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0; }
 
 .mcdev-link {
   padding: 0;

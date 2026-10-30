@@ -1,22 +1,15 @@
 /**
- * 工程浮层：列出工作区里的工程，并给每个可运行目标一个真按钮。
+ * 工程浮层：按模块分组列出目标，单选一个；真正启动由胶囊的 ▶ 负责。
  *
- * 并发规则（服务端强制）：同一工程同时只能有一个实例；所以有实例在跑时，
- * 其它目标的按钮禁用并说明原因，运行中的那个变成"停止"。
+ * 为什么单选而不是每行一个按钮：同一个工程同时只能跑一个实例（服务端强制），
+ * 摆一排按钮只会让人以为能并行点。列表在这里表达"选哪个"，动作在胶囊上。
  * @module minecraft-dev-starter/client/Flyout
  */
 
 import { h } from './h.js'
 import { kindLabel, projectSubtitle, projectTitle } from './format.js'
-import {
-  activeLaunchFor,
-  loadScan,
-  startTarget,
-  stopLaunch,
-  store,
-  useLaunches,
-  useStoreState,
-} from './state.js'
+import { groupByModule, selectedTarget, targetKey } from './selection.js'
+import { activeLaunchFor, loadScan, selectTarget, store, useLaunches, useStoreState } from './state.js'
 import { openDetailTab } from './runtime.js'
 
 export function Flyout() {
@@ -39,30 +32,31 @@ export function Flyout() {
     projects.length === 0 && state.error === undefined
       ? h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, state.loading ? '正在扫描…' : '没有找到 Gradle 工程')
       : undefined,
-    projects.map((project) => h(ProjectRow, { key: project.root, project, launches })),
+    projects.map((project) => h(ProjectBlock, { key: project.root, project, launches, selection: state.selection })),
     state.scan?.truncated === true ? h('div', { className: 'mcdev-warn', style: { marginTop: 8 } }, '扫描超出预算，结果可能不全') : undefined,
     h('div', { className: 'mcdev-divider' }),
-    h('div', { className: 'mcdev-hint' }, '同一工程同时只能跑一个目标；日志在右侧栏「MC 工程」标签里。'),
+    h('div', { className: 'mcdev-hint' }, '选中目标后用标题栏的 ▶ 启动；同一工程同时只能跑一个。'),
   )
 }
 
 /**
- * @param {{ project: Record<string, any>, launches: ReturnType<typeof useLaunches> }} props
+ * @param {{ project: Record<string, any>, launches: ReturnType<typeof useLaunches>, selection: Record<string, string> }} props
  */
-function ProjectRow({ project, launches }) {
+function ProjectBlock({ project, launches, selection }) {
   const state = useStoreState()
   const active = state.selectedRoot === project.root
   const targets = /** @type {Array<Record<string, any>>} */ (project.runTargets ?? [])
+  const groups = groupByModule(targets)
+  const chosen = selectedTarget(project, selection)
   const running = launches.list.find(
-    (entry) => String(entry.root).toLowerCase() === String(project.root).toLowerCase() && (entry.status === 'starting' || entry.status === 'running'),
+    (entry) =>
+      String(entry.root).toLowerCase() === String(project.root).toLowerCase() &&
+      (entry.status === 'starting' || entry.status === 'running'),
   )
 
   return h(
     'div',
-    {
-      className: `mcdev-project${active ? ' is-active' : ''}`,
-      onMouseDown: () => store.set({ selectedRoot: project.root }),
-    },
+    { className: `mcdev-project${active ? ' is-active' : ''}`, onMouseDown: () => store.set({ selectedRoot: project.root }) },
     h(
       'div',
       { className: 'mcdev-row', style: { justifyContent: 'space-between', gap: 8 } },
@@ -70,43 +64,42 @@ function ProjectRow({ project, launches }) {
       h('span', { className: 'mcdev-muted' }, kindLabel(project.kind)),
     ),
     h('div', { className: 'mcdev-sub' }, projectSubtitle(project)),
-    running === undefined ? undefined : h('div', { className: 'mcdev-status' }, `● ${running.label} ${running.status === 'starting' ? '启动中' : '运行中'} · ${elapsed(running.startedAt)}`),
+    running === undefined
+      ? undefined
+      : h('div', { className: 'mcdev-status' }, `● ${running.label} ${running.status === 'starting' ? '启动中' : '运行中'} · ${elapsed(running.startedAt)}`),
     targets.length === 0
       ? h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '没有找到可运行目标')
       : h(
           'div',
-          { className: 'mcdev-actions' },
-          targets.map((target) => {
-            const isRunning = running !== undefined && running.taskPath === target.taskPath
-            const busy = launches.busy === `${project.root}:${target.taskPath}` || launches.busy === running?.id
-            if (isRunning) {
-              return h(
-                'button',
-                {
-                  key: target.taskPath,
-                  type: 'button',
-                  className: 'mcdev-run',
-                  'data-tone': 'stop',
-                  disabled: busy === true,
-                  onClick: () => stopLaunch(running.id),
-                  title: `停止 ${target.taskPath}`,
-                },
-                '⏹ 停止',
-              )
-            }
-            return h(
-              'button',
-              {
-                key: target.taskPath,
-                type: 'button',
-                className: 'mcdev-run',
-                disabled: busy === true || running !== undefined,
-                title: running !== undefined ? '这个工程已经有实例在跑，先停掉它' : target.taskPath,
-                onClick: () => startTarget(project, target),
-              },
-              `▶ ${target.label}`,
-            )
-          }),
+          { className: 'mcdev-options' },
+          groups.map((group) =>
+            h(
+              'div',
+              { key: group.module, className: 'mcdev-option-group' },
+              groups.length > 1 ? h('div', { className: 'mcdev-option-module' }, group.module) : undefined,
+              group.targets.map((target) => {
+                const checked = chosen !== undefined && targetKey(chosen) === targetKey(target)
+                return h(
+                  'label',
+                  {
+                    key: targetKey(target),
+                    className: `mcdev-option${running === undefined ? '' : ' is-disabled'}`,
+                    title: target.taskPath,
+                  },
+                  h('input', {
+                    type: 'radio',
+                    className: 'mcdev-radio',
+                    name: `mcdev-${project.root}`,
+                    checked,
+                    disabled: running !== undefined,
+                    onChange: () => selectTarget(project.root, targetKey(target)),
+                  }),
+                  h('span', { className: 'mcdev-option-label' }, target.label),
+                  target.guessed === true ? h('span', { className: 'mcdev-badge', 'data-guessed': 'true' }, '推测') : undefined,
+                )
+              }),
+            ),
+          ),
         ),
     h(
       'div',

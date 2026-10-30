@@ -1,27 +1,38 @@
 /**
- * 标题栏胶囊：一个状态点 + 一行字。点开是工程浮层。
+ * 标题栏胶囊：状态点 + 选中目标名 + 一个启停按钮。点名字展开浮层选目标。
  *
- * 刻意做得窄：标题栏这一排已经有会话日志等控件，胶囊只回答"这个工作区里
- * 有没有 MC 工程、是什么"。
+ * 只做三件事——告诉人现在选的是哪个目标、它跑没跑、点了会不会动。
  * @module minecraft-dev-starter/client/Capsule
  */
 
 import { useEffect, useRef } from 'react'
 import { h } from './h.js'
-import { capsuleLabel } from './format.js'
-import { loadScan, store, useStoreState } from './state.js'
+import { report } from './debug.js'
+import { capsuleText, selectedTarget } from './selection.js'
+import {
+  activeLaunchFor,
+  loadScan,
+  loadStateInfo,
+  selectedProject,
+  startTarget,
+  stopLaunch,
+  store,
+  useLaunches,
+  useStoreState,
+} from './state.js'
 import { Flyout } from './Flyout.js'
 
 export function Capsule() {
   const state = useStoreState()
+  const launches = useLaunches(5000)
   const anchor = useRef(/** @type {HTMLDivElement | null} */ (null))
 
-  // 首次渲染时拉一次；之后由用户点"刷新"或切会话时重拉。
   useEffect(() => {
+    report('capsule.mounted')
+    void loadStateInfo()
     loadScan()
   }, [])
 
-  // 点外面关闭浮层
   useEffect(() => {
     if (!state.flyoutOpen) return undefined
     const onPointerDown = (event) => {
@@ -32,24 +43,58 @@ export function Capsule() {
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [state.flyoutOpen])
 
-  const projects = state.scan?.projects ?? []
-  const label = state.error !== undefined ? 'MC 识别失败' : capsuleLabel(projects, state.selectedRoot)
-  const dot = state.error !== undefined ? 'error' : projects.length > 0 ? 'ok' : 'idle'
-  const tooltip = state.error ?? `${label}\n点击查看工程与运行目标`
+  const project = selectedProject()
+  const target = selectedTarget(project, state.selection)
+  const running = project === undefined ? undefined : activeLaunchFor(project.root)
+  const busy = launches.busy !== undefined
+
+  const tone = running !== undefined ? 'ok' : state.error !== undefined || launches.error !== undefined ? 'error' : project === undefined ? 'idle' : 'ok'
+  const label = running !== undefined ? `${running.label}` : capsuleText(project, target)
+  const title =
+    launches.error ??
+    state.error ??
+    (project === undefined
+      ? '没有识别到 MC 工程'
+      : `${project.root}\n${target === undefined ? '没有可运行目标' : target.taskPath}`)
 
   return h(
     'div',
     { className: 'mcdev-anchor', ref: anchor },
     h(
-      'button',
-      {
-        type: 'button',
-        className: 'mcdev-pill',
-        title: tooltip,
-        onClick: () => store.set({ flyoutOpen: !state.flyoutOpen }),
-      },
-      h('span', { className: 'mcdev-dot', 'data-state': dot }),
-      h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, label),
+      'div',
+      { className: 'mcdev-capsule' },
+      h(
+        'button',
+        { type: 'button', className: 'mcdev-pill', title, onClick: () => store.set({ flyoutOpen: !state.flyoutOpen }) },
+        h('span', { className: 'mcdev-dot', 'data-state': tone }),
+        h('span', { className: 'mcdev-pill-text' }, label),
+      ),
+      running === undefined
+        ? h(
+            'button',
+            {
+              type: 'button',
+              className: 'mcdev-run mcdev-run-icon',
+              disabled: target === undefined || busy,
+              title: target === undefined ? '没有可运行目标' : `启动 ${target.taskPath}`,
+              onClick: () => {
+                if (project !== undefined && target !== undefined) void startTarget(project, target)
+              },
+            },
+            '▶',
+          )
+        : h(
+            'button',
+            {
+              type: 'button',
+              className: 'mcdev-run mcdev-run-icon',
+              'data-tone': 'stop',
+              disabled: busy,
+              title: `停止 ${running.taskPath}`,
+              onClick: () => void stopLaunch(running.id),
+            },
+            '⏹',
+          ),
     ),
     state.flyoutOpen ? h(Flyout) : undefined,
   )

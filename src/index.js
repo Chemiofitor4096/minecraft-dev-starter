@@ -7,6 +7,7 @@
  */
 
 import { createApi } from './lib/api.js'
+import { createLaunchService } from './lib/launches.js'
 
 /** Cordis 插件名。 */
 export const name = 'mcdev-host'
@@ -77,13 +78,27 @@ async function resolveWorkspaceRoot(ctx) {
   return process.cwd()
 }
 
+/** 部署配置默认值；patch 行的 `config` 会覆盖同名项。 */
+const DEFAULTS = {
+  autoOpenLogTab: true,
+  readyTimeoutMs: 90_000,
+  logRingLines: 2_000,
+}
+
 /**
  * @param {import('@deepseek-ai/cordis').Context} ctx
+ * @param {Record<string, unknown>} [config]
  */
-export function apply(ctx) {
+export function apply(ctx, config = {}) {
+  const settings = { ...DEFAULTS, ...(config ?? {}) }
   const api = createApi({
     version: VERSION,
     resolveRoot: () => resolveWorkspaceRoot(ctx),
+    config: { autoOpenLogTab: settings.autoOpenLogTab !== false },
+    launchService: createLaunchService({
+      readyTimeoutMs: Number(settings.readyTimeoutMs) || DEFAULTS.readyTimeoutMs,
+      maxLogLines: Number(settings.logRingLines) || DEFAULTS.logRingLines,
+    }),
   })
 
   ctx.effect(

@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { gradlewCommand, isAlive, TASK_PATH_PATTERN } from '../src/lib/argv.js'
-import { createLaunchService, decodeLine, splitBufferLines } from '../src/lib/launches.js'
+import { createLaunchService, decodeLine, diagnose, splitBufferLines } from '../src/lib/launches.js'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -69,6 +69,14 @@ test('输出解码：UTF-8 直通，GBK 回退', () => {
 test('整份日志按行解码', () => {
   const buffer = Buffer.concat([Buffer.from('line-1\n'), Buffer.from('line-2\r\n'), Buffer.from('line-3')])
   assert.deepEqual(splitBufferLines(buffer), ['line-1', 'line-2', 'line-3'])
+})
+
+test('崩溃归因：依赖 / JDK / 端口 / Mixin 各给一句话', () => {
+  assert.match(diagnose(['> Could not resolve net.neoforged:neoforge:21.1.251']).hint, /依赖/)
+  assert.match(diagnose(['java.lang.UnsupportedClassVersionError: Unsupported class file major version 65']).hint, /JDK/)
+  assert.match(diagnose(['java.net.BindException: Address already in use: bind']).hint, /端口/)
+  assert.match(diagnose(['Mixin apply failed mod.mixins.json:DemoMixin -> demo.Mixin']).hint, /Mixin/)
+  assert.equal(diagnose(['all good', 'BUILD SUCCESSFUL']), undefined)
 })
 
 test('启动 → 就绪 → 读日志 → 停止', async () => {
