@@ -86,3 +86,17 @@ export function writeSelection(selection) {
     /* 隐身模式等场景写不进去，忽略 */
   }
 }
+
+/**
+ * 胶囊文案。工作区里有多个工程时把工程名带上——否则只显示 "Client" 没人知道
+ * 它是哪个工程的（一个工作区里每工程都记着自己的选择）。
+ * @param {Record<string, any> | undefined} project
+ * @param {Record<string, any> | undefined} target
+ * @param {{ multipleProjects?: boolean }} [options]
+ * @returns {string}
+ */
+export function capsuleSummary(project, target, options = {}) {
+  const base = capsuleText(project, target)
+  if (project === undefined || target === undefined || options.multipleProjects !== true) return base
+  return `${project.modName ?? project.name ?? project.root} · ${base}`
+}

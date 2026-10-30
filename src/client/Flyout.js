@@ -49,6 +49,12 @@ export function Flyout() {
 }
 
 /**
+ * 一个工程。
+ *
+ * 单选只属于「当前工程」——一个工作区里每个工程各记着自己的目标，
+ * 如果全都画出单选，看起来就像"全都选中了"，反而是最容易被误读的地方。
+ * 非当前工程收成一行摘要 + 一个"切到这里"，点了才展开它的单选。
+ *
  * @param {{ project: Record<string, any>, launches: ReturnType<typeof useLaunches>, selection: Record<string, string> }} props
  */
 function ProjectBlock({ project, launches, selection }) {
@@ -65,11 +71,19 @@ function ProjectBlock({ project, launches, selection }) {
 
   return h(
     'div',
-    { className: `mcdev-project${active ? ' is-active' : ''}`, onMouseDown: () => store.set({ selectedRoot: project.root }) },
+    {
+      className: `mcdev-project${active ? ' is-active' : ''}`,
+      onMouseDown: () => store.set({ selectedRoot: project.root }),
+    },
     h(
       'div',
       { className: 'mcdev-row', style: { justifyContent: 'space-between', gap: 8 } },
-      h('span', { className: 'mcdev-title', style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, projectTitle(project)),
+      h(
+        'span',
+        { className: 'mcdev-row', style: { gap: 6, minWidth: 0 } },
+        h('span', { className: 'mcdev-title', style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, projectTitle(project)),
+        active ? h('span', { className: 'mcdev-badge' }, '当前') : undefined,
+      ),
       h('span', { className: 'mcdev-muted' }, kindLabel(project.kind)),
     ),
     h('div', { className: 'mcdev-sub' }, projectSubtitle(project)),
@@ -83,38 +97,56 @@ function ProjectBlock({ project, launches, selection }) {
         ),
     targets.length === 0
       ? h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '没有找到可运行目标')
-      : h(
-          'div',
-          { className: 'mcdev-options' },
-          groups.map((group) =>
+      : active
+        ? h(
+            'div',
+            { className: 'mcdev-options' },
+            groups.map((group) =>
+              h(
+                'div',
+                { key: group.module, className: 'mcdev-option-group' },
+                groups.length > 1 ? h('div', { className: 'mcdev-option-module' }, group.module) : undefined,
+                group.targets.map((target) => {
+                  const checked = chosen !== undefined && targetKey(chosen) === targetKey(target)
+                  return h(
+                    'label',
+                    {
+                      key: targetKey(target),
+                      className: `mcdev-option${running === undefined ? '' : ' is-disabled'}`,
+                      title: target.taskPath,
+                    },
+                    h('input', {
+                      type: 'radio',
+                      className: 'mcdev-radio',
+                      name: `mcdev-${project.root}`,
+                      checked,
+                      disabled: running !== undefined,
+                      onChange: () => selectTarget(project.root, targetKey(target)),
+                    }),
+                    h('span', { className: 'mcdev-option-label' }, target.label),
+                    target.guessed === true ? h('span', { className: 'mcdev-badge', 'data-guessed': 'true', title: '按 loader 惯例推测，尚未验证' }, '未验证') : undefined,
+                  )
+                }),
+              ),
+            ),
+          )
+        : h(
+            'div',
+            { className: 'mcdev-row', style: { justifyContent: 'space-between', gap: 8, marginTop: 6 } },
+            h('span', { className: 'mcdev-hint' }, `目标 ${chosen?.label ?? '—'}${targets.length > 1 ? `（共 ${targets.length} 个）` : ''}`),
             h(
-              'div',
-              { key: group.module, className: 'mcdev-option-group' },
-              groups.length > 1 ? h('div', { className: 'mcdev-option-module' }, group.module) : undefined,
-              group.targets.map((target) => {
-                const checked = chosen !== undefined && targetKey(chosen) === targetKey(target)
-                return h(
-                  'label',
-                  {
-                    key: targetKey(target),
-                    className: `mcdev-option${running === undefined ? '' : ' is-disabled'}`,
-                    title: target.taskPath,
-                  },
-                  h('input', {
-                    type: 'radio',
-                    className: 'mcdev-radio',
-                    name: `mcdev-${project.root}`,
-                    checked,
-                    disabled: running !== undefined,
-                    onChange: () => selectTarget(project.root, targetKey(target)),
-                  }),
-                  h('span', { className: 'mcdev-option-label' }, target.label),
-                  target.guessed === true ? h('span', { className: 'mcdev-badge', 'data-guessed': 'true', title: '按 loader 惯例推测，尚未验证' }, '未验证') : undefined,
-                )
-              }),
+              'button',
+              {
+                type: 'button',
+                className: 'mcdev-link',
+                onClick: (event) => {
+                  event.stopPropagation()
+                  store.set({ selectedRoot: project.root })
+                },
+              },
+              '切到这里',
             ),
           ),
-        ),
     h(
       'div',
       { style: { marginTop: 6 } },

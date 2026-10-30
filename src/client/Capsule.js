@@ -9,7 +9,7 @@ import { useEffect, useRef } from 'react'
 import { h } from './h.js'
 import { IconPlay, IconStop } from './icons.js'
 import { report } from './debug.js'
-import { capsuleText, selectedTarget } from './selection.js'
+import { capsuleSummary, selectedTarget } from './selection.js'
 import {
   activeLaunchFor,
   loadScan,
@@ -48,15 +48,16 @@ export function Capsule() {
   const target = selectedTarget(project, state.selection)
   const running = project === undefined ? undefined : activeLaunchFor(project.root)
   const busy = launches.busy !== undefined
+  const multipleProjects = (state.scan?.projects?.length ?? 0) > 1
 
   const tone = running !== undefined ? 'ok' : state.error !== undefined || launches.error !== undefined ? 'error' : project === undefined ? 'idle' : 'ok'
-  const label = running !== undefined ? `${running.label}` : capsuleText(project, target)
+  const label = running !== undefined ? running.label : capsuleSummary(project, target, { multipleProjects })
   const title =
     launches.error ??
     state.error ??
     (project === undefined
       ? '没有识别到 MC 工程'
-      : `${project.root}\n${target === undefined ? '没有可运行目标' : target.taskPath}`)
+      : `${project.modName ?? project.name}\n${project.root}\n${target === undefined ? '没有可运行目标' : target.taskPath}`)
 
   return h(
     'div',

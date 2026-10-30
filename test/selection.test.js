@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { capsuleText, groupByModule, selectedTarget, targetKey } from '../src/client/selection.js'
+import { capsuleSummary, capsuleText, groupByModule, selectedTarget, targetKey } from '../src/client/selection.js'
 
 const project = {
   root: 'C:\\Projects\\rationality',
@@ -57,4 +57,12 @@ test('胶囊文案：单模块只有目标名，多模块带模块前缀', () =>
   assert.equal(capsuleText(architectury, architectury.runTargets[0]), 'fabric · Client')
   assert.equal(capsuleText(undefined, undefined), '未检测到 MC 工程')
   assert.equal(capsuleText({ root: 'x', runTargets: [] }, undefined), '无可运行目标')
+})
+
+test('多工程工作区：胶囊带上工程名，避免只显示 Client 不知道是哪个', () => {
+  const named = { ...project, modName: 'Example Mod' }
+  assert.equal(capsuleSummary(named, named.runTargets[0], { multipleProjects: true }), 'Example Mod · Client')
+  assert.equal(capsuleSummary(named, named.runTargets[0]), 'Client')
+  assert.equal(capsuleSummary(named, named.runTargets[0], { multipleProjects: false }), 'Client')
+  assert.equal(capsuleSummary(undefined, undefined, { multipleProjects: true }), '未检测到 MC 工程')
 })
