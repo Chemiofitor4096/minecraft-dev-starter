@@ -94,6 +94,46 @@ ctx.effect(() => ctx.webServer.register({
 
 已核实的 slot 名：`conversation.session.header.utilities`、`conversation.session.header.corner`（单占用，内置侧栏占着）、`shell.overlay`、`sidebar.right.pane.tab`、`sidebar.right.pane.tab.title`、`settings.section`。
 
+### 2.3 客户端产物的加载协议（从 `lib/client.js` 反读）
+
+成品不是 ESM，而是自注册到模块表：
+
+```js
+window.__ModuleLoader__.load({
+  id: 'dsh-better-sidebar',
+  factory: (require) => {
+    var module = { exports: {} }
+    var exports = module.exports
+    Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' })
+    // …rolldown 打包后的 CJS 体…
+    exports.apply = apply
+    exports.inject = inject
+    return module.exports
+  },
+})
+```
+
+- 外部依赖（走 `require`）：`react`、`react/jsx-runtime`、`react-dom`、`react-dom/client`、`@deepseek-ai/dsh-client-ui-primitives`。
+- CSS 不是独立文件：构建期内联，运行时 `document.createElement('style')` + `appendChild` 注入。
+- 导出的是 cordis 插件形状：`inject` + `apply`。
+- 结论：客户端构建链只要能产出一段 CJS 并包上这层 wrapper 就行，不需要框架级模板。
+
+### 2.4 右侧栏的正式接口（`dsh-client-ui-sidebar-right` README）
+
+不是 DOM hack，有服务：
+
+```js
+// 注册一种标签类型
+ctx.sidebarRightTabs.register({ id, kind, patterns?, priority?, canOpen?, title, guide? })
+// 注册该类型的正文；Body 内用 useTabInfo() 取 { sidebar, panel, tab }
+ctx.slots.register({ name: 'sidebar.right.pane.tab', key: definition.id }, Body)
+// 打开：会自动展开面板（"the panel expands, because content the user cannot see is not opened"）
+ctx.sidebarRight.openTab(kind, options?)
+ctx.sidebarRight.isExpanded() / toggleExpanded() / close(tabId) / active()
+```
+
+这决定了日志可以做成右侧栏的一个标签页，并且能做到"启动即打开"。
+
 ---
 
 ## 3. 插件入口契约
@@ -193,15 +233,25 @@ v0.2 之后界面是主场，工具卡片是次要的。
 
 | # | 待验证 | 验证方式 |
 |---|---|---|
-| V1 | 本地路径挂载能挂上，工具出现 | desktop profile 的 patch 加一行指向本地入口，重启后在会话里调工具 |
+| V1 | 本地路径挂载能挂上，宿主入口生效 | desktop profile 的 patch 加一行指向本地入口，重启后调工具或打路由 |
 | V2 | 桌面版实际运行的 `@deepseek-ai/dsh-tools` / client 包版本 | 读 `app.asar` 里的 `node_modules/@deepseek-ai/*/package.json` |
-| V3 | **客户端包能不能被桌面版加载** | 最小 `lib/client.js`（只注册一个按钮）+ `dsh.client.inject`，重启后看标题栏有没有按钮 |
+| V3 | **客户端包能不能被桌面版加载**：`__ModuleLoader__` wrapper 是否被认 | 最小 `lib/client.js`（只注册一个按钮）+ `dsh.client.inject`，重启后看标题栏 |
+| V3b | 右侧栏标签类型能注册并自动展开 | 注册一个空 `mcdev.logs` 标签，调用 `ctx.sidebarRight.openTab` |
 | V4 | `--dump-config` 是否可用来确认挂载 | `node <dsh>/lib/bin.js --profile desktop --dump-config` |
 | V5 | 宿主重启后 PID 探活是否可靠（Windows） | 起假进程 → 重启 → 列实例 |
 | V6 | 相对路径请求宿主是否通（Electron 外壳） | 客户端 `fetch('/mcdev/api/ping')`，看是否 200 |
-| V7 | slot 组件拿到的 props 形状 | 打印一次 props，确认能拿到 sessionId / cwd |
+| V7 | slot / tab body 拿到的 props 形状 | 打印一次 `useTabInfo()`，确认能拿到 `tab` 与本次 launch 的关联方式 |
 
-V3 是 v0.2 的关键闸门：不通过就退回独立网页面板。
+V3 / V3b 是主界面方案的关键闸门：任一不通过就退回独立网页面板。
+
+### 8.1 Gradle 任务探测的实测代价
+
+在 `C:\Projects\Custom-Machinery-1.20.1` 上跑 `gradlew tasks --all`：
+
+- 耗时 **6 分 37 秒**；
+- 最终失败：`Could not find dev.latvian.mods:kubejs:2001.6.4-build.121`（工程自身的依赖缺失，与我们的命令无关）。
+
+结论：**不把 Gradle 探测放在扫描路径上**。静态解析读 runs 块，探测只做用户手动触发的一次性验证，结果按 mtime 缓存，失败原样展示。
 
 ---
 
@@ -220,7 +270,9 @@ V3 是 v0.2 的关键闸门：不通过就退回独立网页面板。
                                                  src/index.ts                           路由注册）
 ~/.dsh/profiles/web/node_modules/@tt-a1i/archify-dsh/    最小 bundle 样本
 ~/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/
-                                               各服务端包的 README 就是 API 文档
+                                               各服务端包的 README 就是 API 文档；
+                                               dsh-client-ui-sidebar-right 的 README 是右侧栏
+                                               tab 注册与 ctx.sidebarRight 的权威说明
 <DSH NEXT>/resources/app.asar                  桌面版运行时，内含 313 个 @deepseek-ai 包
                                                其中 client 侧：dsh-client-ui-slots / -conversation /
                                                -primitives / -layout / -modules / -locale / -store

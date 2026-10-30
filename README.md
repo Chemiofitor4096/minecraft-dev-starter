@@ -26,14 +26,22 @@ AI：读代码、改代码、看日志 → 继续
 
 ```
 会话标题栏
-[● Client ▾] [▶] [⟳]                    ← 运行胶囊
-      ↓ 点开
+[● Client ▾] [▶]                        ← 胶囊：状态点 + 目标 + 起停
+      ↓ 点开（单选一个目标）
   rationality · NeoForge 1.21.1 · JDK 21
-  ▶ Client   ● 运行中 2m13s
-  ▶ Server   ○ 未运行
-  ▶ Data     ○ 未运行
-  ⟳ 重新构建后运行   📄 日志   ⚙ 编辑配置…
+  fabric
+    ◉ Client
+    ○ Server
+  forge
+    ○ Client
+
+右侧栏「运行日志」标签页                 ← 启动时自动打开
+  [Client · 20:31 运行中 ▾]  ← 历史切换
+  [BUILD] > Task :runClient
+  [MC]    Backend library: LWJGL
 ```
+
+多模块（Architectury）按模块分组，任务路径用 `:fabric:runClient`。同一工程同时只跑一个实例，换工程可并存。
 
 ## 计划中的 AI 工具
 
