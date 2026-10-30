@@ -9,7 +9,7 @@ import { useEffect, useRef } from 'react'
 import { h } from './h.js'
 import { IconPlay, IconStop } from './icons.js'
 import { report } from './debug.js'
-import { capsuleSummary, selectedTarget } from './selection.js'
+import { capsuleParts, selectedTarget } from './selection.js'
 import {
   activeLaunchFor,
   loadScan,
@@ -51,7 +51,8 @@ export function Capsule() {
   const multipleProjects = (state.scan?.projects?.length ?? 0) > 1
 
   const tone = running !== undefined ? 'ok' : state.error !== undefined || launches.error !== undefined ? 'error' : project === undefined ? 'idle' : 'ok'
-  const label = running !== undefined ? running.label : capsuleSummary(project, target, { multipleProjects })
+  const parts = capsuleParts(project, target, { multipleProjects })
+  const runningLabel = running === undefined ? undefined : running.label
   const title =
     launches.error ??
     state.error ??
@@ -69,7 +70,17 @@ export function Capsule() {
         'button',
         { type: 'button', className: 'mcdev-pill', title, onClick: () => store.set({ flyoutOpen: !state.flyoutOpen }) },
         h('span', { className: 'mcdev-dot', 'data-state': tone, 'data-pulse': running === undefined ? 'false' : 'true' }),
-        h('span', { className: 'mcdev-pill-text' }, label),
+        h(
+          'span',
+          { className: 'mcdev-pill-text' },
+          runningLabel !== undefined || parts.project === undefined
+            ? undefined
+            : [
+                h('span', { key: 'project', className: 'mcdev-pill-project', title: parts.project }, parts.project),
+                h('span', { key: 'sep', className: 'mcdev-pill-sep' }, '·'),
+              ],
+          h('span', { key: 'target', className: 'mcdev-pill-target' }, runningLabel ?? parts.target),
+        ),
       ),
       running === undefined
         ? h(

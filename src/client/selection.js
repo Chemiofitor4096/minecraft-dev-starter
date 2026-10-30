@@ -88,6 +88,22 @@ export function writeSelection(selection) {
 }
 
 /**
+ * 胶囊的两段文案。窄的时候应该让"工程名"省略，而不是把目标名截掉——
+ * 目标名才是可操作的那部分，工程名只是上下文。
+ * @param {Record<string, any> | undefined} project
+ * @param {Record<string, any> | undefined} target
+ * @param {{ multipleProjects?: boolean }} [options]
+ * @returns {{ project: string | undefined, target: string }}
+ */
+export function capsuleParts(project, target, options = {}) {
+  const targetText = capsuleText(project, target)
+  if (project === undefined || target === undefined || options.multipleProjects !== true) {
+    return { project: undefined, target: targetText }
+  }
+  return { project: String(project.modName ?? project.name ?? project.root), target: targetText }
+}
+
+/**
  * 胶囊文案。工作区里有多个工程时把工程名带上——否则只显示 "Client" 没人知道
  * 它是哪个工程的（一个工作区里每工程都记着自己的选择）。
  * @param {Record<string, any> | undefined} project
@@ -96,7 +112,6 @@ export function writeSelection(selection) {
  * @returns {string}
  */
 export function capsuleSummary(project, target, options = {}) {
-  const base = capsuleText(project, target)
-  if (project === undefined || target === undefined || options.multipleProjects !== true) return base
-  return `${project.modName ?? project.name ?? project.root} · ${base}`
+  const parts = capsuleParts(project, target, options)
+  return parts.project === undefined ? parts.target : `${parts.project} · ${parts.target}`
 }

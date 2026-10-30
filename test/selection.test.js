@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { capsuleSummary, capsuleText, groupByModule, selectedTarget, targetKey } from '../src/client/selection.js'
+import { capsuleParts, capsuleSummary, capsuleText, groupByModule, selectedTarget, targetKey } from '../src/client/selection.js'
 
 const project = {
   root: 'C:\\Projects\\rationality',
@@ -65,4 +65,21 @@ test('多工程工作区：胶囊带上工程名，避免只显示 Client 不知
   assert.equal(capsuleSummary(named, named.runTargets[0]), 'Client')
   assert.equal(capsuleSummary(named, named.runTargets[0], { multipleProjects: false }), 'Client')
   assert.equal(capsuleSummary(undefined, undefined, { multipleProjects: true }), '未检测到 MC 工程')
+})
+
+test('胶囊分段：窄的时候省略工程名，目标名保持完整', () => {
+  const named = { ...project, modName: 'Example Neo Mod' }
+  const dataTarget = named.runTargets[2]
+  const parts = capsuleParts(named, dataTarget, { multipleProjects: true })
+  assert.equal(parts.project, 'Example Neo Mod')
+  assert.equal(parts.target, 'Data')
+
+  const single = capsuleParts(named, dataTarget, { multipleProjects: false })
+  assert.equal(single.project, undefined)
+  assert.equal(single.target, 'Data')
+
+  assert.deepEqual(capsuleParts(undefined, undefined, { multipleProjects: true }), {
+    project: undefined,
+    target: '未检测到 MC 工程',
+  })
 })

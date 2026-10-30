@@ -31,7 +31,17 @@ export const CSS = `
   cursor: pointer;
 }
 .mcdev-pill:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.mcdev-pill-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 窄的时候让工程名让步：目标名永远完整显示 */
+.mcdev-pill-text { display: flex; align-items: center; min-width: 0; }
+.mcdev-pill-project {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+}
+.mcdev-pill-sep { flex: none; padding: 0 4px; color: var(--dsw-alias-label-tertiary); }
+.mcdev-pill-target { flex: none; white-space: nowrap; }
 
 .mcdev-dot {
   width: 7px;
