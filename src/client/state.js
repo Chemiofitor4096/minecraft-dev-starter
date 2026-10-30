@@ -71,3 +71,115 @@ export function useStoreState() {
   useEffect(() => store.subscribe(setState), [])
   return state
 }
+
+// ── 运行实例 ──────────────────────────────────────────────────────────
+
+/** 实例列表单独一个 store：轮询频率比扫描高，别互相拖累。 */
+export const launchStore = createStore({
+  /** @type {Array<Record<string, any>>} */
+  list: [],
+  /** @type {string | undefined} */
+  error: undefined,
+  /** @type {string | undefined} 正在启停的目标 key，用来禁用按钮 */
+  busy: undefined,
+  /** @type {number} 每次拉取递增，供 tail 刷新用 */
+  rev: 0,
+})
+
+/**
+ * 拉一次实例列表。
+ * @param {string | undefined} [root]
+ */
+export async function loadLaunches(root) {
+  try {
+    const list = await call('launch.list', root === undefined ? {} : { root })
+    launchStore.set({ list: /** @type {Array<Record<string, any>>} */ (list), error: undefined, rev: Date.now() })
+  } catch (error) {
+    launchStore.set({ error: error instanceof Error ? error.message : String(error) })
+  }
+}
+
+/**
+ * @param {string} root
+ * @returns {Record<string, any> | undefined}
+ */
+export function activeLaunchFor(root) {
+  return launchStore.get().list.find(
+    (entry) => String(entry.root).toLowerCase() === root.toLowerCase() && (entry.status === 'starting' || entry.status === 'running'),
+  )
+}
+
+/**
+ * 启动一个目标。
+ * @param {Record<string, any>} project
+ * @param {Record<string, any>} target
+ */
+export async function startTarget(project, target) {
+  const key = `${project.root}:${target.taskPath}`
+  launchStore.set({ busy: key, error: undefined })
+  try {
+    await call('launch.start', {
+      root: project.root,
+      taskPath: target.taskPath,
+      label: target.label,
+      kind: target.kind,
+      module: target.module,
+    })
+  } catch (error) {
+    launchStore.set({ error: error instanceof Error ? error.message : String(error) })
+  } finally {
+    launchStore.set({ busy: undefined })
+    await loadLaunches()
+  }
+}
+
+/**
+ * 停止一个实例。
+ * @param {string} id
+ */
+export async function stopLaunch(id) {
+  launchStore.set({ busy: id, error: undefined })
+  try {
+    await call('launch.stop', { id })
+  } catch (error) {
+    launchStore.set({ error: error instanceof Error ? error.message : String(error) })
+  } finally {
+    launchStore.set({ busy: undefined })
+    await loadLaunches()
+  }
+}
+
+/**
+ * React 绑定 + 轮询（页面不可见时停轮询）。
+ * @param {number} [intervalMs]
+ * @returns {ReturnType<typeof launchStore.get>}
+ */
+export function useLaunches(intervalMs = 1500) {
+  const [state, setState] = useState(launchStore.get())
+  useEffect(() => {
+    const unsubscribe = launchStore.subscribe(setState)
+    void loadLaunches()
+    let timer
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      void loadLaunches()
+    }
+    timer = setInterval(tick, intervalMs)
+    return () => {
+      unsubscribe()
+      clearInterval(timer)
+    }
+  }, [intervalMs])
+  return state
+}
+
+/**
+ * 拉一次某个实例的日志尾部。
+ * @param {string} id
+ * @param {number} limit
+ * @returns {Promise<string[]>}
+ */
+export async function fetchLogTail(id, limit = 40) {
+  const result = await call('launch.logs', { id, offset: 0, limit })
+  return /** @type {string[]} */ (result.lines ?? [])
+}

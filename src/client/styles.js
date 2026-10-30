@@ -96,6 +96,43 @@ export const CSS = `
 
 .mcdev-hint { color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
 
+/* 运行按钮：系统尺寸（24 高、4 圆角），中性底色 */
+.mcdev-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.mcdev-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxs-12);
+  cursor: pointer;
+}
+.mcdev-run:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.mcdev-run:disabled { opacity: 0.4; cursor: default; }
+.mcdev-run[data-tone="stop"] { color: var(--dsw-alias-danger); border-color: var(--dsw-alias-danger); }
+
+.mcdev-status { margin-top: 6px; color: var(--dsw-alias-state-success-primary); font: var(--dsw-font-xxxs-11); }
+
+/* 日志尾部：等宽、可滚，底色用系统层级 3 */
+.mcdev-logs {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .mcdev-link {
   padding: 0;
   border: 0;

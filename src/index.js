@@ -58,10 +58,14 @@ function writeJson(res, status, value) {
 
 /**
  * 最近一个活跃会话的工作目录。
+ *
+ * `MCDEV_WORKSPACE` 是测试/固定工作区的逃生门：没有会话、或想把面板钉在某个目录时用它。
  * @param {import('@deepseek-ai/cordis').Context} ctx
  * @returns {Promise<string | undefined>}
  */
 async function resolveWorkspaceRoot(ctx) {
+  const pinned = process.env.MCDEV_WORKSPACE
+  if (typeof pinned === 'string' && pinned !== '') return pinned
   try {
     const sessions = ctx.sessions.list()
     const last = sessions.at(-1)

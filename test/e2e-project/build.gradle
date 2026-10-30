@@ -1,0 +1,14 @@
+plugins {
+    id 'fabric-loom' version '1.10-SNAPSHOT'
+}
+
+// 只给启动链路做端到端验证：任务是假的，gradlew.bat 只打印就绪标记后挂住。
+loom {
+    runs {
+        client {
+            client()
+        }
+    }
+}
+
+minecraft_version = '1.21.1'
