@@ -12,6 +12,7 @@
 3. **桌面版 GUI 加载的是 `~/.dsh/profiles/desktop`**，不是 CLI 默认 profile；装插件要往这个 profile 里挂。
 4. **本地开发可以用绝对路径 / `file://` URL 直接挂**，不必先发布 npm。
 5. **长生命周期进程不能用 `ctx.subprocess` 或 `ctx.jobs`**：两者的生命周期都绑在服务和 agent 作用域上，作用域释放即终止/取消。
+6. **界面能做**：客户端插件可以往宿主已有的 slot 里注册 React 组件（已装插件 `dsh-better-sidebar` 就是这么在会话标题栏放按钮的），宿主侧用 `ctx.webServer.register` 提供 HTTP 接口给界面调。
 
 ---
 
@@ -64,7 +65,34 @@
 }
 ```
 
-说明 client 侧机制存在（侧栏面板、HTTP 路由），但注入的 client 包名要跟桌面版实际加载的运行时对齐——M5 开工前必须实测，不能照抄。
+这个包里能直接抄的三件事：
+
+**a) 往界面挂组件**（`src/client/context-diagnostics-ui.tsx`、`src/client/sidebar/bottom-toggle.tsx`）：
+
+```js
+ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+  name: 'conversation.session.header.utilities',
+  id: 'dsh-better-sidebar:bottom-toggle',
+  order: 10,
+  registrant: 'dsh-better-sidebar',
+}, () => <BottomDockToggle store={store} />))
+```
+
+`slots.inject` 会等目标 slot 的声明上账（插件激活可能早于声明），声明撤了再重来时回调会重跑。组件签名是 `(props, context/entry)` 形态，具体以运行时类型为准。
+
+**b) 宿主提供接口**（`src/index.ts`）：
+
+```js
+ctx.effect(() => ctx.webServer.register({
+  kind: 'prefix',
+  path: '/sidebar/api',
+  handler: async (req, res) => { /* 读 body → 分发到方法表 → 写 JSON */ },
+}), 'dsh-better-sidebar: /sidebar/api routes')
+```
+
+**c) 客户端怎么找宿主**（`src/client/host-route-url.ts` 注释）：Electron 外壳的页面是 `dsh-app://app/`，外壳把非静态路径转发给宿主，所以客户端必须用**相对路径**；绝对 origin 会变成跨域且宿主不返回 CORS 头。
+
+已核实的 slot 名：`conversation.session.header.utilities`、`conversation.session.header.corner`（单占用，内置侧栏占着）、`shell.overlay`、`sidebar.right.pane.tab`、`sidebar.right.pane.tab.title`、`settings.section`。
 
 ---
 
@@ -122,8 +150,10 @@ export function apply(ctx, config) {
 
 | Service | 提供什么 | 对本项目的用处 |
 |---|---|---|
-| `ctx.tools` | 注册模型可见工具 | 6 个工具 |
-| `ctx.systemPrompt` | `section()` / `variable()`，可加系统提示段 | 可选：注入"工作区有 N 个 MC 工程"的一段上下文 |
+| `ctx.tools` | 注册模型可见工具 | 4 个工具（次要能力） |
+| `ctx.webServer` | `register({ kind, path, handler })` 挂 HTTP 路由 | **界面的数据通道**（`/mcdev/api`） |
+| `ctx.slots`（客户端上下文） | `inject(name, cb)` / `register(options, Component)` | **标题栏胶囊** |
+| `ctx.systemPrompt` | `section()` / `variable()`，可加系统提示段 | 可选：注入"工作区有 N 个 MC 工程" |
 | `ctx.workspaceRegistry` | 用户级工程记录（路径、标题、会话） | 不作为检测来源：它是"用户加进来的项目"，不是"磁盘上的 MC 工程" |
 | `ctx.subprocess` | 托管子进程、输出收集、进程树终止 | **不用于启动游戏**（见 6.1） |
 | `ctx.jobs` | 后台任务注册、状态、完成通知 | **不用于启动游戏**（见 6.2） |
@@ -151,9 +181,11 @@ export function apply(ctx, config) {
 
 ## 7. 呈现层
 
-工具可以带 `presentCall` / `presentResult`，返回 `card` 结构（`terminal`、`generic` 等），Web 客户端据此渲染卡片。纯函数约束：不能读时间、不能 IO，因为回放时也会调用。
+v0.2 之后界面是主场，工具卡片是次要的。
 
-`mc_launch` 打算用 `terminal` 卡片显示启动命令，用 `generic` 卡片显示实例状态表；日志走单独的 `mc_launch_logs` 结果。
+- **界面**：客户端插件（React）注入 `conversation.session.header.utilities` 等 slot，数据走 `/mcdev/api/*`。
+- **工具卡片**：`presentCall` / `presentResult` 返回 `card` 结构（`terminal`、`generic` 等），Web 客户端据此渲染。纯函数约束：不能读时间、不能 IO，因为回放时也会调用。
+- 两者共用同一份服务状态，不做两套逻辑。
 
 ---
 
@@ -161,11 +193,15 @@ export function apply(ctx, config) {
 
 | # | 待验证 | 验证方式 |
 |---|---|---|
-| V1 | 本地路径挂载能挂上，工具出现 | 在 desktop profile 的 patch 里加一行 `file:///C:/Projects/minecraft-dev-starter/src/hello.js`，重启后在会话里调工具 |
-| V2 | 桌面版实际运行的 `@deepseek-ai/dsh-tools` 版本 | 读 `app.asar` 里的 `node_modules/@deepseek-ai/dsh-tools/package.json` |
-| V3 | client 插件注入点是否与 `dsh-better-sidebar` 声明的一致 | M5 前读桌面版 client 包清单 |
+| V1 | 本地路径挂载能挂上，工具出现 | desktop profile 的 patch 加一行指向本地入口，重启后在会话里调工具 |
+| V2 | 桌面版实际运行的 `@deepseek-ai/dsh-tools` / client 包版本 | 读 `app.asar` 里的 `node_modules/@deepseek-ai/*/package.json` |
+| V3 | **客户端包能不能被桌面版加载** | 最小 `lib/client.js`（只注册一个按钮）+ `dsh.client.inject`，重启后看标题栏有没有按钮 |
 | V4 | `--dump-config` 是否可用来确认挂载 | `node <dsh>/lib/bin.js --profile desktop --dump-config` |
-| V5 | 宿主重启后 PID 探活是否可靠（Windows） | 起假进程 → 重启 → `mc_launch_list` |
+| V5 | 宿主重启后 PID 探活是否可靠（Windows） | 起假进程 → 重启 → 列实例 |
+| V6 | 相对路径请求宿主是否通（Electron 外壳） | 客户端 `fetch('/mcdev/api/ping')`，看是否 200 |
+| V7 | slot 组件拿到的 props 形状 | 打印一次 props，确认能拿到 sessionId / cwd |
+
+V3 是 v0.2 的关键闸门：不通过就退回独立网页面板。
 
 ---
 
@@ -177,8 +213,17 @@ export function apply(ctx, config) {
 ~/.dsh/profiles/desktop/cordis.patch.yml       profile 用户层
 ~/.dsh/cordis.patch.yml                        全局用户层（当前挂着两个 MCP）
 ~/.dsh/profiles/desktop/node_modules/minecraft-dev/     插件样本（服务端）
-~/.dsh/profiles/desktop/node_modules/dsh-better-sidebar/ 插件样本（含 client）
+~/.dsh/profiles/desktop/node_modules/dsh-better-sidebar/ 插件样本（含 client：
+                                                 src/client/context-diagnostics-ui.tsx  标题栏 slot
+                                                 src/client/sidebar/bottom-toggle.tsx   按钮示例
+                                                 src/client/host-route-url.ts           同源踩坑
+                                                 src/index.ts                           路由注册）
 ~/.dsh/profiles/web/node_modules/@tt-a1i/archify-dsh/    最小 bundle 样本
 ~/AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/
-                                               各包的 README 就是 API 文档
+                                               各服务端包的 README 就是 API 文档
+<DSH NEXT>/resources/app.asar                  桌面版运行时，内含 313 个 @deepseek-ai 包
+                                               其中 client 侧：dsh-client-ui-slots / -conversation /
+                                               -primitives / -layout / -modules / -locale / -store
 ```
+
+桌面版包里没有 README（只有编译产物），client 侧 API 的权威样本是 `dsh-better-sidebar` 的源码。

@@ -18,3 +18,7 @@ coverage/
 *.swp
 Thumbs.db
 desktop.ini
+
+# 构建产物
+lib/
+dist/
