@@ -43,23 +43,71 @@ export const CSS = `
 .mcdev-dot[data-state="ok"] { background: var(--dsw-alias-state-success-primary); }
 .mcdev-dot[data-state="error"] { background: var(--dsw-alias-state-error-primary); }
 
-/* 浮层：系统层级 2 的底色 + 一级描边 */
+/* 浮层：三层结构（表头 / 列表 / 选择区），选工程时列表高度不变 */
 .mcdev-flyout {
   position: absolute;
   top: 30px;
   right: 0;
   z-index: 60;
+  display: flex;
+  flex-direction: column;
   width: 340px;
   max-height: 60vh;
-  overflow: auto;
-  padding: 10px;
+  padding: 0;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: var(--dsw-font-xxs-12);
   box-shadow: 0 8px 24px var(--dsw-alias-bg-mask-1);
+  overflow: hidden;
 }
+.mcdev-flyout-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--dsw-alias-hairline);
+}
+.mcdev-flyout-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}
+.mcdev-flyout-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--dsw-alias-hairline);
+}
+
+/* 列表行：一行一个工程，高度恒定 */
+.mcdev-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxs-12);
+  text-align: left;
+  cursor: pointer;
+}
+.mcdev-list-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.mcdev-list-row[data-current="true"] { background: var(--dsw-alias-interactive-bg-hover); }
+.mcdev-list-row[data-current="true"] .mcdev-list-name { font: var(--dsw-font-xxs-strong-12); }
+.mcdev-list-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcdev-list-meta { flex: none; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+.mcdev-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .mcdev-title { font: var(--dsw-font-xxs-strong-12); }
 .mcdev-sub { color: var(--dsw-alias-label-secondary); }
@@ -70,29 +118,7 @@ export const CSS = `
 
 .mcdev-row { display: flex; align-items: baseline; gap: 8px; }
 .mcdev-key { flex: none; width: 78px; color: var(--dsw-alias-label-tertiary); }
-.mcdev-divider { height: 1px; margin: 8px 0; background: var(--dsw-alias-hairline); }
 
-/* 工程之间用内缩分割线，不做通栏；当前工程靠底色区分 */
-.mcdev-project { position: relative; padding: 8px 6px; border-radius: 4px; }
-.mcdev-project + .mcdev-project::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 10px;
-  right: 10px;
-  height: 1px;
-  background: var(--dsw-alias-hairline);
-}
-.mcdev-project.is-active { background: var(--dsw-alias-interactive-bg-hover); }
-
-/* 工程底部动作行：右对齐的小按钮，不是裸文字链接 */
-.mcdev-project-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
 .mcdev-mini {
   display: inline-flex;
   align-items: center;
@@ -107,7 +133,7 @@ export const CSS = `
   cursor: pointer;
 }
 .mcdev-mini:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-.mcdev-mini[data-tone="accent"] { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l4); }
+.mcdev-mini-icon { width: 22px; padding: 0; justify-content: center; }
 
 /* 目标标签：中性徽标，不是按钮——M2 之前没有可点的动作 */
 .mcdev-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
@@ -171,6 +197,14 @@ export const CSS = `
 .mcdev-option-label { font: var(--dsw-font-xxs-12); }
 
 .mcdev-status { margin-top: 6px; color: var(--dsw-alias-state-success-primary); font: var(--dsw-font-xxxs-11); }
+.mcdev-inline-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  color: var(--dsw-alias-state-success-primary);
+  font: var(--dsw-font-xxxs-11);
+}
 
 /* 日志尾部：等宽、可滚，底色用系统层级 3 */
 .mcdev-logs {
