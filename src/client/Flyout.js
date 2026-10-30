@@ -1,5 +1,7 @@
 /**
- * 工程浮层：列表 + 每个工程的可运行目标（只读，M2 才接启动）。
+ * 工程浮层：列出工作区里的工程与它们能跑的目标。
+ *
+ * M1 阶段只读：目标是**徽标**不是按钮，避免看起来能点却没有反应。
  * @module minecraft-dev-starter/client/Flyout
  */
 
@@ -31,9 +33,9 @@ export function Flyout() {
       ? h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, state.loading ? '正在扫描…' : '没有找到 Gradle 工程')
       : undefined,
     projects.map((project) => h(ProjectRow, { key: project.root, project })),
-    state.scan?.truncated === true
-      ? h('div', { className: 'mcdev-warn', style: { marginTop: 8 } }, '扫描超出预算，结果可能不全')
-      : undefined,
+    state.scan?.truncated === true ? h('div', { className: 'mcdev-warn', style: { marginTop: 8 } }, '扫描超出预算，结果可能不全') : undefined,
+    h('div', { className: 'mcdev-divider' }),
+    h('div', { className: 'mcdev-hint' }, '识别结果只读；启动能力在 M2 接入。'),
   )
 }
 
@@ -48,8 +50,7 @@ function ProjectRow({ project }) {
   return h(
     'div',
     {
-      className: 'mcdev-project',
-      style: active ? { background: 'rgba(88,166,255,.08)' } : undefined,
+      className: `mcdev-project${active ? ' is-active' : ''}`,
       onMouseDown: () => store.set({ selectedRoot: project.root }),
     },
     h(
@@ -58,23 +59,23 @@ function ProjectRow({ project }) {
       h('span', { className: 'mcdev-title', style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, projectTitle(project)),
       h('span', { className: 'mcdev-muted' }, kindLabel(project.kind)),
     ),
-    h('div', { className: 'mcdev-muted' }, projectSubtitle(project)),
+    h('div', { className: 'mcdev-sub' }, projectSubtitle(project)),
     targets.length === 0
-      ? h('div', { className: 'mcdev-muted', style: { marginTop: 6 } }, '没有找到可运行目标')
+      ? h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '没有找到可运行目标')
       : h(
           'div',
-          { className: 'mcdev-chips' },
+          { className: 'mcdev-badges' },
           targets.map((target) =>
             h(
               'span',
               {
                 key: `${target.module}:${target.task}`,
-                className: 'mcdev-chip',
+                className: 'mcdev-badge',
                 'data-guessed': target.guessed === true ? 'true' : 'false',
-                title: `${target.taskPath}${target.guessed === true ? '（推测，未验证）' : ''}`,
+                title: `${target.taskPath}${target.guessed === true ? '（按惯例推测，未验证）' : ''}`,
               },
-              `▶ ${target.label}`,
-              target.module !== '.' && target.module !== undefined ? h('span', { className: 'mcdev-muted' }, ` ${target.module}`) : undefined,
+              target.label,
+              target.module !== undefined && target.module !== '.' ? h('span', { className: 'mcdev-badge-tag' }, target.module) : undefined,
             ),
           ),
         ),

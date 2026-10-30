@@ -1,7 +1,11 @@
 /**
- * 样式：一次性注入一段 <style>，不用 CSS modules，也不引 UI 库。
+ * 样式：一次性注入 <style>，**只使用 DSH 的设计 token**（`--dsw-*`）。
  *
- * 颜色用 DSH 的 CSS 变量，取不到时退到中性的深色/浅色都能看的值。
+ * 规则来自系统自身：颜色一律走 `--dsw-alias-*`，字号走 `--dsw-font-*`，
+ * 控件高度对齐 24/28、圆角 3/4/8。不写死任何色值——跟随主题与皮肤切换，
+ * 也不会在亮色主题下突然出现一块深色面板。
+ *
+ * 这条约束由测试守护：`test/styles.test.js` 会拒绝出现原始色值的声明。
  * @module minecraft-dev-starter/client/styles
  */
 
@@ -9,53 +13,119 @@ export const STYLE_ID = 'mcdev-styles'
 
 export const CSS = `
 .mcdev-anchor { position: relative; display: inline-flex; }
+
+/* 标题栏胶囊：与系统控件同高同圆角，默认无底色 */
 .mcdev-pill {
-  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px;
-  border-radius: 999px; border: 1px solid var(--dsh-border, rgba(139,148,158,.35));
-  background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer;
-  max-width: 220px; overflow: hidden; white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  max-width: 220px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxs-12);
+  cursor: pointer;
 }
-.mcdev-pill:hover { background: var(--dsh-hover, rgba(139,148,158,.12)); }
-.mcdev-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: #8b949e; }
-.mcdev-dot[data-state="ok"] { background: #3fb950; }
-.mcdev-dot[data-state="idle"] { background: #8b949e; }
-.mcdev-dot[data-state="error"] { background: #f85149; }
+.mcdev-pill:hover { background: var(--dsw-alias-interactive-bg-hover); }
+
+.mcdev-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-tertiary);
+}
+.mcdev-dot[data-state="ok"] { background: var(--dsw-alias-state-success-primary); }
+.mcdev-dot[data-state="error"] { background: var(--dsw-alias-state-error-primary); }
+
+/* 浮层：系统层级 2 的底色 + 一级描边 */
 .mcdev-flyout {
-  position: absolute; top: 30px; right: 0; z-index: 60; width: 340px; max-height: 60vh; overflow: auto;
-  padding: 10px; border-radius: 10px; border: 1px solid var(--dsh-border, rgba(139,148,158,.35));
-  background: var(--dsh-surface, #1b1f24); color: var(--dsh-text, #e6edf3);
-  box-shadow: 0 12px 32px rgba(0,0,0,.35); font-size: 12px; line-height: 1.55;
+  position: absolute;
+  top: 30px;
+  right: 0;
+  z-index: 60;
+  width: 340px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxs-12);
+  box-shadow: 0 8px 24px var(--dsw-alias-bg-mask-1);
 }
-.mcdev-title { font-weight: 600; font-size: 12px; }
-.mcdev-muted { opacity: .62; }
+
+.mcdev-title { font: var(--dsw-font-xxs-strong-12); }
+.mcdev-sub { color: var(--dsw-alias-label-secondary); }
+.mcdev-muted { color: var(--dsw-alias-label-tertiary); }
+.mcdev-code { font-family: var(--dsw-font-mono); font-size: 11px; }
+.mcdev-warn { color: var(--dsw-alias-state-warn-primary); }
+.mcdev-error { color: var(--dsw-alias-state-error-primary); }
+
 .mcdev-row { display: flex; align-items: baseline; gap: 8px; }
-.mcdev-key { flex: none; width: 78px; opacity: .55; }
-.mcdev-project { padding: 8px 6px; border-radius: 8px; }
-.mcdev-project + .mcdev-project { border-top: 1px solid var(--dsh-border, rgba(139,148,158,.2)); }
-.mcdev-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.mcdev-chip {
-  height: 22px; padding: 0 8px; display: inline-flex; align-items: center; gap: 4px;
-  border-radius: 6px; border: 1px solid var(--dsh-border, rgba(139,148,158,.35));
-  background: transparent; color: inherit; font: inherit; font-size: 11px; opacity: .55;
-  cursor: not-allowed;
+.mcdev-key { flex: none; width: 78px; color: var(--dsw-alias-label-tertiary); }
+.mcdev-divider { height: 1px; margin: 8px 0; background: var(--dsw-alias-hairline); }
+
+.mcdev-project { padding: 8px 6px; border-radius: 4px; }
+.mcdev-project.is-active { background: var(--dsw-alias-interactive-bg-hover); }
+
+/* 目标标签：中性徽标，不是按钮——M2 之前没有可点的动作 */
+.mcdev-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.mcdev-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxxs-11);
 }
-.mcdev-chip[data-guessed="true"] { border-style: dashed; }
+.mcdev-badge[data-guessed="true"] {
+  border-style: dashed;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+}
+.mcdev-badge-tag { color: var(--dsw-alias-label-tertiary); }
+
+.mcdev-hint { color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+
 .mcdev-link {
-  background: transparent; border: 0; color: #58a6ff; font: inherit; font-size: 12px;
-  cursor: pointer; padding: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-accent);
+  font: var(--dsw-font-xxs-12);
+  cursor: pointer;
 }
 .mcdev-link:hover { text-decoration: underline; }
+
 .mcdev-section { margin-top: 12px; }
-.mcdev-section > h4 { margin: 0 0 4px; font-size: 11px; font-weight: 600; opacity: .7; letter-spacing: .04em; text-transform: uppercase; }
-.mcdev-list { margin: 0; padding-left: 16px; }
-.mcdev-list li { margin: 2px 0; }
-.mcdev-warn { color: #d29922; }
-.mcdev-error { color: #f85149; }
-.mcdev-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.mcdev-table th, .mcdev-table td { text-align: left; padding: 3px 6px 3px 0; vertical-align: top; }
-.mcdev-table th { font-weight: 500; opacity: .55; }
-.mcdev-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
-.mcdev-detail { padding: 12px; font-size: 12px; }
+.mcdev-section > h4 {
+  margin: 0 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xxxs-strong-11);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mcdev-table { width: 100%; border-collapse: collapse; font: var(--dsw-font-xxxs-11); }
+.mcdev-table th,
+.mcdev-table td { padding: 3px 6px 3px 0; text-align: left; vertical-align: top; }
+.mcdev-table thead th {
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xxxs-strong-11);
+  border-bottom: 1px solid var(--dsw-alias-hairline);
+}
+
+.mcdev-detail { padding: 12px; font: var(--dsw-font-xxs-12); color: var(--dsw-alias-label-primary); }
+.mcdev-stack { display: flex; flex-direction: column; gap: 4px; }
 `
 
 /** 注入一次；重复调用无副作用。 */

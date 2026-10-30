@@ -1,8 +1,7 @@
 /**
- * 右侧栏「MC 工程」标签：一个工程的完整画像——版本、环境、模块与目标、证据、警告。
+ * 右侧栏「MC 工程」标签：单个工程的完整画像——版本、环境、模块与目标、证据、警告。
  *
- * 这是给人核对"你凭什么说它是 NeoForge 1.21.1"的地方，所以证据永远显示，
- * 而不是折叠成一句结论。
+ * 这是给人核对"你凭什么说它是 Forge 1.20.1"的地方，所以证据永远展开显示。
  * @module minecraft-dev-starter/client/DetailTab
  */
 
@@ -40,10 +39,13 @@ export function DetailTab() {
     'div',
     { className: 'mcdev-detail' },
     h('div', { className: 'mcdev-title' }, projectTitle(project)),
-    h('div', { className: 'mcdev-muted' }, projectSubtitle(project)),
+    h('div', { className: 'mcdev-sub' }, projectSubtitle(project)),
     h('div', { className: 'mcdev-muted mcdev-code' }, project.root),
-    h('div', { className: 'mcdev-muted', style: { marginTop: 2 } },
-      `${kindLabel(project.kind)} · 置信度 ${Math.round(Number(project.confidence ?? 0) * 100)}%`),
+    h(
+      'div',
+      { className: 'mcdev-muted', style: { marginTop: 2 } },
+      `${kindLabel(project.kind)} · 置信度 ${Math.round(Number(project.confidence ?? 0) * 100)}%`,
+    ),
 
     section('基本信息', [
       row('loader', loaderLabel(project.loader)),
@@ -60,9 +62,8 @@ export function DetailTab() {
       row('本机 JDK', java.available?.length > 0 ? java.available.map((jdk) => `${jdk.major}`).join(' / ') : '未发现'),
     ]),
 
-    section(
-      '模块与运行目标',
-      modules.length === 0
+    section('模块与运行目标', [
+      ...(modules.length === 0
         ? [h('div', { className: 'mcdev-muted' }, '没有模块信息')]
         : [
             h(
@@ -89,15 +90,29 @@ export function DetailTab() {
                 ),
               ),
             ),
+          ]),
+      h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '带 ? 的任务是按 loader 惯例推测的，未经验证；启动能力在 M2 接入。'),
+    ]),
+
+    section(
+      '证据',
+      evidence.length === 0
+        ? [h('div', { className: 'mcdev-muted' }, '没有证据')]
+        : [
+            h(
+              'div',
+              { className: 'mcdev-stack' },
+              evidence.map((entry, index) =>
+                h(
+                  'div',
+                  { key: `${entry.file}:${index}` },
+                  h('span', { className: 'mcdev-code mcdev-sub' }, entry.file),
+                  h('span', { className: 'mcdev-muted' }, ` — ${entry.detail}`),
+                ),
+              ),
+            ),
           ],
     ),
-
-    section('证据', evidence.length === 0
-      ? [h('div', { className: 'mcdev-muted' }, '没有证据')]
-      : [h('ul', { className: 'mcdev-list' }, evidence.map((entry, index) =>
-          h('li', { key: `${entry.file}:${index}` },
-            h('span', { className: 'mcdev-code' }, entry.file),
-            ' — ', entry.detail)))]),
 
     warnings.length === 0 && conflicts.length === 0
       ? undefined
@@ -106,12 +121,14 @@ export function DetailTab() {
           ...conflicts.map((conflict, index) => h('div', { key: `c${index}`, className: 'mcdev-error' }, `· ${conflict}`)),
         ]),
 
-    h('div', { style: { marginTop: 14 } },
-      h('button', { type: 'button', className: 'mcdev-link', onClick: () => loadScan({ refresh: true }) },
-        state.loading ? '重新扫描中…' : '重新扫描')),
+    h(
+      'div',
+      { style: { marginTop: 14 } },
+      h('button', { type: 'button', className: 'mcdev-link', onClick: () => loadScan({ refresh: true }) }, state.loading ? '重新扫描中…' : '重新扫描'),
+    ),
     state.scan?.scannedAt === undefined
       ? undefined
-      : h('div', { className: 'mcdev-muted', style: { marginTop: 4 } }, `扫描于 ${state.scan.scannedAt}`),
+      : h('div', { className: 'mcdev-muted mcdev-hint', style: { marginTop: 4 } }, `扫描于 ${state.scan.scannedAt}`),
   )
 }
 
@@ -120,12 +137,7 @@ export function DetailTab() {
  * @param {Array<any>} children
  */
 function section(title, children) {
-  return h(
-    'div',
-    { className: 'mcdev-section' },
-    h('h4', undefined, title),
-    ...children,
-  )
+  return h('div', { className: 'mcdev-section' }, h('h4', undefined, title), ...children)
 }
 
 /**
@@ -133,10 +145,5 @@ function section(title, children) {
  * @param {string} value
  */
 function row(key, value) {
-  return h(
-    'div',
-    { className: 'mcdev-row', key },
-    h('span', { className: 'mcdev-key' }, key),
-    h('span', { className: 'mcdev-code' }, value),
-  )
+  return h('div', { className: 'mcdev-row', key }, h('span', { className: 'mcdev-key' }, key), h('span', { className: 'mcdev-code' }, value))
 }
