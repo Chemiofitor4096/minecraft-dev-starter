@@ -1,0 +1,32 @@
+{
+  "name": "minecraft-dev-starter",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Minecraft 运行面板：会话标题栏胶囊 + 右侧栏运行日志",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "build:client": "node scripts/build-client.mjs"
+  },
+  "license": "MIT"
+}

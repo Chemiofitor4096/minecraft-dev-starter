@@ -1,0 +1,7 @@
+# minecraft-dev-starter bundle patch
+#
+# 一行宿主插件；客户端半边由 dsh-client-modules 按 package.json 的
+# `dsh.client` 声明自动扫描并挂载，不需要单独的行。
+- insert:
+    - id: mcdev-host
+      name: 'minecraft-dev-starter'

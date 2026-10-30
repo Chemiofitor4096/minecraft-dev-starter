@@ -52,6 +52,26 @@ AI：读代码、改代码、看日志 → 继续
 | `mc_launch_logs` | 增量读日志，含崩溃归因 |
 | `mc_launch_stop` | 停止实例 |
 
+## 开发
+
+M0 探针已通过（加载协议、标题栏 slot、右侧栏标签与自动展开），细节见 [M0 验证记录](./doc/M0-验证记录.md)。
+
+```powershell
+# 建一个独立测试 profile（只需一次）
+node <dsh>/lib/bin.js --profile m0test --from-default-profile web --port 3499 --no-open
+
+# 挂本地插件；开发期用 link:，改完重启即生效
+node <dsh>/lib/bin.js plugin --profile m0test add link:C:/Projects/minecraft-dev-starter
+
+# 起服务并打开它打印的带 token 的地址
+node <dsh>/lib/bin.js --profile m0test --port 3499 --no-open
+
+# 构建客户端半边（M0 是原样拷贝，M1 起换成 esbuild）
+npm run build
+```
+
+探针把宿主/客户端两边的握手结果挂在 `/mcdev/api/reports`，不用看截图也能确认链路。
+
 ## 许可证
 
-MIT（待定，见策划 D1）。
+MIT（待定，见策划 §16 D1）。
