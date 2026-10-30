@@ -8,12 +8,13 @@
 
 import { createApi } from './lib/api.js'
 import { createLaunchService } from './lib/launches.js'
+import { applyTools } from './tools.js'
 
 /** Cordis 插件名。 */
 export const name = 'mcdev-host'
 
 /** 依赖的宿主服务。 */
-export const inject = ['webServer', 'sessions']
+export const inject = ['webServer', 'sessions', 'tools']
 
 /** 插件版本；客户端会显示，用来确认两边同一份代码。 */
 const VERSION = '0.1.0'
@@ -100,6 +101,9 @@ export function apply(ctx, config = {}) {
       maxLogLines: Number(settings.logRingLines) || DEFAULTS.logRingLines,
     }),
   })
+
+  // 面板与模型共用同一套服务；工具只是薄封装（M5）
+  applyTools(ctx, { api })
 
   ctx.effect(
     () =>

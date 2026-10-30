@@ -26,9 +26,16 @@
   },
   "scripts": {
     "build": "node scripts/build-client.mjs",
-    "build:client": "node scripts/build-client.mjs"
+    "build:client": "node scripts/build-client.mjs",
+    "test": "node --test \"test/*.test.js\""
   },
   "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
   "devDependencies": {
     "esbuild": "^0.28.2"
   }
