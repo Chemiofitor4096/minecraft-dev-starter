@@ -8,7 +8,7 @@
 import { useEffect } from 'react'
 import { h } from './h.js'
 import { kindLabel, loaderLabel, projectSubtitle, projectTitle, text } from './format.js'
-import { IconWarning } from './icons.js'
+import { IconRefresh, IconWarning } from './icons.js'
 import { capsuleText, selectedTarget } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { openLogTab } from './runtime.js'
@@ -198,7 +198,12 @@ export function DetailTab() {
     h(
       'div',
       { style: { marginTop: 14 } },
-      h('button', { type: 'button', className: 'mcdev-link', onClick: () => loadScan({ refresh: true }) }, state.loading ? '重新扫描中…' : '重新扫描'),
+      h(
+        'button',
+        { type: 'button', className: 'mcdev-mini', onClick: () => loadScan({ refresh: true }) },
+        h('span', { className: 'mcdev-icon' }, h(IconRefresh, { size: 12 })),
+        state.loading ? '重新扫描中…' : '重新扫描',
+      ),
     ),
     state.scan?.scannedAt === undefined
       ? undefined

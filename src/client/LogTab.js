@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { call } from './api.js'
 import { h } from './h.js'
-import { IconWarning } from './icons.js'
+import { IconRefresh, IconWarning } from './icons.js'
 import { Skeleton } from './Skeleton.js'
 import { loadLaunches, selectedProject, useLaunches } from './state.js'
 
@@ -132,7 +132,12 @@ export function LogTab() {
     h(
       'div',
       { style: { marginTop: 8 } },
-      h('button', { type: 'button', className: 'mcdev-link', onClick: () => void loadLaunches() }, '刷新实例列表'),
+      h(
+        'button',
+        { type: 'button', className: 'mcdev-mini', onClick: () => void loadLaunches() },
+        h('span', { className: 'mcdev-icon' }, h(IconRefresh, { size: 12 })),
+        '刷新实例列表',
+      ),
     ),
   )
 }

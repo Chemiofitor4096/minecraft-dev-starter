@@ -8,7 +8,7 @@
 
 import { h } from './h.js'
 import { kindLabel, projectSubtitle, projectTitle } from './format.js'
-import { IconRefresh } from './icons.js'
+import { IconCheck, IconChevronRight, IconRefresh } from './icons.js'
 import { groupByModule, selectedTarget, targetKey } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { activeLaunchFor, loadScan, selectTarget, store, useLaunches, useStoreState } from './state.js'
@@ -28,8 +28,8 @@ export function Flyout() {
       h('span', { className: 'mcdev-title' }, '工作区 MC 工程'),
       h(
         'button',
-        { type: 'button', className: 'mcdev-link mcdev-icon-text', onClick: () => loadScan({ refresh: true }) },
-        h('span', { className: 'mcdev-icon' }, h(IconRefresh, undefined)),
+        { type: 'button', className: 'mcdev-mini', onClick: () => loadScan({ refresh: true }) },
+        h('span', { className: 'mcdev-icon' }, h(IconRefresh, { size: 12 })),
         state.loading ? '扫描中…' : '刷新',
       ),
     ),
@@ -132,35 +132,40 @@ function ProjectBlock({ project, launches, selection }) {
           )
         : h(
             'div',
-            { className: 'mcdev-row', style: { justifyContent: 'space-between', gap: 8, marginTop: 6 } },
-            h('span', { className: 'mcdev-hint' }, `目标 ${chosen?.label ?? '—'}${targets.length > 1 ? `（共 ${targets.length} 个）` : ''}`),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'mcdev-link',
-                onClick: (event) => {
-                  event.stopPropagation()
-                  store.set({ selectedRoot: project.root })
-                },
-              },
-              '切到这里',
-            ),
+            { className: 'mcdev-hint', style: { marginTop: 6 } },
+            `目标 ${chosen?.label ?? '—'}${targets.length > 1 ? `（共 ${targets.length} 个）` : ''}`,
           ),
     h(
       'div',
-      { style: { marginTop: 6 } },
+      { className: 'mcdev-project-actions' },
+      active
+        ? undefined
+        : h(
+            'button',
+            {
+              type: 'button',
+              className: 'mcdev-mini',
+              onClick: (event) => {
+                event.stopPropagation()
+                store.set({ selectedRoot: project.root })
+              },
+            },
+            h('span', { className: 'mcdev-icon' }, h(IconCheck, { size: 12 })),
+            '切换到此工程',
+          ),
       h(
         'button',
         {
           type: 'button',
-          className: 'mcdev-link',
+          className: 'mcdev-mini',
+          'data-tone': active ? 'accent' : undefined,
           onClick: () => {
             store.set({ selectedRoot: project.root })
             openDetailTab()
           },
         },
-        '查看详情',
+        '工程详情',
+        h('span', { className: 'mcdev-icon' }, h(IconChevronRight, { size: 12 })),
       ),
     ),
   )

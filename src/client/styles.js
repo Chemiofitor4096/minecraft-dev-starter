@@ -72,8 +72,42 @@ export const CSS = `
 .mcdev-key { flex: none; width: 78px; color: var(--dsw-alias-label-tertiary); }
 .mcdev-divider { height: 1px; margin: 8px 0; background: var(--dsw-alias-hairline); }
 
-.mcdev-project { padding: 8px 6px; border-radius: 4px; }
+/* 工程之间用内缩分割线，不做通栏；当前工程靠底色区分 */
+.mcdev-project { position: relative; padding: 8px 6px; border-radius: 4px; }
+.mcdev-project + .mcdev-project::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10px;
+  right: 10px;
+  height: 1px;
+  background: var(--dsw-alias-hairline);
+}
 .mcdev-project.is-active { background: var(--dsw-alias-interactive-bg-hover); }
+
+/* 工程底部动作行：右对齐的小按钮，不是裸文字链接 */
+.mcdev-project-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.mcdev-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxxs-11);
+  cursor: pointer;
+}
+.mcdev-mini:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.mcdev-mini[data-tone="accent"] { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l4); }
 
 /* 目标标签：中性徽标，不是按钮——M2 之前没有可点的动作 */
 .mcdev-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
@@ -178,16 +212,6 @@ export const CSS = `
 .mcdev-diagnosis-hint { color: var(--dsw-alias-state-error-primary); font: var(--dsw-font-xxs-strong-12); }
 .mcdev-logs-full { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0; }
 
-.mcdev-link {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--dsw-alias-accent);
-  font: var(--dsw-font-xxs-12);
-  cursor: pointer;
-}
-.mcdev-link:hover { text-decoration: underline; }
-
 .mcdev-section { margin-top: 12px; }
 .mcdev-section > h4 {
   margin: 0 0 4px;
@@ -224,8 +248,8 @@ export const CSS = `
 .mcdev-dot[data-pulse="true"] { animation: mcdev-pulse 1.6s ease-in-out infinite; }
 .mcdev-pill,
 .mcdev-run,
-.mcdev-option,
-.mcdev-link { transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease; }
+.mcdev-mini,
+.mcdev-option { transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease; }
 
 /* 骨架：扫描/加载中的占位，避免一片空白 */
 .mcdev-skeleton { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
@@ -244,8 +268,8 @@ export const CSS = `
   .mcdev-skeleton-row { animation: none; }
   .mcdev-pill,
   .mcdev-run,
-  .mcdev-option,
-  .mcdev-link { transition: none; }
+  .mcdev-mini,
+  .mcdev-option { transition: none; }
 }
 `
 

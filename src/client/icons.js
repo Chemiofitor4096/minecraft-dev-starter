@@ -88,3 +88,31 @@ export function IconChevronDown({ size = 13 } = {}) {
     }),
   ])
 }
+
+/** 前进：右箭头，用于"详情"这类进入动作。 */
+export function IconChevronRight({ size = 13 } = {}) {
+  return svg(size, [
+    h('path', {
+      key: 'a',
+      d: 'm6.5 4.5 3.5 3.5-3.5 3.5',
+      stroke: 'currentColor',
+      strokeWidth: 1.5,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+    }),
+  ])
+}
+
+/** 勾选：用于"切换到此工程"这类确认动作。 */
+export function IconCheck({ size = 13 } = {}) {
+  return svg(size, [
+    h('path', {
+      key: 'a',
+      d: 'm3.8 8.4 2.7 2.7 5.7-6',
+      stroke: 'currentColor',
+      strokeWidth: 1.5,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+    }),
+  ])
+}
