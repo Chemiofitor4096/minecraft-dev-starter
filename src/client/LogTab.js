@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import { call } from './api.js'
 import { h } from './h.js'
 import { IconRefresh, IconWarning } from './icons.js'
+import { highlightLine } from './logFormat.js'
 import { launchStatusText, pickLogTarget } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { loadLaunches, selectedProject, useLaunches } from './state.js'
@@ -140,7 +141,22 @@ export function LogTab() {
     log?.error === undefined
       ? log === undefined && running
         ? h(Skeleton, { rows: 4, hint: '正在读取日志…' })
-        : h('pre', { ref: body, className: 'mcdev-logs mcdev-logs-full' }, (log?.lines ?? []).join('\n') || '（还没有输出）')
+        : h(
+            'pre',
+            { ref: body, className: 'mcdev-logs mcdev-logs-full' },
+            (log?.lines ?? []).length === 0
+              ? '（还没有输出）'
+              : (log?.lines ?? []).map((line, index) =>
+                  h(
+                    'span',
+                    { key: index, className: 'mcdev-log-line' },
+                    highlightLine(line).map((part, partIndex) =>
+                      h('span', { key: partIndex, 'data-kind': part.kind }, part.text),
+                    ),
+                    '\n',
+                  ),
+                ),
+          )
       : h('div', { className: 'mcdev-error', style: { marginTop: 8 } }, log.error),
     h(
       'div',

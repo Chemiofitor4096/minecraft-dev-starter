@@ -257,6 +257,20 @@ export const CSS = `
 .mcdev-diagnosis-hint { color: var(--dsw-alias-state-error-primary); font: var(--dsw-font-xxs-strong-12); }
 .mcdev-logs-full { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0; }
 
+/* 日志高亮：只按语义上色，时间/线程/logger 一律压到 tertiary，让正文更清楚 */
+.mcdev-log-line { display: inline; }
+.mcdev-log-line [data-kind="time"],
+.mcdev-log-line [data-kind="thread"],
+.mcdev-log-line [data-kind="logger"] { color: var(--dsw-alias-label-tertiary); }
+.mcdev-log-line [data-kind="muted"] { color: var(--dsw-alias-label-tertiary); }
+.mcdev-log-line [data-kind="level-warn"] { color: var(--dsw-alias-state-warn-primary); }
+.mcdev-log-line [data-kind="level-error"] { color: var(--dsw-alias-state-error-primary); }
+.mcdev-log-line [data-kind="level-debug"] { color: var(--dsw-alias-label-tertiary); }
+.mcdev-log-line [data-kind="task"] { color: var(--dsw-alias-label-secondary); }
+.mcdev-log-line [data-kind="ok"] { color: var(--dsw-alias-state-success-primary); }
+.mcdev-log-line [data-kind="fail"] { color: var(--dsw-alias-state-error-primary); font: var(--dsw-font-xxxs-strong-11); }
+.mcdev-log-line [data-kind="stack"] { color: var(--dsw-alias-label-secondary); }
+
 .mcdev-section { margin-top: 12px; }
 .mcdev-section > h4 {
   margin: 0 0 4px;
