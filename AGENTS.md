@@ -176,6 +176,18 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 - 新版本发出去后，用干净 profile 装一次并看启动日志里的 `host ready (x.y.z)`，
   这条同时验证了「版本号读对了」与「包结构完整」。
 
+## 安全告警（npm / Socket）
+
+npm 包页面上会出现两条告警，都来自 peer 依赖图，不是本包代码：
+
+- **High CVE**：`zod@<4.6.6`（GHSA-mrhx-c7xc-m3w5），经 `@deepseek-ai/dsh-llm` 传导，
+  属于官方运行时 `@deepseek-ai/dsh-tools` 的树。本包 `dependencies` 为空，改不了；只能等上游升 zod。
+- **Uses eval**：**误报**。`@deepseek-ai/dsh-ptc-runtime/lib/index.js` 里有一张保留字表，
+  其中一项就是字符串 `"eval"`，静态扫描按字符串命中了。本仓库与产物里 `\beval\b` 零命中（可复查）。
+
+结论：不要为了这两条去改依赖声明（把 peer 改成 optional 也挡不住 CVE，因为它是真实的传递依赖）。
+需要清除误报就往 Socket 的 false positive 通道提；需要修 CVE 就等官方升 `zod`。
+
 ## 还没做的事
 
 - **M6 通用启动器**：HMCL 实例库 + 直启 java，让面板也能起非 Gradle 工程（估 5–8 天）。
