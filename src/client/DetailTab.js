@@ -158,7 +158,7 @@ export function DetailTab() {
               ),
             ),
           ]),
-      h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '带 ? 的任务是按 loader 惯例推测的，未经验证；启动能力在 M2 接入。'),
+      h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '带 ? 的任务是按 loader 惯例推测的，尚未真实运行验证；可以直接启动试，失败时日志里会给出原因。'),
     ]),
 
     section(

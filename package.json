@@ -1,6 +1,6 @@
 {
   "name": "minecraft-dev-starter",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": false,
   "description": "DSH plugin that detects Minecraft mod projects and launches the client from the session header, with live logs in the sidebar",
   "type": "module",
@@ -44,13 +44,20 @@
     "test": "node --test \"test/*.test.js\""
   },
   "license": "MIT",
-  "dependencies": {
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.3"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chemiofitor4096/minecraft-dev-starter.git"
+  },
+  "homepage": "https://github.com/Chemiofitor4096/minecraft-dev-starter#readme",
+  "bugs": {
+    "url": "https://github.com/Chemiofitor4096/minecraft-dev-starter/issues"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1"
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "^0.2.1-rc.1"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.3",
     "esbuild": "^0.28.2"
   }
 }
