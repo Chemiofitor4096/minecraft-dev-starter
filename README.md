@@ -4,137 +4,122 @@
 
 # minecraft-dev-starter
 
-在 DSH（DeepSeek Harness）的会话标题栏放一个 IDEA 风格的运行控件：认出工作区里的 Minecraft 模组工程，点一下就能起 Client，日志就在右侧栏。
+为 DeepSeek Harness 添加 Minecraft 模组开发运行控件。
 
-给做模组的人用，不是给 AI 用的——AI 侧只是顺带留了几个工具。
+插件识别当前工作区中的 Minecraft 模组与插件工程，在会话标题栏提供运行目标的选择与启动、停止操作，并将运行日志输出到侧边栏标签页。
 
-## 能做什么
+## 功能
 
-**识别**：Fabric、Forge、NeoForge、Architectury、Paper、Spigot，覆盖 1.7.10 到 26.x。
-单模块、多模块、聚合仓库都能认；loader 写在子模块里也能认。
-
-**启动**：Client / Server / Data / GameTestServer。自动挑 JDK（读 `<jdk>/release`，不乱起进程）；
-构建完能判断"进游戏了"而不是"进程还活着"；关掉游戏后状态同步；宿主重启后按 pid 对账，不伪造结束原因。
-
-**看日志**：右侧栏独立标签，按工程列历史、默认显示最新、可跟随尾部；
-崩溃时给一句归因（依赖没解析、JDK 版本不对、端口被占、认证失败等 8 类）。
-
-**多工程与多会话**：工作区里每个工程分别记住自己选的目标；切换对话即切换工作区，不需要手动刷新。
-
-**AI 工具**（可选）：`mc_projects` / `mc_launch` / `mc_launch_logs` / `mc_launch_stop`，与面板共用同一套服务。
-
-**better-sidebar**：装了 [dsh-better-sidebar](https://github.com/topics/dsh-better-sidebar)，还会多出两个带图标的侧栏页面。
+- **工程识别**：支持 Fabric、Forge、NeoForge、Architectury、Paper 与 Spigot，覆盖 Minecraft 1.7.10 至 26.x。支持单模块、多模块与聚合仓库；loader 声明位于子模块时同样可以识别。
+- **运行目标**：从 Gradle 配置中提取 Client、Server、Data、GameTestServer 等任务。按 loader 惯例推测的目标会标记为未验证，不影响选择与启动。
+- **托管启动**：通过 Gradle Wrapper 启动任务，依据日志标记判定是否进入运行状态，而非仅依据进程存活。停止时终止 Gradle 及其全部子进程。
+- **状态保持**：运行记录持久化到本地。宿主重启后按进程 ID 校验：确认存活则继续跟踪，无法确认则记为未知，不推测退出原因。
+- **运行日志**：独立侧边栏标签页，按工程展示启动历史，支持跟随输出。异常退出时给出可能原因，覆盖依赖解析失败、JDK 版本不匹配、端口占用、认证失败等情况。
+- **工作区跟随**：以当前会话的工作目录作为工作区，切换会话时自动重新扫描，无需手动刷新。
+- **模型工具**（可选）：提供 `mc_projects`、`mc_launch`、`mc_launch_logs`、`mc_launch_stop` 四个工具，与面板共用同一套服务。
+- **扩展集成**：安装 [dsh-better-sidebar](https://github.com/topics/dsh-better-sidebar) 后，面板与日志可在其侧边栏中作为带图标的标签页打开。
 
 ## 安装
 
-需要 DSH 桌面版（0.2.1 及以上）或 dsh CLI。
+要求 DSH 桌面版 0.2.1 或更高版本，或对应的 `dsh` CLI。
 
 ```powershell
-# 本地仓库（改完即生效）
+# 从 npm 安装
+dsh plugin --profile desktop add minecraft-dev-starter
+
+# 本地仓库（修改后即时生效）
 dsh plugin --profile desktop add link:C:/Projects/minecraft-dev-starter
 
-# 打好的 tarball
-dsh plugin --profile desktop add file:./minecraft-dev-starter-0.1.0.tgz
-
-# 从 npm 安装（发布之后）
-dsh plugin --profile desktop add minecraft-dev-starter
+# 使用打包文件
+dsh plugin --profile desktop add file:./minecraft-dev-starter-0.1.3.tgz
 ```
 
-装完**重启 DSH** 生效。卸载：
+安装完成后需重启 DSH 生效。卸载：
 
 ```powershell
 dsh plugin --profile desktop remove minecraft-dev-starter
 ```
 
-`dsh plugin` 实际是 pnpm 的转发器：它把包装进 profile、再把声明了 `dsh.bundle` 的依赖加进
-`dsh.profile.bundles` 层列表。所以手工在 profile 的 `package.json` 里加一行再用 pnpm 安装，
-效果是一样的。
+`dsh plugin` 是 pnpm 的封装：将插件加入 profile 的依赖，并把声明了 `dsh.bundle` 的包加入 `dsh.profile.bundles` 列表。直接编辑 profile 的 `package.json` 后执行 `pnpm install`，效果相同。
 
 ## 使用
 
-1. 打开一个模组工程所在的对话。
-2. 标题栏出现 `● Client ▶`。点名字展开浮层，选工程与目标；点 ▶ 开始构建并启动。
-3. 启动后自动打开「运行日志」（可在配置里关掉），日志实时刷新。
-4. 再点一次按钮（变成 ⏹）停止，会连同 Gradle 拉起的整个进程树一起结束。
+1. 打开包含 Minecraft 工程的工作区会话。
+2. 标题栏显示当前选中的运行目标。点击目标名称打开浮层，从中选择工程与任务。
+3. 点击启动按钮开始构建并运行。启动后自动打开「运行日志」标签页，该行为可通过配置关闭。
+4. 运行期间按钮切换为停止；点击后终止 Gradle 及其子进程。
 
-浮层形态会自适应：工作区里只有一个工程时跳过列表，表头直接是工程名、loader/版本与路径；
-有多个工程时列表固定高度，选谁只换下面的目标区，界面不会跳。
+浮层布局随工程数量变化：单工程工作区不显示工程列表，表头直接呈现工程名称、loader 与版本、路径；多工程工作区显示固定高度的列表，切换工程时仅更新下方目标区域，页面不会跳动。
 
 ## 配置
 
-在 profile 的 `cordis.patch.yml` 里给插件那行加 `config`：
+在 profile 的 `cordis.patch.yml` 中为该插件条目添加 `config` 字段：
 
 ```yaml
 - id: mcdev-host
   name: minecraft-dev-starter
   config:
-    autoOpenLogTab: true   # 启动后自动打开日志标签
-    readyTimeoutMs: 90000  # 等"进游戏"的上限，超时不算失败
-    logRingLines: 2000     # 内存里保留的日志行数（磁盘文件是完整的）
+    autoOpenLogTab: true
+    readyTimeoutMs: 90000
+    logRingLines: 2000
 ```
 
-## 支持范围
+| 配置项 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `autoOpenLogTab` | boolean | `true` | 启动后自动打开运行日志标签页 |
+| `readyTimeoutMs` | number | `90000` | 等待进入运行状态的超时时间；超时不计为失败 |
+| `logRingLines` | number | `2000` | 内存中保留的日志行数；磁盘上的日志始终完整 |
 
-| 平台 | 版本线 | 说明 |
+## 兼容范围
+
+| 平台 | 版本范围 | 说明 |
 |---|---|---|
-| Fabric | 1.14 – 26.x | loom 的 `runClient` 一族 |
-| Forge | 1.7.10 / 1.12.2 / 1.16.5 / 1.20.1 | 包括 legacyforge |
+| Fabric | 1.14 – 26.x | loom 提供的 `runClient` 等任务 |
+| Forge | 1.7.10 / 1.12.2 / 1.16.5 / 1.20.1 | 包含 legacyforge |
 | NeoForge | 1.20.1 – 26.x | moddev 插件 |
-| Architectury | 1.16 – 26.x | 按子模块拆目标 |
+| Architectury | 1.16 – 26.x | 按子模块拆分任务 |
 | Paper / Spigot | 1.7.10 – 26.x | 服务端插件工程 |
 
-JDK 需求按版本推断（1.7.10/1.12.2 → 8，1.18–1.20.4 → 17，1.20.5+ → 21，26.x → 25），
-和机器上已装的 JDK 比对，缺了会在面板里提示，不会带着错的版本硬跑。
+JDK 版本按 Minecraft 版本推断：1.7.10 与 1.12.2 需要 Java 8，1.18 至 1.20.4 需要 Java 17，1.20.5 及以上需要 Java 21，26.x 需要 Java 25。插件将需求与已安装的 JDK 比对，缺失或版本不符时在面板中提示。
 
 ## 开发
 
 ```powershell
 npm install
-npm run build        # 构建客户端到 lib/client.js（改 src/client 后必须跑）
+npm run build        # 构建客户端到 lib/client.js；修改 src/client 后必须执行
 npm test             # 59 个测试
 npm run build -- --watch
 ```
 
-仓库结构、硬坑清单与历史验证结论都在 [AGENTS.md](./AGENTS.md)。
-设计文档：[策划](./doc/策划.md) · [DSH 插件机制调研](./doc/调研-DSH插件机制.md)。
+仓库结构、已知问题与历次验证结论见 [AGENTS.md](./AGENTS.md)。设计文档：[策划](./doc/策划.md)、[DSH 插件机制调研](./doc/调研-DSH插件机制.md)。
 
 ## 发布
 
-DSH 插件的分发就是 npm 包 + 一份清单声明，没有单独的注册流程：
+DSH 插件以 npm 包形式分发，不需要独立注册流程。
 
-1. **清单**：`package.json` 里声明 `dsh.bundle.patch`（指向 `cordis.patch.yml`）与
-   `dsh.client.platform`（有客户端时）。宿主靠这两项决定"这是不是一个 DSH 插件"。
-2. **产物**：`npm run build` 把客户端打进 `lib/client.js` 并**提交进仓库**——
-   运行时直接读它，不装依赖也不做构建。
-3. **自检**：`npm test`，`npm pack --dry-run` 看包里有没有多余文件（`files` 字段已限定
-   `src`、`lib`、`cordis.patch.yml`、README、AGENTS）。
-4. **发布**：`npm publish --access public`。版本号走 semver，破坏性改动升主版本。
-
-   如果用的是 granular token（只允许暂存），会被拒为 `E_STAGE_REQUIRED`，改走两步：
+1. **清单**：`package.json` 声明 `dsh.bundle.patch`（指向 `cordis.patch.yml`）；提供浏览器界面时同时声明 `dsh.client.platform`。宿主依据这两项识别插件。
+2. **产物**：执行 `npm run build` 生成 `lib/client.js`，并将该文件提交到仓库。运行时直接读取产物，不安装依赖，也不执行构建。
+3. **校验**：执行 `npm test`；使用 `npm pack --dry-run` 确认包内容（`files` 字段已限定为 `src`、`lib`、`cordis.patch.yml`、README 与 AGENTS）。
+4. **发布**：`npm publish --access public`。若使用仅允许暂存的 granular token，改为以下流程：
 
    ```powershell
-   npm stage publish                 # 提交到暂存区，拿到 stage-id
-   npm stage list                   # 看到 status: validated 再批准
-   npm stage approve <stage-id>      # 需要人工过 2FA（网页确认）
+   npm stage publish                 # 提交到暂存区
+   npm stage list                   # 等待状态变为 validated
+   npm stage approve <stage-id>      # 人工完成 2FA 确认
    ```
 
-   暂存 → 人工批准是 npm 的设计：机器提交、人确认，token 泄露也发不出正式版本。
-   批准后 `latest` 自动指向新版本，通常十几秒内可从 registry 拉到。
+   暂存后由人工批准是 npm 的设计：机器提交、人工确认，即使 token 泄露也无法直接发布正式版本。批准后 `latest` 标签自动指向新版本。
+5. **兼容性**：宿主 API 会持续演进。发布前将 `@deepseek-ai/dsh-tools` 与 `@deepseek-ai/cordis` 的版本范围对齐目标运行时；跨大版本时应分别发布版本，而非放宽范围强行兼容。
+6. **安装**：用户执行 `dsh plugin --profile <name> add <包名>` 后重启，或在 Plugins 面板中安装。
 
-5. **兼容性**：宿主 API 会演进（本插件按 0.2.1-rc.3 的 `dsh-tools` 开发）。发布前把
-   `dependencies` 里的 `@deepseek-ai/dsh-tools` 与 `peerDependencies` 的 cordis 范围对齐
-   目标运行时；跨大版本时最好发两个版本而不是硬兼容。
-6. **安装**：用户 `dsh plugin --profile <name> add <包名>` 后重启；也可以在 Plugins 面板里装。
-
-本地想先验证发布形态，可以 `npm pack` 后用 `dsh plugin add file:<tarball>` 装一遍——
-它会走和 npm 安装完全相同的 pnpm 路径。
+在本地验证发布形态时，可先 `npm pack`，再通过 `dsh plugin add file:<tarball>` 安装；该路径与 npm 安装完全一致。
 
 ## 已知限制
 
-- 原生右侧栏的标签类型没有图标位，只有 better-sidebar 的标签能带图标。
-- 只支持 Gradle 工程；HMCL 实例库里的整合包还不能直接起（见 AGENTS.md 的 M6）。
-- 状态文件放在 `~/.dsh/mc-dev-starter/`，多个 profile 共用一份；日志标签按工程过滤，不影响使用。
-- Windows 上第一次构建会下载 Gradle 与依赖，可能要几分钟；之后有 daemon 会快很多。
+- 原生右侧栏的标签类型不提供图标字段，图标仅支持 `dsh-better-sidebar` 中的标签。
+- 当前仅支持 Gradle 工程；HMCL 实例库中的整合包尚不支持（见 AGENTS.md 的 M6）。
+- 运行状态保存于 `~/.dsh/mc-dev-starter/`，多个 profile 共用同一份记录；日志标签按工程过滤，功能不受影响。
+- 在 Windows 上首次构建需要下载 Gradle 与项目依赖，耗时可能达到数分钟；后续构建可使用 Gradle daemon。
 
 ## License
 
