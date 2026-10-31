@@ -220,6 +220,8 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
   忘了构建就会发出旧客户端。同理，**新 clone 下来要先构建**，否则 `link:` 安装拿不到客户端。
 - 新版本发出去后，用干净 profile 装一次并看启动日志里的 `host ready (x.y.z)`，
   这条同时验证了「版本号读对了」与「包结构完整」。
+- 每个发布版本打 annotated tag `vX.Y.Z`，指向 `package.json` 已是该版本的那个提交。
+  补历史 tag 时按版本号定位提交，别按日期猜：`git show <sha>:package.json` 逐个核对。
 
 ## 安全告警（npm / Socket）
 
