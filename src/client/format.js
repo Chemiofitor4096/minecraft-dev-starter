@@ -3,6 +3,11 @@
  * @module minecraft-dev-starter/client/format
  */
 
+/**
+ * 面板名。比"MC 工程"更说明用途：这是给模组开发用的运行面板。
+ */
+export const PANEL_TITLE = 'Mod Dev'
+
 const LOADER_LABELS = {
   fabric: 'Fabric',
   forge: 'Forge',

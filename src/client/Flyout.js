@@ -1,14 +1,16 @@
 /**
- * 工程浮层：三层结构——表头固定、工程列表滚动、选中工程的运行目标固定在底部。
+ * 工程浮层。两种形态：
  *
- * 这样选工程只改底部选择区，列表每行高度恒定，不会出现"点一下整块跳一下"。
- * 每行不再挂按钮：点行 = 选中；详情与刷新各只有一处。
+ * - **多工程**：三层结构——表头固定、工程列表滚动、选中工程的目标固定在底部。
+ *   列表每行高度恒定，选工程只改底部，不会"点一下整块跳一下"。
+ * - **单工程**（更常见）：跳过列表，表头直接显示工程名与 loader/版本，底下就是目标；
+ *   少一层选择，也少一次点击。
  *
  * @module minecraft-dev-starter/client/Flyout
  */
 
 import { h } from './h.js'
-import { kindLabel, projectSubtitle } from './format.js'
+import { kindLabel, PANEL_TITLE, projectSubtitle, projectTitle } from './format.js'
 import { IconChevronRight, IconRefresh } from './icons.js'
 import { groupByModule, selectedTarget, targetKey } from './selection.js'
 import { Skeleton } from './Skeleton.js'
@@ -20,6 +22,7 @@ export function Flyout() {
   const launches = useLaunches(1500)
   const projects = state.scan?.projects ?? []
   const current = projects.find((project) => project.root === state.selectedRoot) ?? projects[0]
+  const single = projects.length === 1
   const running = launches.list.find(
     (entry) =>
       (entry.status === 'starting' || entry.status === 'running') &&
@@ -28,7 +31,7 @@ export function Flyout() {
 
   return h(
     'div',
-    { className: 'mcdev-flyout', role: 'dialog', 'aria-label': 'MC 工程' },
+    { className: 'mcdev-flyout', role: 'dialog', 'aria-label': PANEL_TITLE },
 
     // ① 表头：与列表之间有一条通栏分割线，滚动时不动
     h(
@@ -37,7 +40,7 @@ export function Flyout() {
       h(
         'div',
         { className: 'mcdev-row', style: { justifyContent: 'space-between', alignItems: 'center' } },
-        h('span', { className: 'mcdev-title' }, 'MC 工程'),
+        h('span', { className: 'mcdev-title' }, PANEL_TITLE),
         h(
           'button',
           {
@@ -50,13 +53,24 @@ export function Flyout() {
           h('span', { className: 'mcdev-icon' }, h(IconRefresh, { size: 12 })),
         ),
       ),
-      h('div', { className: 'mcdev-muted mcdev-code mcdev-ellipsis', title: state.scan?.root ?? '' }, state.scan?.root ?? '—'),
+      // 单工程：表头直接承担原来列表行的工作，省掉一层选择
+      single && current !== undefined
+        ? h(
+            'div',
+            { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
+            h('div', { className: 'mcdev-title', title: projectTitle(current) }, projectTitle(current)),
+            h('div', { className: 'mcdev-sub' }, projectSubtitle(current)),
+            h('div', { className: 'mcdev-muted mcdev-code mcdev-ellipsis', title: current.root }, current.root),
+          )
+        : h('div', { className: 'mcdev-muted mcdev-code mcdev-ellipsis', title: state.scan?.root ?? '' }, state.scan?.root ?? '—'),
       state.error === undefined ? undefined : h('div', { className: 'mcdev-error' }, state.error),
       launches.error === undefined ? undefined : h('div', { className: 'mcdev-error' }, launches.error),
     ),
 
-    // ② 列表：每行只有名字与 loader/版本，高度恒定
-    h(
+    // ② 列表：只在多工程时出现；每行只有名字与 loader/版本，高度恒定
+    single
+      ? undefined
+      : h(
       'div',
       { className: 'mcdev-flyout-list' },
       projects.length === 0

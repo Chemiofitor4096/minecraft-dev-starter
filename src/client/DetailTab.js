@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react'
 import { h } from './h.js'
-import { kindLabel, loaderLabel, projectSubtitle, projectTitle, text } from './format.js'
+import { kindLabel, loaderLabel, PANEL_TITLE, projectSubtitle, projectTitle, text } from './format.js'
 import { IconRefresh, IconWarning } from './icons.js'
 import { capsuleText, selectedTarget } from './selection.js'
 import { Skeleton } from './Skeleton.js'
@@ -44,10 +44,10 @@ export function DetailTab() {
     return h(
       'div',
       { className: 'mcdev-detail' },
-      h('div', { className: 'mcdev-title' }, 'MC 工程'),
+      h('div', { className: 'mcdev-title' }, PANEL_TITLE),
       state.loading
         ? h(Skeleton, { rows: 4, hint: '正在扫描工作区…' })
-        : h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, '当前工作区没有识别到 MC 工程'),
+        : h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, '当前工作区没有识别到模组工程'),
       state.error === undefined ? undefined : h('div', { className: 'mcdev-error', style: { marginTop: 8 } }, state.error),
     )
   }

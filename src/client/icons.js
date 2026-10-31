@@ -116,3 +116,32 @@ export function IconCheck({ size = 13 } = {}) {
     }),
   ])
 }
+
+/** 方块：代表"模组工程"（侧边栏标签图标）。 */
+export function IconCube({ size = 14 } = {}) {
+  return svg(size, [
+    h('path', {
+      key: 'a',
+      d: 'M8 1.9 13.6 4.7v6.6L8 14.1 2.4 11.3V4.7z',
+      stroke: 'currentColor',
+      strokeWidth: 1.3,
+      strokeLinejoin: 'round',
+    }),
+    h('path', { key: 'b', d: 'M2.6 4.8 8 7.5l5.4-2.7M8 7.5v6.4', stroke: 'currentColor', strokeWidth: 1.3, strokeLinejoin: 'round' }),
+  ])
+}
+
+/** 终端：代表"运行日志"（侧边栏标签图标）。 */
+export function IconTerminal({ size = 14 } = {}) {
+  return svg(size, [
+    h('rect', { key: 'a', x: 1.9, y: 2.9, width: 12.2, height: 10.2, rx: 2, stroke: 'currentColor', strokeWidth: 1.3 }),
+    h('path', {
+      key: 'b',
+      d: 'm4.6 6.4 1.9 1.9-1.9 1.9M8.6 10.4h2.9',
+      stroke: 'currentColor',
+      strokeWidth: 1.3,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+    }),
+  ])
+}
