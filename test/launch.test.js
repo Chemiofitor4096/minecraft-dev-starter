@@ -122,6 +122,64 @@ test('启动 → 就绪 → 读日志 → 停止', async () => {
       return entry?.status === 'exited' ? entry : undefined
     })
     assert.equal(exited.outcome, 'killed')
+    // 常驻目标没有"过没过"这回事，结论字段保持空
+    assert.equal(exited.mode, 'daemon')
+    assert.equal(exited.verdict, null)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('会跑完的目标：生下来就是运行中，结束即结论', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mcdev-oneshot-'))
+  const script = [
+    "setTimeout(() => { process.stdout.write('> Task :runData\\n'); process.stdout.write('BUILD SUCCESSFUL in 3s\\n') }, 150)",
+  ].join(';')
+  const service = createLaunchService({
+    dir,
+    commandFor: () => ({ argv: [process.execPath, '-e', script], cwd: process.cwd(), windowsVerbatimArguments: false }),
+  })
+
+  try {
+    const record = await service.start({ root: 'C:\\fake\\demo', taskPath: 'runData', label: 'Data', kind: 'data' })
+    // 没有就绪这一步：进程活着就是在跑
+    assert.equal(record.mode, 'oneshot')
+    assert.equal(record.status, 'running')
+
+    const exited = await waitFor(async () => {
+      const list = await service.list()
+      return list.find((entry) => entry.id === record.id && entry.status === 'exited')
+    })
+    assert.equal(exited.exitCode, 0)
+    assert.equal(exited.outcome, 'normal')
+    assert.equal(exited.verdict, 'passed')
+    assert.match(exited.summary, /BUILD SUCCESSFUL/)
+    assert.equal(exited.readyTimedOut, false)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('会跑完的目标：测试挂了但退了 0，也要判失败', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mcdev-gametest-'))
+  const script = [
+    "setTimeout(() => { process.stdout.write('Running test demo:oak_planks\\n'); process.stdout.write('2 required tests failed :(\\n') }, 150)",
+  ].join(';')
+  const service = createLaunchService({
+    dir,
+    commandFor: () => ({ argv: [process.execPath, '-e', script], cwd: process.cwd(), windowsVerbatimArguments: false }),
+  })
+
+  try {
+    const record = await service.start({ root: 'C:\\fake\\game', taskPath: 'runGameTestServer', label: 'GameTestServer', kind: 'gameTestServer' })
+    const exited = await waitFor(async () => {
+      const list = await service.list()
+      return list.find((entry) => entry.id === record.id && entry.status === 'exited')
+    })
+    assert.equal(exited.exitCode, 0)
+    assert.equal(exited.verdict, 'failed')
+    assert.match(exited.summary, /2 required tests failed/)
+    assert.equal(exited.failures.length, 1)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

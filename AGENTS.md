@@ -7,6 +7,16 @@
 DeepSeek Harness（DSH）插件：识别工作区里的 Minecraft 模组工程，并在会话标题栏提供一个
 IDEA 风格的运行控件（选中目标 → 启动 / 停止 / 看日志）。
 
+界面不是全部。面板与工具共用同一份运行状态与同一把锁：**人**看工程状态、起停、读日志；
+**模型**识别工程、启动任务、拿日志、拿结论。同一工程同时只有一个实例，两边不会互相踩。
+两者的分工来自运行目标的两类生命周期：
+
+- `daemon`（`runClient` / `runServer`）：一直跑到人关窗口，"就绪"是个有意义的状态；
+- `oneshot`（`runData` / `runGameTestServer` / 自建 `runGametest`）：跑完即结束，
+  结束时的 `verdict` 才是它的产出。模型的"改 → 跑 → 验"闭环靠这一类。
+
+窗口画面是模型判断不了的部分，交给人；能断言的（构建、数据生成、gametest 结果）交给模型。
+
 - 宿主侧：ESM、无 TypeScript、JSDoc 注解；Node ≥ 20。
 - 客户端侧：React 组件用 `h()` 手写（不用 JSX），由 esbuild 打成 CJS，再包一层
   `window.__ModuleLoader__.load({ id, factory })`。
@@ -16,7 +26,7 @@ IDEA 风格的运行控件（选中目标 → 启动 / 停止 / 看日志）。
 
 ```
 src/index.js          宿主入口：inject + apply，挂 HTTP 路由与工具
-src/tools.js          四个模型工具（mc_projects / mc_launch / mc_launch_logs / mc_launch_stop）
+src/tools.js          六个模型工具（mc_projects / mc_project_detail / mc_launch / mc_launch_logs / mc_launch_list / mc_launch_stop）
 src/lib/
   api.js              /mcdev/api 的方法实现（scan / detail / state / launch.*）
   detect.js           工程画像：loader、模块、run 目标、证据与警告
@@ -24,6 +34,7 @@ src/lib/
   gradle.js           build.gradle / settings.gradle / gradle.properties 的解析
   metadata.js         mods.toml / fabric.mod.json / plugin.yml / archive.yml
   java.js             JDK 探测与版本匹配（读 <jdk>/release，不起进程）
+  verify.js           目标分类（daemon / oneshot）与一次性任务的裁决（verdict）
   launches.js         启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
   state.js            ~/.dsh/mc-dev-starter 下的状态与日志文件
   argv.js             gradlew 命令行构造（含 Windows 引号规则）
@@ -35,8 +46,8 @@ src/client/
   DetailTab.js        工程面板（版本、环境、模块、证据、警告）
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
-lib/client.js         构建产物（提交进仓库，运行时直接加载）
-test/                 59 个测试 + fixtures（真实工程形态的假仓库）
+lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
+test/                 97 个测试 + fixtures（真实工程形态的假仓库）
 doc/                  策划与调研
 ```
 
@@ -75,6 +86,8 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 改 profile 后启动失败 | `package.json` 写入了 BOM | 用无 BOM 的 UTF-8 写；改完必须重启 DSH |
 | 仓库的 `node_modules` 神秘消失 | 在某个 profile 里把 `link:` 依赖换成 `file:`/npm 包时，pnpm 解链会**删掉被链接目录的 `node_modules`**（实测：`plugin add link:` → 在 → `plugin add file:tgz` → 没了） | 别在同一 profile 里来回切换安装方式；tarball/registry 验证用独立 profile；发现消失就 `npm install --ignore-scripts` 重装 |
 | 侧栏标签打不开 | `openTab` 的展开是异步的 | 打开后等一帧再断言 `isExpanded()` |
+| 一次性任务被当成守护进程 | 用"等就绪"的语义管 `runData` / `runGameTestServer`：`BUILD SUCCESSFUL` 是**终止**信号却被当成**就绪**信号，而且跑完拿不到"过没过" | 目标带 `mode`（daemon / oneshot），oneshot 生下来就是 running、结束即算 `verdict`；见 `src/lib/verify.js` |
+| 测试挂了却判通过 | 部分 GameTest 运行器失败时进程仍退 0 | 裁决先看失败特征行、再看退出码；`readVerdict` 里顺序不能调 |
 
 其他约定：
 
@@ -159,6 +172,30 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 - 面板改名「MC 工程」→「Mod Dev」（功能名，不是名词描述），浮层表头/标签/详情页统一。
 - 单工程工作区跳过工程列表：表头直接承担工程身份（名字 + loader/版本 + 路径）。
 
+### M10 验证回路（2026-10-31）
+
+把"运行目标"分成两类生命周期，并给会跑完的那类补上结论。起因是两个判断：模型无法从游戏窗口里
+获得信息（它只能读日志），而它自己的命令模型装不下一个长生命周期进程（超时、单例、杀树、JDK）。
+
+- **识别层**：`runTargets[].mode`——`client` / `server` → `daemon`；`data` / `datagen` /
+  `gameTest` / `gameTestServer` → `oneshot`。认不出的 kind 一律当 daemon，不替陌生任务宣布"跑完了"。
+- **生命周期**：oneshot 生下来就是 `running`（没有就绪这一步），不打 `readyTimedOut`；
+  进程结束即 `exited`，同一次落盘写入 `verdict` / `summary` / `failures`。
+- **裁决**：`readVerdict` 的顺序是"被停 → 起不来 → 失败特征行 → 非零退出码 → 成功特征行 → 零退出码 → unknown"。
+  失败特征排在退出码之前，是为了抓住"测试挂了但进程退了 0"（部分 GameTest 运行器如此）。
+- **工具**：`mc_launch` 的默认 `wait` 由 mode 决定（daemon → ready，oneshot → exit）；
+  显式传 `ready` 给 oneshot 时按 exit 处理并附 `note`；输出新增 `mode` / `verdict` / `summary` / `failures`。
+  `mc_project_detail`（每个目标标常驻/会跑完）、`mc_launch_list`（历史带结论）、`mc_launch_logs`（结论摘要）同步暴露。
+- **面板**：状态词区分为「运行中 / 执行中」「通过 / 失败」，其余未动。
+
+验证：
+
+- 真机识别：EnchatingPaper、ProtectionEngineering 的 `runData` / `runGameTestServer` 判为 oneshot，
+  `runClient` / `runServer` 判为 daemon。
+- 真实日志回放：拿 `~/.dsh/mc-dev-starter/logs` 里的真实 Gradle 输出喂 `readVerdict`——
+  成功收尾（`BUILD SUCCESSFUL in 38s`）判 passed，依赖解析崩溃判 failed 并取到 `BUILD FAILED`。
+- 97 个测试；`test/verify.test.js` 覆盖分类与裁决，`test/launch.test.js` 用真子进程跑通 oneshot 的两种结局。
+
 ## 发布记录
 
 - `0.1.0` → 首版。
@@ -169,15 +206,18 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 - `0.1.3` → peer 依赖、仓库元数据、截图与 README 重写；详情页去掉过期文案。
 - `0.1.4` → 运行日志按级别着色（`src/client/logFormat.js`）。
 - `0.1.5` → `logDock` 配置：日志可落原生右侧栏或 better-sidebar 底部工作台。
-- 待发：装 better-sidebar 时默认落底部（`chooseLogDock` 默认改为 bottom），与其他改动
-  一起攒到 `0.1.6` 再发。
+- `0.1.6`（已提交暂存，等人工批准）→ 装 better-sidebar 时默认落底部（`chooseLogDock` 默认 bottom）、
+  日志级别过滤、六个工具与结构化归因、`mc_launch` 默认超时 10 分钟、描述与格式修正。
+- 待发 `0.1.7` → 验证回路：目标分类 daemon / oneshot、一次性任务的 `verdict`、
+  `mc_launch` 的 `wait: exit`、面板状态词。
 
 发版注意：
 
 - 账号用的是 **granular token（只允许暂存）**，直接 `npm publish` 会被拒为 `E_STAGE_REQUIRED`。
   流程是 `npm stage publish` → `npm stage list`（等 `status: validated`）→
   `npm stage approve <stage-id>`（人工过 2FA）。token 不能批准，批准必须是人。
-- 发布前必须 `npm run build`：`lib/client.js` 是提交进仓库的产物，忘了构建就会发出旧客户端。
+- 发布前必须 `npm run build`：`lib/client.js` 被 `.gitignore` 忽略，只通过 `package.json` 的 `files` 进包；
+  忘了构建就会发出旧客户端。同理，**新 clone 下来要先构建**，否则 `link:` 安装拿不到客户端。
 - 新版本发出去后，用干净 profile 装一次并看启动日志里的 `host ready (x.y.z)`，
   这条同时验证了「版本号读对了」与「包结构完整」。
 
@@ -196,6 +236,7 @@ npm 包页面上会出现两条告警，都来自 peer 依赖图，不是本包�
 ## 还没做的事
 
 - **M6 通用启动器**：HMCL 实例库 + 直启 java，让面板也能起非 Gradle 工程（估 5–8 天）。
+  优先级下调：它服务"人想玩"，与模型的验证回路无关，排在 oneshot 结论之后。
 - 跨 profile 共用 `~/.dsh/mc-dev-starter/state.json`：不同 profile 的实例记录会混在一起，
   日志标签已按工程过滤，暂不影响使用，但值得按 profile 分目录。
 - 桌面版目前仍用 `link:` 安装（改代码即时生效）；切到 npm 版本需要每次改完都发版。

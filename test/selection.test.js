@@ -116,4 +116,9 @@ test('实例状态的中文标签', () => {
   assert.equal(launchStatusText({ status: 'exited', outcome: 'killed' }), '已停止')
   assert.equal(launchStatusText({ status: 'exited', outcome: 'normal' }), '已退出')
   assert.equal(launchStatusText({ status: 'exited', outcome: 'crashed', exitCode: 1 }), '已退出(1)')
+  // 会跑完的目标说的是"过没过"，不是"退没退"
+  assert.equal(launchStatusText({ status: 'running', mode: 'oneshot' }), '执行中')
+  assert.equal(launchStatusText({ status: 'exited', verdict: 'passed' }), '通过')
+  assert.equal(launchStatusText({ status: 'exited', verdict: 'failed', exitCode: 1 }), '失败')
+  assert.equal(launchStatusText({ status: 'exited', verdict: 'aborted', outcome: 'killed' }), '已停止')
 })

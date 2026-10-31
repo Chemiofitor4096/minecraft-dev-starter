@@ -8,15 +8,19 @@
 
 插件识别当前工作区中的 Minecraft 模组与插件工程，在会话标题栏提供运行目标的选择与启动、停止操作，并将运行日志输出到侧边栏标签页。
 
+面板服务于人，工具服务于模型，两者共用同一份运行状态和同一把锁：同一工程同时只有一个实例，谁先起的，另一方都看得见，也不会把对方的进程踩掉。
+
+运行目标分两类，生命周期不同。`runClient` / `runServer` 是常驻进程，启动后一直运行到人关闭窗口；`runData` / `runGameTestServer` 会跑完，插件在它们结束时给出通过或失败的结论。模型因此可以自己完成「改代码 → 跑一遍 → 看结论」这一环，而不必让窗口里的画面承担它判断不了的事情。
+
 ## 功能
 
 - **工程识别**：支持 Fabric、Forge、NeoForge、Architectury、Paper 与 Spigot，覆盖 Minecraft 1.7.10 至 26.x。支持单模块、多模块与聚合仓库；loader 声明位于子模块时同样可以识别。
-- **运行目标**：从 Gradle 配置中提取 Client、Server、Data、GameTestServer 等任务。按 loader 惯例推测的目标会标记为未验证，不影响选择与启动。
-- **托管启动**：通过 Gradle Wrapper 启动任务，依据日志标记判定是否进入运行状态，而非仅依据进程存活。停止时终止 Gradle 及其全部子进程。
+- **运行目标**：从 Gradle 配置中提取 Client、Server、Data、GameTestServer 等任务，并区分常驻（`daemon`）与会跑完（`oneshot`）两类。按 loader 惯例推测的目标会标记为未验证，不影响选择与启动。
+- **托管启动**：通过 Gradle Wrapper 启动任务。常驻目标依据日志标记判定是否进入运行状态，而非仅依据进程存活；一次性目标跑完即给出结论，成功、失败、被停止、起不来分别可辨。停止时终止 Gradle 及其全部子进程。
 - **状态保持**：运行记录持久化到本地。宿主重启后按进程 ID 校验：确认存活则继续跟踪，无法确认则记为未知，不推测退出原因。
 - **运行日志**：独立侧边栏标签页或 better-sidebar 底部工作台，按工程展示启动历史，支持跟随输出。日志按级别着色：WARN 与 ERROR 高亮，堆栈帧与 Gradle 任务行区分显示，时间、线程与 logger 弱化；可按级别过滤（全部 / INFO+ / WARN+ / ERROR），选择会被记住。异常退出时给出可能原因，覆盖依赖解析失败、JDK 版本不匹配、端口占用、认证失败等情况。
 - **工作区跟随**：以当前会话的工作目录作为工作区，切换会话时自动重新扫描，无需手动刷新。
-- **模型工具**（可选）：提供六个工具，与面板共用同一套服务——`mc_projects`（列出工程与目标）、`mc_project_detail`（loader 依据、模块、JDK、证据与警告）、`mc_launch`（启动，默认等待就绪，最长 10 分钟）、`mc_launch_logs`（读日志，异常退出时附带结构化归因与建议）、`mc_launch_list`（历史实例与状态）、`mc_launch_stop`（停止整棵进程树）。
+- **模型工具**（可选）：提供六个工具，与面板共用同一套服务——`mc_projects`（列出工程与目标）、`mc_project_detail`（loader 依据、模块、JDK、证据与警告，并标明每个目标是常驻还是会跑完）、`mc_launch`（启动；常驻目标默认等到运行态，一次性目标默认等到结束并返回 `verdict` 与失败行）、`mc_launch_logs`（读日志，异常退出时附带结构化归因与建议）、`mc_launch_list`（历史实例与状态，含验证结论）、`mc_launch_stop`（停止整棵进程树）。
 - **扩展集成**：安装 [dsh-better-sidebar](https://github.com/topics/dsh-better-sidebar) 后，面板与日志可在其侧边栏中作为带图标的标签页打开。
 
 ## 安装
@@ -50,6 +54,16 @@ dsh plugin --profile desktop remove minecraft-dev-starter
 4. 运行期间按钮切换为停止；点击后终止 Gradle 及其子进程。
 
 浮层布局随工程数量变化：单工程工作区不显示工程列表，表头直接呈现工程名称、loader 与版本、路径；多工程工作区显示固定高度的列表，切换工程时仅更新下方目标区域，页面不会跳动。
+
+### 验证改动
+
+对会跑完的目标，模型可以直接拿到结论，不需要人盯着窗口：
+
+1. `mc_project_detail` 看哪些目标是 `oneshot`，即 `runData`、`runGameTestServer`，以及工程里自建的 `runGametest`；
+2. `mc_launch` 启动它。这类目标默认等到结束，返回 `verdict`：`passed` / `failed` / `aborted` / `error`；
+3. 失败时 `summary` 是第一处失败特征行，`failures` 是命中的若干行；需要全文用 `mc_launch_logs`。
+
+常驻目标（`runClient`）能自动断言的只有「是否进入运行状态」与日志里的异常。画面、手感这类判断仍由人完成：模型把客户端起起来，人看一眼，再让模型回去读日志。
 
 ## 配置
 
@@ -91,9 +105,11 @@ JDK 版本按 Minecraft 版本推断：1.7.10 与 1.12.2 需要 Java 8，1.18 �
 ```powershell
 npm install
 npm run build        # 构建客户端到 lib/client.js；修改 src/client 后必须执行
-npm test             # 59 个测试
+npm test             # 97 个测试
 npm run build -- --watch
 ```
+
+`lib/client.js` 被 `.gitignore` 忽略，只在打包时通过 `package.json` 的 `files` 进入 npm 包。因此新 clone 的仓库要先执行一次 `npm run build`，否则 `link:` 安装的插件拿不到客户端产物。
 
 仓库结构、已知问题与历次验证结论见 [AGENTS.md](./AGENTS.md)。设计文档：[策划](./doc/策划.md)、[DSH 插件机制调研](./doc/调研-DSH插件机制.md)。
 
@@ -102,7 +118,7 @@ npm run build -- --watch
 DSH 插件以 npm 包形式分发，不需要独立注册流程。
 
 1. **清单**：`package.json` 声明 `dsh.bundle.patch`（指向 `cordis.patch.yml`）；提供浏览器界面时同时声明 `dsh.client.platform`。宿主依据这两项识别插件。
-2. **产物**：执行 `npm run build` 生成 `lib/client.js`，并将该文件提交到仓库。运行时直接读取产物，不安装依赖，也不执行构建。
+2. **产物**：执行 `npm run build` 生成 `lib/client.js`。该文件被 `.gitignore` 忽略，通过 `package.json` 的 `files` 字段进入 npm 包。运行时直接读取产物，不安装依赖，也不执行构建。
 3. **校验**：执行 `npm test`；使用 `npm pack --dry-run` 确认包内容（`files` 字段已限定为 `src`、`lib`、`cordis.patch.yml`、README 与 AGENTS）。
 4. **发布**：`npm publish --access public`。若使用仅允许暂存的 granular token，改为以下流程：
 
@@ -123,6 +139,7 @@ DSH 插件以 npm 包形式分发，不需要独立注册流程。
 - 原生右侧栏的标签类型不提供图标字段，图标仅支持 `dsh-better-sidebar` 中的标签。
 - 当前仅支持 Gradle 工程；HMCL 实例库中的整合包尚不支持（见 AGENTS.md 的 M6）。
 - 运行状态保存于 `~/.dsh/mc-dev-starter/`，多个 profile 共用同一份记录；日志标签按工程过滤，功能不受影响。
+- 一次性目标的结论由退出码与日志特征共同判定：退出码非零必为失败；退出码为零但日志里出现测试失败特征（如 `N required tests failed`）同样判为失败，以免把「测试挂了但进程退了 0」当成通过。两者都缺失时记为未知，不猜。
 - 在 Windows 上首次构建需要下载 Gradle 与项目依赖，耗时可能达到数分钟；后续构建可使用 Gradle daemon。
 
 ## License

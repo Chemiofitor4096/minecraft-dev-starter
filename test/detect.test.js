@@ -37,6 +37,11 @@ test('neoforge：版本来自 neo_version 映射，runs 四个目标', async () 
     profile.runTargets.map((target) => target.taskPath),
     ['runClient', 'runServer', 'runData', 'runGameTestServer'],
   )
+  // 常驻还是会跑完：决定启动后是等就绪还是等结束
+  assert.deepEqual(
+    profile.runTargets.map((target) => target.mode),
+    ['daemon', 'daemon', 'oneshot', 'oneshot'],
+  )
   assert.ok(profile.warnings.some((warning) => warning.includes('configuration-cache')))
 })
 

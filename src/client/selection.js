@@ -111,15 +111,18 @@ export function pickLogTarget(history, currentId, pinned) {
 }
 
 /**
- * 实例状态的中文标签。
+ * 实例状态的中文标签。会跑完的目标（oneshot）用"执行中 / 通过 / 失败"，
+ * 常驻目标仍说"运行中 / 已退出"——两类的"结束"含义本来就不同。
  * @param {Record<string, any>} entry
  * @returns {string}
  */
 export function launchStatusText(entry) {
   if (entry.status === 'starting') return '启动中'
-  if (entry.status === 'running') return '运行中'
+  if (entry.status === 'running') return entry.mode === 'oneshot' ? '执行中' : '运行中'
   if (entry.status === 'unknown') return '状态未知'
-  if (entry.outcome === 'killed') return '已停止'
+  if (entry.verdict === 'passed') return '通过'
+  if (entry.verdict === 'failed') return '失败'
+  if (entry.verdict === 'aborted' || entry.outcome === 'killed') return '已停止'
   if (entry.outcome === 'normal') return '已退出'
   return entry.exitCode === null || entry.exitCode === undefined ? '已退出' : `已退出(${entry.exitCode})`
 }

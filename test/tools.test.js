@@ -40,6 +40,10 @@ function fakeApi(overrides = {}) {
       minecraftVersion: '1.21.1',
       confidence: 0.95,
       modules: [{ path: '.', platform: 'neoforge', targets: [{ taskPath: 'runClient' }] }],
+      runTargets: [
+        { taskPath: 'runClient', label: 'Client', kind: 'client', mode: 'daemon', module: '.', guessed: false },
+        { taskPath: 'runData', label: 'Data', kind: 'data', mode: 'oneshot', module: '.', guessed: false },
+      ],
       evidence: [{ file: 'build.gradle', kind: 'plugin', detail: '插件 net.neoforged.moddev' }],
       warnings: ['没找到可用的 JDK 21'],
       conflicts: [],
@@ -133,6 +137,90 @@ test('mc_launch detach 立即返回', async () => {
   assertLossless(value)
 })
 
+test('mc_launch 对会跑完的目标默认等结束并给结论', async () => {
+  const { byName } = build({
+    'launch.start': async () => ({
+      id: 'launch-3',
+      status: 'running',
+      taskPath: 'runData',
+      mode: 'oneshot',
+      pid: 456,
+      logPath: 'C:/logs/launch-3.log',
+    }),
+    'launch.list': async () => [
+      {
+        id: 'launch-3',
+        status: 'exited',
+        taskPath: 'runData',
+        mode: 'oneshot',
+        outcome: 'normal',
+        exitCode: 0,
+        verdict: 'passed',
+        summary: 'BUILD SUCCESSFUL in 3s',
+        failures: [],
+        startedAt: '2026-10-31T02:00:00.000Z',
+        logPath: 'C:/logs/launch-3.log',
+      },
+    ],
+  })
+  const value = await byName.mc_launch.execute({ taskPath: 'runData' }, {})
+  assert.equal(value.mode, 'oneshot')
+  assert.equal(value.verdict, 'passed')
+  assert.equal(value.timedOut, false)
+  assertLossless(value)
+  assert.match(byName.mc_launch.output.render({}, value)[0].text, /通过/)
+})
+
+test('mc_launch 失败时点名第一处失败', async () => {
+  const { byName } = build({
+    'launch.start': async () => ({ id: 'launch-4', status: 'running', taskPath: 'runGameTestServer', mode: 'oneshot', logPath: 'C:/logs/launch-4.log' }),
+    'launch.list': async () => [
+      {
+        id: 'launch-4',
+        status: 'exited',
+        taskPath: 'runGameTestServer',
+        mode: 'oneshot',
+        outcome: 'normal',
+        exitCode: 0,
+        verdict: 'failed',
+        summary: '2 required tests failed :(',
+        failures: ['2 required tests failed :(', 'AssertionError: expected true'],
+        startedAt: '2026-10-31T02:00:00.000Z',
+        logPath: 'C:/logs/launch-4.log',
+      },
+    ],
+  })
+  const value = await byName.mc_launch.execute({ taskPath: 'runGameTestServer' }, {})
+  assert.equal(value.verdict, 'failed')
+  assert.equal(value.failures.length, 2)
+  assertLossless(value)
+  const text = byName.mc_launch.output.render({}, value)[0].text
+  assert.match(text, /失败/)
+  assert.match(text, /第一处失败：2 required tests failed/)
+})
+
+test('mc_launch 对会跑完的目标显式传 ready 时按等结束处理并说明', async () => {
+  const { byName } = build({
+    'launch.start': async () => ({ id: 'launch-5', status: 'running', taskPath: 'runData', mode: 'oneshot', logPath: 'C:/logs/launch-5.log' }),
+    'launch.list': async () => [
+      { id: 'launch-5', status: 'exited', taskPath: 'runData', mode: 'oneshot', outcome: 'normal', exitCode: 0, verdict: 'passed', logPath: 'C:/logs/launch-5.log' },
+    ],
+  })
+  const value = await byName.mc_launch.execute({ taskPath: 'runData', wait: 'ready' }, {})
+  assert.equal(value.verdict, 'passed')
+  assert.match(value.note, /按等结束处理/)
+  assertLossless(value)
+})
+
+test('mc_launch 传 exit 时等常驻目标结束，超时如实上报', async () => {
+  const { byName } = build()
+  const value = await byName.mc_launch.execute({ taskPath: 'runClient', wait: 'exit', timeoutMs: 300 }, {})
+  assert.equal(value.timedOut, true)
+  // 超时后回落到启动时的记录：还在跑，只是没等到结束
+  assert.equal(value.status, 'starting')
+  assertLossless(value)
+})
+
 test('mc_launch_logs 省略 id 时取当前实例，且结果可无损序列化', async () => {
   const { byName } = build()
   const value = await byName.mc_launch_logs.execute({}, {})
@@ -219,6 +307,10 @@ test('mc_project_detail 输出证据、JDK 与警告', async () => {
   assert.equal(value.name, 'Demo Mod')
   assert.equal(value.loader, 'neoforge')
   assert.deepEqual(value.modules[0].targets, ['runClient'])
+  assert.deepEqual(
+    value.targets.map((target) => `${target.taskPath}:${target.mode}`),
+    ['runClient:daemon', 'runData:oneshot'],
+  )
   assert.equal(value.java.required, 21)
   assert.deepEqual(value.java.available, [21, 17])
   assert.match(value.evidence[0], /build\.gradle/)
@@ -227,6 +319,7 @@ test('mc_project_detail 输出证据、JDK 与警告', async () => {
   const blocks = byName.mc_project_detail.output.render({}, value)
   assert.match(blocks[0].text, /置信度 95%/)
   assert.match(blocks[0].text, /需要 21/)
+  assert.match(blocks[0].text, /runData（会跑完）/)
 })
 
 test('mc_launch_logs 把归因输出为结构化对象', async () => {

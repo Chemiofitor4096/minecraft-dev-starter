@@ -224,5 +224,5 @@ function optionLabel(entry) {
 function statusText(log, running) {
   if (log === undefined) return '加载中…'
   void running
-  return launchStatusText({ status: log.status, outcome: log.outcome, exitCode: log.exitCode })
+  return launchStatusText(log)
 }

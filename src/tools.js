@@ -1,14 +1,15 @@
 /**
  * 模型侧工具（M5）：面板能做的事，AI 也该能做，而且是同一套服务。
  *
- * 四个工具都薄封装在 `/mcdev/api` 的方法表上，不复制业务逻辑：
- *   mc_projects / mc_launch / mc_launch_logs / mc_launch_stop
+ * 六个工具都薄封装在 `/mcdev/api` 的方法表上，不复制业务逻辑：
+ *   mc_projects / mc_project_detail / mc_launch / mc_launch_logs / mc_launch_list / mc_launch_stop
  *
  * 依赖 `@deepseek-ai/dsh-tools` 的 `defineTool`（与桌面运行时同版本 0.2.1-rc.3）。
  * @module minecraft-dev-starter/tools
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { modeOf } from './lib/verify.js'
 
 /**
  * 工具的工作区根：调用参数优先，其次取**调用它的那个会话**的 cwd。
@@ -26,21 +27,28 @@ function agentRoot(args, exec) {
 }
 
 /**
- * 等实例进入 running 或结束。
+ * 等实例到达目标状态。
+ *
+ * 两种终点：`ready` 是"跑起来了"（常驻目标），`exit` 是"跑完了"（一次性任务）。
+ * 一次性任务没有就绪标记，用 ready 去等会永远等到超时，所以这里必须分开。
  * @param {{ 'launch.list': (payload?: unknown) => Promise<any> }} api
  * @param {string} launchId
  * @param {number} timeoutMs
  * @param {AbortSignal | undefined} signal
+ * @param {'ready' | 'exit'} until
  * @returns {Promise<Record<string, any> | undefined>}
  */
-async function waitForSettle(api, launchId, timeoutMs, signal) {
+async function waitForSettle(api, launchId, timeoutMs, signal, until = 'ready') {
+  const done = until === 'exit'
+    ? (status) => status === 'exited' || status === 'unknown'
+    : (status) => status === 'running' || status === 'exited' || status === 'unknown'
   const started = Date.now()
   while (Date.now() - started < timeoutMs) {
     if (signal?.aborted === true) return undefined
     const list = await api['launch.list']({})
     const entry = list.find((item) => item.id === launchId)
     if (entry === undefined) return undefined
-    if (entry.status === 'running' || entry.status === 'exited' || entry.status === 'unknown') return entry
+    if (done(entry.status)) return entry
     await new Promise((resolve) => setTimeout(resolve, 400))
   }
   return undefined
@@ -59,9 +67,45 @@ function launchValue(record, timedOut) {
     taskPath: record.taskPath,
     logPath: record.logPath,
     timedOut,
+    mode: record.mode ?? modeOf(record.kind),
   }
   if (typeof record.pid === 'number') value.pid = record.pid
+  if (record.outcome !== null && record.outcome !== undefined) value.outcome = record.outcome
+  if (typeof record.exitCode === 'number') value.exitCode = record.exitCode
+  if (record.verdict !== null && record.verdict !== undefined) value.verdict = record.verdict
+  if (record.summary !== null && record.summary !== undefined) value.summary = record.summary
+  if (Array.isArray(record.failures) && record.failures.length > 0) value.failures = record.failures
   return value
+}
+
+/**
+ * mc_launch 的渲染：常驻目标说"起来了没有"，一次性任务说"过没过"。
+ * @param {Record<string, any>} value
+ * @returns {string}
+ */
+function describeLaunch(value) {
+  const target = value.taskPath
+  if (value.mode === 'oneshot') {
+    const head = `${target} 已完成（${value.id}）：`
+    if (value.verdict === 'passed') return `${head}通过${value.summary === undefined ? '' : `（${value.summary}）`}。`
+    if (value.verdict === 'failed') {
+      const lines = [`${head}失败${value.exitCode === undefined ? '' : `（退出码 ${value.exitCode}）`}。`]
+      if (value.summary !== undefined) lines.push(`第一处失败：${value.summary}`)
+      if (Array.isArray(value.failures) && value.failures.length > 1) {
+        lines.push(`另有 ${value.failures.length - 1} 行失败特征，用 mc_launch_logs 看全文。`)
+      }
+      return lines.join('\n')
+    }
+    if (value.verdict === 'aborted') return `${target} 被停止（${value.id}），没有结论。`
+    if (value.verdict === 'error') return `${target} 没能启动（${value.id}），用 mc_launch_logs 看原因。`
+    if (value.verdict === 'unknown') return `${target} 结束方式未知（${value.id}），用 mc_launch_logs 看日志。`
+    if (value.timedOut) return `${target} 还没跑完（${value.id}），等满了超时；用 mc_launch_logs 看进展，或调大 timeoutMs 重跑。`
+    return `${target} 已开始（${value.id}）；用 mc_launch_logs 看进展，mc_launch_list 看是否结束。`
+  }
+  if (value.timedOut) {
+    return `已启动 ${target}（${value.id}），但在超时前没看到就绪标记；用 mc_launch_logs 看进展，可能还在构建。`
+  }
+  return `启动 ${target}：状态 ${value.status}，实例 ${value.id}${value.pid === undefined ? '' : `，pid ${value.pid}`}。日志在 ${value.logPath}。`
 }
 
 /**
@@ -149,15 +193,21 @@ export function applyTools(ctx, deps) {
     defineTool({
       name: 'mc_launch',
       description:
-        '在后台启动一个 Minecraft 开发工程的运行目标（默认等它进入运行态再返回，最长 10 分钟）。'
+        '启动一个 Minecraft 开发工程的运行目标。两类目标语义不同：'
+        + '常驻的（runClient / runServer）默认等它进入运行态就返回，之后一直跑着；'
+        + '会跑完的（runData / runGameTestServer / 自定义 runGametest）默认等它结束并给出结论 verdict（passed/failed/aborted/error）。'
         + ' 同一个工程同时只能有一个实例；任务路径必须是 mc_projects 列出的那些（形如 runClient 或 :fabric:runClient）。'
-        + ' 首次构建需要下载依赖，耗时可能数分钟；超时只代表还没看到就绪标记，不代表失败。'
+        + ' 首次构建需要下载依赖，耗时可能数分钟；超时只代表还没等到目标状态，不代表失败。'
         + ' 启动后可用 mc_launch_logs 看日志、mc_launch_stop 停止。',
       parameters: {
         root: { type: 'string', description: '工程根目录；省略则用当前工作区' },
-        taskPath: { type: 'string', required: true, description: 'Gradle 任务路径，例如 runClient、:fabric:runClient' },
-        wait: { type: 'string', enum: ['ready', 'detach'], description: 'ready（默认）等到运行态或结束；detach 立刻返回' },
-        timeoutMs: { type: 'number', description: '等就绪的上限，默认 600000（10 分钟）' },
+        taskPath: { type: 'string', required: true, description: 'Gradle 任务路径，例如 runClient、:fabric:runClient、runGameTestServer' },
+        wait: {
+          type: 'string',
+          enum: ['ready', 'exit', 'detach'],
+          description: 'ready 等运行态；exit 等结束并拿结论；detach 立刻返回。省略时按目标类型决定：常驻用 ready，会跑完的用 exit',
+        },
+        timeoutMs: { type: 'number', description: '等 ready/exit 的上限，默认 600000（10 分钟）' },
       },
       output: {
         schema: {
@@ -170,25 +220,37 @@ export function applyTools(ctx, deps) {
             pid: { type: 'integer' },
             logPath: { type: 'string', required: true },
             timedOut: { type: 'boolean', required: true },
+            mode: { type: 'string', required: true, enum: ['daemon', 'oneshot'] },
+            outcome: { type: 'string' },
+            exitCode: { type: 'integer' },
+            verdict: { type: 'string', enum: ['passed', 'failed', 'aborted', 'error', 'unknown'] },
+            summary: { type: 'string' },
+            failures: { type: 'array', items: { type: 'string' } },
+            note: { type: 'string' },
           },
         },
         render: (_args, value) => [
           {
             type: 'text',
-            text: value.timedOut
-              ? `已启动 ${value.taskPath}（${value.id}），但在超时前没看到就绪标记；用 mc_launch_logs 看进展，可能还在构建。`
-              : `启动 ${value.taskPath}：状态 ${value.status}，实例 ${value.id}${value.pid === undefined ? '' : `，pid ${value.pid}`}。日志在 ${value.logPath}。`,
+            text: `${describeLaunch(value)}${value.note === undefined ? '' : `\n（${value.note}）`}`,
           },
         ],
       },
       async execute(args, exec) {
         const record = await api['launch.start']({ root: agentRoot(args, exec), taskPath: args.taskPath })
+        const mode = record.mode ?? modeOf(record.kind)
         if (args.wait === 'detach') {
           return launchValue(record, false)
         }
+        // 会跑完的目标默认等到结束：它唯一的产出就是结论
+        const until = args.wait === 'exit' || mode === 'oneshot' ? 'exit' : 'ready'
         const timeoutMs = Number.isFinite(args.timeoutMs) ? Number(args.timeoutMs) : 600_000
-        const settled = await waitForSettle(api, record.id, timeoutMs, exec.signal)
-        return launchValue(settled ?? record, settled === undefined)
+        const settled = await waitForSettle(api, record.id, timeoutMs, exec.signal, until)
+        const value = launchValue(settled ?? record, settled === undefined)
+        if (mode === 'oneshot' && args.wait === 'ready') {
+          value.note = '这是会跑完的目标（跑完即结束），ready 按等结束处理'
+        }
+        return value
       },
     }),
   )
@@ -212,6 +274,8 @@ export function applyTools(ctx, deps) {
             status: { type: 'string', required: true },
             outcome: { type: 'string' },
             exitCode: { type: 'integer' },
+            verdict: { type: 'string', enum: ['passed', 'failed', 'aborted', 'error', 'unknown'] },
+            summary: { type: 'string' },
             lines: { type: 'array', required: true, items: { type: 'string' } },
             total: { type: 'integer', required: true },
             diagnosis: {
@@ -230,6 +294,7 @@ export function applyTools(ctx, deps) {
             type: 'text',
             text:
               `${value.launchId} · ${value.status}${value.outcome === undefined ? '' : `/${value.outcome}`}`
+              + `${value.verdict === undefined ? '' : ` · 结论 ${value.verdict}${value.summary === undefined ? '' : `（${value.summary}）`}`}`
               + `${value.diagnosis === undefined ? '' : `\n归因：${value.diagnosis.hint}`}`
               + `${value.diagnosis?.suggestion === undefined ? '' : `\n建议：${value.diagnosis.suggestion}`}`
               + `\n${value.lines.slice(-40).join('\n')}`,
@@ -258,6 +323,8 @@ export function applyTools(ctx, deps) {
         }
         if (result.outcome !== null && result.outcome !== undefined) value.outcome = result.outcome
         if (typeof result.exitCode === 'number') value.exitCode = result.exitCode
+        if (result.verdict !== null && result.verdict !== undefined) value.verdict = result.verdict
+        if (result.summary !== null && result.summary !== undefined) value.summary = result.summary
         if (result.diagnosis !== undefined) {
           // 结构化：模型不用解析中文就能决定下一步
           /** @type {Record<string, any>} */
@@ -335,6 +402,8 @@ export function applyTools(ctx, deps) {
                   status: { type: 'string', required: true },
                   outcome: { type: 'string' },
                   exitCode: { type: 'integer' },
+                  mode: { type: 'string', enum: ['daemon', 'oneshot'] },
+                  verdict: { type: 'string', enum: ['passed', 'failed', 'aborted', 'error', 'unknown'] },
                   startedAt: { type: 'string', required: true },
                   endedAt: { type: 'string' },
                 },
@@ -370,6 +439,8 @@ export function applyTools(ctx, deps) {
           }
           if (record.outcome !== null && record.outcome !== undefined) value.outcome = record.outcome
           if (typeof record.exitCode === 'number') value.exitCode = record.exitCode
+          if (record.mode !== null && record.mode !== undefined) value.mode = record.mode
+          if (record.verdict !== null && record.verdict !== undefined) value.verdict = record.verdict
           if (record.endedAt !== null && record.endedAt !== undefined) value.endedAt = record.endedAt
           return value
         })
@@ -383,7 +454,8 @@ export function applyTools(ctx, deps) {
       name: 'mc_project_detail',
       description:
         '查看单个工程的完整画像：loader 判定依据、模块与目标、JDK 需求与选择、证据、冲突与警告。只读。'
-        + ' 用于回答"为什么判成这个 loader""为什么启动不了""缺哪个 JDK"。',
+        + ' targets 里的 mode 说明目标是常驻（daemon）还是会跑完（oneshot）：后者（runData、runGameTestServer）可以用 mc_launch 直接拿到验证结论。'
+        + ' 用于回答"为什么判成这个 loader""为什么启动不了""缺哪个 JDK""跑哪个任务能验证改动"。',
       parameters: {
         root: { type: 'string', description: '工程根目录；省略则用当前会话的工作区' },
       },
@@ -412,6 +484,19 @@ export function applyTools(ctx, deps) {
                 },
               },
             },
+            targets: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  taskPath: { type: 'string', required: true },
+                  label: { type: 'string', required: true },
+                  mode: { type: 'string', required: true, enum: ['daemon', 'oneshot'] },
+                  guessed: { type: 'boolean', required: true },
+                },
+              },
+            },
             java: {
               type: 'object',
               additionalProperties: false,
@@ -433,6 +518,9 @@ export function applyTools(ctx, deps) {
             text:
               `${value.name} · ${value.loader}${value.minecraftVersion === undefined ? '' : ` ${value.minecraftVersion}`} · 置信度 ${Math.round(value.confidence * 100)}%`
               + `\n模块：${value.modules.map((module) => `${module.path}(${module.platform})`).join('、')}`
+              + (value.targets === undefined
+                ? ''
+                : `\n目标：${value.targets.map((target) => `${target.taskPath}（${target.mode === 'oneshot' ? '会跑完' : '常驻'}${target.guessed ? '，未验证' : ''}）`).join('、')}`)
               + `\nJDK：需要 ${value.java?.required ?? '?'}，选中 ${value.java?.selected ?? '无'}`
               + (value.warnings.length === 0 ? '' : `\n警告：${value.warnings.join('；')}`),
           },
@@ -458,6 +546,13 @@ export function applyTools(ctx, deps) {
           conflicts: profile.conflicts ?? [],
         }
         if (Array.isArray(profile.loaders) && profile.loaders.length > 0) value.loaders = profile.loaders
+        const runTargets = (profile.runTargets ?? []).map((target) => ({
+          taskPath: target.taskPath,
+          label: target.label ?? target.taskPath,
+          mode: target.mode ?? modeOf(target.kind),
+          guessed: target.guessed === true,
+        }))
+        if (runTargets.length > 0) value.targets = runTargets
         if (profile.minecraftVersion !== undefined && profile.minecraftVersion !== '') value.minecraftVersion = profile.minecraftVersion
         if (profile.java !== undefined) {
           value.java = { required: profile.java.required, exact: profile.java.exact === true }
@@ -472,14 +567,16 @@ export function applyTools(ctx, deps) {
 
 /**
  * 实例状态的中文短标签。
- * @param {{ status?: string, outcome?: string, exitCode?: number }} entry
+ * @param {{ status?: string, outcome?: string, exitCode?: number, mode?: string, verdict?: string }} entry
  * @returns {string}
  */
 function statusText(entry) {
   if (entry.status === 'starting') return '启动中'
-  if (entry.status === 'running') return '运行中'
+  if (entry.status === 'running') return entry.mode === 'oneshot' ? '执行中' : '运行中'
   if (entry.status === 'unknown') return '状态未知'
-  if (entry.outcome === 'killed') return '已停止'
+  if (entry.verdict === 'passed') return '通过'
+  if (entry.verdict === 'failed') return '失败'
+  if (entry.verdict === 'aborted' || entry.outcome === 'killed') return '已停止'
   if (entry.outcome === 'normal') return '已退出'
   return entry.exitCode === undefined ? '已退出' : `已退出(${entry.exitCode})`
 }
