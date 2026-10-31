@@ -73,6 +73,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 中文日志乱码 | `.bat` 输出按 GBK 编码 | `decodeLine`：先按 UTF-8 解，失败再按 GBK |
 | 工具报 "value is not lossless JSON" | 返回值里带了 `undefined` | 只放存在的字段；测试里用 `assertLossless()` |
 | 改 profile 后启动失败 | `package.json` 写入了 BOM | 用无 BOM 的 UTF-8 写；改完必须重启 DSH |
+| 仓库的 `node_modules` 神秘消失 | 在某个 profile 里把 `link:` 依赖换成 `file:`/npm 包时，pnpm 解链会**删掉被链接目录的 `node_modules`**（实测：`plugin add link:` → 在 → `plugin add file:tgz` → 没了） | 别在同一 profile 里来回切换安装方式；tarball/registry 验证用独立 profile；发现消失就 `npm install --ignore-scripts` 重装 |
 | 侧栏标签打不开 | `openTab` 的展开是异步的 | 打开后等一帧再断言 `isExpanded()` |
 
 其他约定：
