@@ -1,87 +1,125 @@
 # minecraft-dev-starter
 
-一个 DeepSeek Harness（DSH）插件：在会话标题栏放一个像 IDEA 运行配置那样的控件，认出当前工作区里的 Minecraft 模组工程和它能跑的目标（Client / Server / Data …），点一下就起客户端。
+在 DSH（DeepSeek Harness）的会话标题栏放一个 IDEA 风格的运行控件：认出工作区里的 Minecraft 模组工程，点一下就能起 Client，日志就在右侧栏。
 
-当前状态：**M0–M5 与 M7 完成**（识别 + 托管启动 + 标题栏胶囊 + 运行日志 + AI 工具 + UI 打磨）。M6 通用启动器可选。
+给做模组的人用，不是给 AI 用的——AI 侧只是顺带留了几个工具。
 
-已完成：
+## 能做什么
 
-- **M0** 加载协议与槽位验证 —— [记录](./doc/M0-验证记录.md)
-- **M1** 识别引擎（22 个真实工程 / 22 个单测）+ esbuild 构建链 + 面板接通 —— [记录](./doc/M1-验证记录.md)
-- **M2** 托管启动：detached 进程、就绪判定、日志、停止、状态落盘 —— [记录](./doc/M2-验证记录.md)
-- **M3** 标题栏胶囊：选中目标、状态点、启停；浮层单选并记住选择 —— [记录](./doc/M3-验证记录.md)
-- **M4** 运行日志标签：历史切换、跟随、崩溃归因、自动打开 —— [记录](./doc/M4-验证记录.md)
-- **M5** AI 工具：`mc_projects` / `mc_launch` / `mc_launch_logs` / `mc_launch_stop` —— [记录](./doc/M5-验证记录.md)
-- **M7** UI 打磨：内联图标、骨架空态、动效与 reduced-motion、文案 —— [记录](./doc/M7-UI打磨记录.md)
+**识别**：Fabric、Forge、NeoForge、Architectury、Paper、Spigot，覆盖 1.7.10 到 26.x。
+单模块、多模块、聚合仓库都能认；loader 写在子模块里也能认。
 
-## 它解决什么
+**启动**：Client / Server / Data / GameTestServer。自动挑 JDK（读 `<jdk>/release`，不乱起进程）；
+构建完能判断"进游戏了"而不是"进程还活着"；关掉游戏后状态同步；宿主重启后按 pid 对账，不伪造结束原因。
 
-AI 写 MC 模组卡在验收环节：人得离开对话、开终端、等构建、进游戏看效果。这个插件把这几步压成一个按钮：
+**看日志**：右侧栏独立标签，按工程列历史、默认显示最新、可跟随尾部；
+崩溃时给一句归因（依赖没解析、JDK 版本不对、端口被占、认证失败等 8 类）。
 
-```
-人：改完 → 点 ▶ → 进游戏看 → 回来提意见
-AI：读代码、改代码、看日志 → 继续
-```
+**多工程与多会话**：工作区里每个工程分别记住自己选的目标；切换对话即切换工作区，不需要手动刷新。
 
-识别与启动是地基，界面是主场。AI 侧也保留少量工具，方便它自己起一次做验证。
+**AI 工具**（可选）：`mc_projects` / `mc_launch` / `mc_launch_logs` / `mc_launch_stop`，与面板共用同一套服务。
 
-## 文档
+**better-sidebar**：装了 [dsh-better-sidebar](https://github.com/topics/dsh-better-sidebar)，还会多出两个带图标的侧栏页面。
 
-- [策划](./doc/策划.md) — 界面设计、架构、识别与启动方案、里程碑、风险、待确认决策
-- [DSH 插件机制调研](./doc/调研-DSH插件机制.md) — 插件契约、client slot 注入、HTTP 路由、能力边界与出处
+## 安装
 
-审核意见请写在 [策划](./doc/策划.md) 第 16 节「待确认决策」对应的行上。
+需要 DSH 桌面版（0.2.1 及以上）或 dsh CLI。
 
-## 计划中的形态
+```powershell
+# 本地仓库（改完即生效）
+dsh plugin --profile desktop add link:C:/Projects/minecraft-dev-starter
 
-```
-会话标题栏
-[● Client ▾] [▶]                        ← 胶囊：状态点 + 目标 + 起停
-      ↓ 点开（单选一个目标）
-  rationality · NeoForge 1.21.1 · JDK 21
-  fabric
-    ◉ Client
-    ○ Server
-  forge
-    ○ Client
+# 打好的 tarball
+dsh plugin --profile desktop add file:./minecraft-dev-starter-0.1.0.tgz
 
-右侧栏「运行日志」标签页                 ← 启动时自动打开
-  [Client · 20:31 运行中 ▾]  ← 历史切换
-  [BUILD] > Task :runClient
-  [MC]    Backend library: LWJGL
+# 从 npm 安装（发布之后）
+dsh plugin --profile desktop add minecraft-dev-starter
 ```
 
-多模块（Architectury）按模块分组，任务路径用 `:fabric:runClient`。同一工程同时只跑一个实例，换工程可并存。
+装完**重启 DSH** 生效。卸载：
 
-## 计划中的 AI 工具
+```powershell
+dsh plugin --profile desktop remove minecraft-dev-starter
+```
 
-| 工具 | 作用 |
-|---|---|
-| `mc_projects` | 列出工作区识别到的工程与可运行目标 |
-| `mc_launch` | 启动某个目标（等就绪后返回） |
-| `mc_launch_logs` | 增量读日志，含崩溃归因 |
-| `mc_launch_stop` | 停止实例 |
+`dsh plugin` 实际是 pnpm 的转发器：它把包装进 profile、再把声明了 `dsh.bundle` 的依赖加进
+`dsh.profile.bundles` 层列表。所以手工在 profile 的 `package.json` 里加一行再用 pnpm 安装，
+效果是一样的。
+
+## 使用
+
+1. 打开一个模组工程所在的对话。
+2. 标题栏出现 `● Client ▶`。点名字展开浮层，选工程与目标；点 ▶ 开始构建并启动。
+3. 启动后自动打开「运行日志」（可在配置里关掉），日志实时刷新。
+4. 再点一次按钮（变成 ⏹）停止，会连同 Gradle 拉起的整个进程树一起结束。
+
+浮层形态会自适应：工作区里只有一个工程时跳过列表，表头直接是工程名、loader/版本与路径；
+有多个工程时列表固定高度，选谁只换下面的目标区，界面不会跳。
+
+## 配置
+
+在 profile 的 `cordis.patch.yml` 里给插件那行加 `config`：
+
+```yaml
+- id: mcdev-host
+  name: minecraft-dev-starter
+  config:
+    autoOpenLogTab: true   # 启动后自动打开日志标签
+    readyTimeoutMs: 90000  # 等"进游戏"的上限，超时不算失败
+    logRingLines: 2000     # 内存里保留的日志行数（磁盘文件是完整的）
+```
+
+## 支持范围
+
+| 平台 | 版本线 | 说明 |
+|---|---|---|
+| Fabric | 1.14 – 26.x | loom 的 `runClient` 一族 |
+| Forge | 1.7.10 / 1.12.2 / 1.16.5 / 1.20.1 | 包括 legacyforge |
+| NeoForge | 1.20.1 – 26.x | moddev 插件 |
+| Architectury | 1.16 – 26.x | 按子模块拆目标 |
+| Paper / Spigot | 1.7.10 – 26.x | 服务端插件工程 |
+
+JDK 需求按版本推断（1.7.10/1.12.2 → 8，1.18–1.20.4 → 17，1.20.5+ → 21，26.x → 25），
+和机器上已装的 JDK 比对，缺了会在面板里提示，不会带着错的版本硬跑。
 
 ## 开发
 
-M0 探针已通过（加载协议、标题栏 slot、右侧栏标签与自动展开），细节见 [M0 验证记录](./doc/M0-验证记录.md)。
-
 ```powershell
-# 建一个独立测试 profile（只需一次）
-node <dsh>/lib/bin.js --profile m0test --from-default-profile web --port 3499 --no-open
-
-# 挂本地插件；开发期用 link:，改完重启即生效
-node <dsh>/lib/bin.js plugin --profile m0test add link:C:/Projects/minecraft-dev-starter
-
-# 起服务并打开它打印的带 token 的地址
-node <dsh>/lib/bin.js --profile m0test --port 3499 --no-open
-
-# 构建客户端半边（M0 是原样拷贝，M1 起换成 esbuild）
-npm run build
+npm install
+npm run build        # 构建客户端到 lib/client.js（改 src/client 后必须跑）
+npm test             # 59 个测试
+npm run build -- --watch
 ```
 
-探针把宿主/客户端两边的握手结果挂在 `/mcdev/api/reports`，不用看截图也能确认链路。
+仓库结构、硬坑清单与历史验证结论都在 [AGENTS.md](./AGENTS.md)。
+设计文档：[策划](./doc/策划.md) · [DSH 插件机制调研](./doc/调研-DSH插件机制.md)。
 
-## 许可证
+## 发布
 
-MIT（待定，见策划 §16 D1）。
+DSH 插件的分发就是 npm 包 + 一份清单声明，没有单独的注册流程：
+
+1. **清单**：`package.json` 里声明 `dsh.bundle.patch`（指向 `cordis.patch.yml`）与
+   `dsh.client.platform`（有客户端时）。宿主靠这两项决定"这是不是一个 DSH 插件"。
+2. **产物**：`npm run build` 把客户端打进 `lib/client.js` 并**提交进仓库**——
+   运行时直接读它，不装依赖也不做构建。
+3. **自检**：`npm test`，`npm pack --dry-run` 看包里有没有多余文件（`files` 字段已限定
+   `src`、`lib`、`cordis.patch.yml`、README、AGENTS）。
+4. **发布**：`npm publish --access public`。版本号走 semver，破坏性改动升主版本。
+5. **兼容性**：宿主 API 会演进（本插件按 0.2.1-rc.3 的 `dsh-tools` 开发）。发布前把
+   `dependencies` 里的 `@deepseek-ai/dsh-tools` 与 `peerDependencies` 的 cordis 范围对齐
+   目标运行时；跨大版本时最好发两个版本而不是硬兼容。
+6. **安装**：用户 `dsh plugin --profile <name> add <包名>` 后重启；也可以在 Plugins 面板里装。
+
+本地想先验证发布形态，可以 `npm pack` 后用 `dsh plugin add file:<tarball>` 装一遍——
+它会走和 npm 安装完全相同的 pnpm 路径。
+
+## 已知限制
+
+- 原生右侧栏的标签类型没有图标位，只有 better-sidebar 的标签能带图标。
+- 只支持 Gradle 工程；HMCL 实例库里的整合包还不能直接起（见 AGENTS.md 的 M6）。
+- 状态文件放在 `~/.dsh/mc-dev-starter/`，多个 profile 共用一份；日志标签按工程过滤，不影响使用。
+- Windows 上第一次构建会下载 Gradle 与依赖，可能要几分钟；之后有 daemon 会快很多。
+
+## License
+
+MIT

@@ -1,8 +1,8 @@
 {
   "name": "minecraft-dev-starter",
-  "version": "0.0.1",
-  "private": true,
-  "description": "Minecraft 运行面板：会话标题栏胶囊 + 右侧栏运行日志",
+  "version": "0.1.0",
+  "private": false,
+  "description": "DSH 插件：识别 Minecraft 模组工程并在会话标题栏启动 Client，日志进右侧栏",
   "type": "module",
   "main": "src/index.js",
   "exports": {
@@ -14,7 +14,21 @@
     "src",
     "lib",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "AGENTS.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "minecraft",
+    "modding",
+    "gradle",
+    "fabric",
+    "neoforge",
+    "forge"
   ],
   "dsh": {
     "bundle": {
