@@ -6,6 +6,7 @@
  * @module minecraft-dev-starter
  */
 
+import { readFileSync } from 'node:fs'
 import { createApi } from './lib/api.js'
 import { createLaunchService } from './lib/launches.js'
 import { applyTools } from './tools.js'
@@ -22,8 +23,23 @@ export const name = 'mcdev-host'
  */
 export const inject = ['sessions', 'tools']
 
-/** 插件版本；客户端会显示，用来确认两边同一份代码。 */
-const VERSION = '0.1.0'
+/**
+ * 插件版本；客户端会显示，用来确认两边同一份代码。
+ *
+ * 从 package.json 读，不再手写——手写的常量在发版后必然忘记同步，
+ * 面板上就会出现"装了 0.1.1、显示 0.1.0"的假版本。
+ */
+const VERSION = readPackageVersion()
+
+/** @returns {string} */
+function readPackageVersion() {
+  try {
+    const url = new URL('../package.json', import.meta.url)
+    return String(JSON.parse(readFileSync(url, 'utf8')).version)
+  } catch {
+    return '0.0.0-unknown'
+  }
+}
 
 /**
  * @param {import('node:http').IncomingMessage} req
