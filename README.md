@@ -105,6 +105,18 @@ DSH 插件的分发就是 npm 包 + 一份清单声明，没有单独的注册�
 3. **自检**：`npm test`，`npm pack --dry-run` 看包里有没有多余文件（`files` 字段已限定
    `src`、`lib`、`cordis.patch.yml`、README、AGENTS）。
 4. **发布**：`npm publish --access public`。版本号走 semver，破坏性改动升主版本。
+
+   如果用的是 granular token（只允许暂存），会被拒为 `E_STAGE_REQUIRED`，改走两步：
+
+   ```powershell
+   npm stage publish                 # 提交到暂存区，拿到 stage-id
+   npm stage list                   # 看到 status: validated 再批准
+   npm stage approve <stage-id>      # 需要人工过 2FA（网页确认）
+   ```
+
+   暂存 → 人工批准是 npm 的设计：机器提交、人确认，token 泄露也发不出正式版本。
+   批准后 `latest` 自动指向新版本，通常十几秒内可从 registry 拉到。
+
 5. **兼容性**：宿主 API 会演进（本插件按 0.2.1-rc.3 的 `dsh-tools` 开发）。发布前把
    `dependencies` 里的 `@deepseek-ai/dsh-tools` 与 `peerDependencies` 的 cordis 范围对齐
    目标运行时；跨大版本时最好发两个版本而不是硬兼容。

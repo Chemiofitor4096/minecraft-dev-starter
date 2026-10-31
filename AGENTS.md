@@ -158,9 +158,26 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 - 面板改名「MC 工程」→「Mod Dev」（功能名，不是名词描述），浮层表头/标签/详情页统一。
 - 单工程工作区跳过工程列表：表头直接承担工程身份（名字 + loader/版本 + 路径）。
 
+## 发布记录
+
+- `0.1.0` → 首版。
+- `0.1.1` → 修「最小 profile 起不来」：`webServer` 从 `inject` 里拿掉，改用
+  `ctx.inject(['webServer'], …)` 可选等待。原来在没有 web 层的 profile（只有 `dsh-base`）里会
+  `pending (waiting for service: webServer)`，整个 plugin tree 加载失败。
+- `0.1.2` → 修「装 0.1.1 却打印 0.1.0」：`VERSION` 改为启动时读 `package.json`。
+
+发版注意：
+
+- 账号用的是 **granular token（只允许暂存）**，直接 `npm publish` 会被拒为 `E_STAGE_REQUIRED`。
+  流程是 `npm stage publish` → `npm stage list`（等 `status: validated`）→
+  `npm stage approve <stage-id>`（人工过 2FA）。token 不能批准，批准必须是人。
+- 发布前必须 `npm run build`：`lib/client.js` 是提交进仓库的产物，忘了构建就会发出旧客户端。
+- 新版本发出去后，用干净 profile 装一次并看启动日志里的 `host ready (x.y.z)`，
+  这条同时验证了「版本号读对了」与「包结构完整」。
+
 ## 还没做的事
 
 - **M6 通用启动器**：HMCL 实例库 + 直启 java，让面板也能起非 Gradle 工程（估 5–8 天）。
-- **发布**：目前只在本地 `link:` 安装。发布流程见 README 的「发布」一节。
 - 跨 profile 共用 `~/.dsh/mc-dev-starter/state.json`：不同 profile 的实例记录会混在一起，
   日志标签已按工程过滤，暂不影响使用，但值得按 profile 分目录。
+- 桌面版目前仍用 `link:` 安装（改代码即时生效）；切到 npm 版本需要每次改完都发版。
