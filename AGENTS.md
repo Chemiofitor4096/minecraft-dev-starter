@@ -206,15 +206,15 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 - `0.1.3` → peer 依赖、仓库元数据、截图与 README 重写；详情页去掉过期文案。
 - `0.1.4` → 运行日志按级别着色（`src/client/logFormat.js`）。
 - `0.1.5` → `logDock` 配置：日志可落原生右侧栏或 better-sidebar 底部工作台。
-- `0.1.6`（已提交暂存，等人工批准）→ 装 better-sidebar 时默认落底部（`chooseLogDock` 默认 bottom）、
+- `0.1.6` → 装 better-sidebar 时默认落底部（`chooseLogDock` 默认 bottom）、
   日志级别过滤、六个工具与结构化归因、`mc_launch` 默认超时 10 分钟、描述与格式修正。
-- 待发 `0.1.7` → 验证回路：目标分类 daemon / oneshot、一次性任务的 `verdict`、
-  `mc_launch` 的 `wait: exit`、面板状态词。
+- `0.1.7`（已提交暂存，等人工批准）→ 验证回路：目标分类 daemon / oneshot、一次性任务的 `verdict`、
+  `mc_launch` 的 `wait: exit`、面板状态词；顺带修 `.gitignore` 误伤 `src/lib` 并补入引擎源码。
 
 发版注意：
 
 - 账号用的是 **granular token（只允许暂存）**，直接 `npm publish` 会被拒为 `E_STAGE_REQUIRED`。
-  流程是 `npm stage publish` → `npm stage list`（等 `status: validated`）→
+  流程是 `npm stage publish` → `npm stage list`（等 `validating` 结束）→
   `npm stage approve <stage-id>`（人工过 2FA）。token 不能批准，批准必须是人。
 - 发布前必须 `npm run build`：`lib/client.js` 被 `.gitignore` 忽略，只通过 `package.json` 的 `files` 进包；
   忘了构建就会发出旧客户端。同理，**新 clone 下来要先构建**，否则 `link:` 安装拿不到客户端。
