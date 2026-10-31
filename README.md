@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/banner.png" alt="minecraft-dev-starter" width="100%">
+</p>
+
 # minecraft-dev-starter
 
 在 DSH（DeepSeek Harness）的会话标题栏放一个 IDEA 风格的运行控件：认出工作区里的 Minecraft 模组工程，点一下就能起 Client，日志就在右侧栏。
