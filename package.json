@@ -1,6 +1,6 @@
 {
   "name": "minecraft-dev-starter",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": false,
   "description": "DSH plugin that detects Minecraft mod projects and launches the client from the session header, with live logs in the sidebar",
   "type": "module",
