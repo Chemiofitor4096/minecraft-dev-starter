@@ -5,11 +5,12 @@
  * @module minecraft-dev-starter/client/LogTab
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { call } from './api.js'
 import { h } from './h.js'
 import { IconRefresh, IconWarning } from './icons.js'
-import { highlightLine } from './logFormat.js'
+import { filterByLevel, LEVEL_FILTERS, readLevelFilter, writeLevelFilter } from './logFilter.js'
+import { highlightLines } from './logFormat.js'
 import { launchStatusText, pickLogTarget } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { loadLaunches, selectedProject, useLaunches } from './state.js'
@@ -24,6 +25,7 @@ export function LogTab() {
   const [log, setLog] = useState(/** @type {any} */ (undefined))
   const [follow, setFollow] = useState(true)
   const [pinned, setPinned] = useState(false)
+  const [level, setLevel] = useState(readLevelFilter())
   const body = useRef(/** @type {HTMLPreElement | null} */ (null))
 
   // 历史按当前工程过滤；工程还没识别出来时退回全部
@@ -95,6 +97,9 @@ export function LogTab() {
           ? 'idle'
           : 'error'
 
+  const parsed = useMemo(() => highlightLines(log?.lines ?? []), [log?.lines])
+  const filtered = filterByLevel(parsed, level)
+
   return h(
     'div',
     { className: 'mcdev-logtab' },
@@ -125,6 +130,33 @@ export function LogTab() {
         '跟随',
       ),
     ),
+    h(
+      'div',
+      { className: 'mcdev-log-tools' },
+      h(
+        'div',
+        { className: 'mcdev-seg', role: 'group', 'aria-label': '日志级别' },
+        LEVEL_FILTERS.map((option) =>
+          h(
+            'button',
+            {
+              key: option.value,
+              type: 'button',
+              className: 'mcdev-seg-item',
+              'data-active': level === option.value ? 'true' : 'false',
+              onClick: () => {
+                setLevel(option.value)
+                writeLevelFilter(option.value)
+              },
+            },
+            option.label,
+          ),
+        ),
+      ),
+      filtered.hidden === 0
+        ? undefined
+        : h('span', { className: 'mcdev-hint' }, `已隐藏 ${filtered.hidden} 行`),
+    ),
     log?.diagnosis === undefined
       ? undefined
       : h(
@@ -144,15 +176,15 @@ export function LogTab() {
         : h(
             'pre',
             { ref: body, className: 'mcdev-logs mcdev-logs-full' },
-            (log?.lines ?? []).length === 0
-              ? '（还没有输出）'
-              : (log?.lines ?? []).map((line, index) =>
+            filtered.lines.length === 0
+              ? parsed.length === 0
+                ? '（还没有输出）'
+                : `（当前过滤条件下没有输出，共 ${parsed.length} 行）`
+              : filtered.lines.map((parts, index) =>
                   h(
                     'span',
                     { key: index, className: 'mcdev-log-line' },
-                    highlightLine(line).map((part, partIndex) =>
-                      h('span', { key: partIndex, 'data-kind': part.kind }, part.text),
-                    ),
+                    parts.map((part, partIndex) => h('span', { key: partIndex, 'data-kind': part.kind }, part.text)),
                     '\n',
                   ),
                 ),

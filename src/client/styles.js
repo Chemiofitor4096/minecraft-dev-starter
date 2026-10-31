@@ -247,6 +247,30 @@ export const CSS = `
   font: var(--dsw-font-xxxs-11);
 }
 .mcdev-follow { display: inline-flex; align-items: center; gap: 4px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+.mcdev-log-tools { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; }
+.mcdev-seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+.mcdev-seg-item {
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xxxs-11);
+  cursor: pointer;
+}
+.mcdev-seg-item:hover { color: var(--dsw-alias-label-primary); }
+.mcdev-seg-item[data-active="true"] {
+  background: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxxs-strong-11);
+}
 .mcdev-diagnosis {
   margin-bottom: 8px;
   padding: 8px;
