@@ -25,8 +25,8 @@ export const store = createStore({
   flyoutOpen: false,
   /** @type {Record<string, string>} 每个工程记住的目标 key */
   selection: readSelection(),
-  /** @type {{ autoOpenLogTab?: boolean }} 宿主下发的部署配置 */
-  config: { autoOpenLogTab: true },
+  /** @type {{ autoOpenLogTab?: boolean, logDock?: 'right' | 'bottom' }} 宿主下发的部署配置 */
+  config: { autoOpenLogTab: true, logDock: 'right' },
   /** @type {string | undefined} 当前会话的工作区（由胶囊从会话上下文注入） */
   workspaceRoot: undefined,
 })
@@ -37,7 +37,7 @@ export const store = createStore({
 export async function loadStateInfo() {
   try {
     const info = await call('state.info', {})
-    store.set({ config: { autoOpenLogTab: true, ...(info?.config ?? {}) } })
+    store.set({ config: { autoOpenLogTab: true, logDock: 'right', ...(info?.config ?? {}) } })
   } catch {
     /* 拉不到就用默认值 */
   }
@@ -172,7 +172,7 @@ export async function startTarget(project, target) {
       module: target.module,
     })
     // 启动成功就把日志摆到人眼前（部署配置可关）
-    if (store.get().config.autoOpenLogTab !== false) openLogTab()
+    if (store.get().config.autoOpenLogTab !== false) openLogTab(store.get().config)
   } catch (error) {
     launchStore.set({ error: error instanceof Error ? error.message : String(error) })
   } finally {

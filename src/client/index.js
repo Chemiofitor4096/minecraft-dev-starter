@@ -17,7 +17,7 @@ import { LogTab } from './LogTab.js'
 import { report } from './debug.js'
 import { h } from './h.js'
 import { IconCube, IconTerminal } from './icons.js'
-import { DETAIL_KIND, LOG_KIND, runtime } from './runtime.js'
+import { BETTER_DETAIL_ID, BETTER_LOG_ID, DETAIL_KIND, LOG_KIND, runtime } from './runtime.js'
 import { ensureStyles } from './styles.js'
 
 export const name = 'mcdev-client'
@@ -99,7 +99,7 @@ function registerBetterSidebarTabs(ctx) {
     try {
       disposers.push(
         sidebar.registerTab({
-          id: 'minecraft-dev-starter:project',
+          id: BETTER_DETAIL_ID,
           title: PANEL_TITLE,
           icon: (size) => h(IconCube, { size }),
           component: () => h(DetailTab),
@@ -107,7 +107,7 @@ function registerBetterSidebarTabs(ctx) {
       )
       disposers.push(
         sidebar.registerTab({
-          id: 'minecraft-dev-starter:logs',
+          id: BETTER_LOG_ID,
           title: '运行日志',
           icon: (size) => h(IconTerminal, { size }),
           component: () => h(LogTab),

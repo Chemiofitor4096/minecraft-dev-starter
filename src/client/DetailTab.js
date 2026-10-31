@@ -17,6 +17,7 @@ import {
   selectedProject,
   startTarget,
   stopLaunch,
+  store,
   useLaunches,
   useStoreState,
 } from './state.js'
@@ -122,7 +123,7 @@ export function DetailTab() {
               ),
               h(
                 'button',
-                { type: 'button', className: 'mcdev-run', onClick: () => openLogTab() },
+                { type: 'button', className: 'mcdev-run', onClick: () => openLogTab(store.get().config) },
                 '打开日志',
               ),
             ),

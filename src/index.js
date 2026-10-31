@@ -117,6 +117,7 @@ function resolveWorkspaceRoot(ctx) {
 /** 部署配置默认值；patch 行的 `config` 会覆盖同名项。 */
 const DEFAULTS = {
   autoOpenLogTab: true,
+  logDock: 'right',
   readyTimeoutMs: 90_000,
   logRingLines: 2_000,
 }
@@ -131,7 +132,10 @@ export function apply(ctx, config = {}) {
     version: VERSION,
     resolveRoot: () => resolveWorkspaceRoot(ctx),
     resolveRoots: () => sessionCwds(ctx),
-    config: { autoOpenLogTab: settings.autoOpenLogTab !== false },
+    config: {
+      autoOpenLogTab: settings.autoOpenLogTab !== false,
+      logDock: settings.logDock === 'bottom' ? 'bottom' : 'right',
+    },
     launchService: createLaunchService({
       readyTimeoutMs: Number(settings.readyTimeoutMs) || DEFAULTS.readyTimeoutMs,
       maxLogLines: Number(settings.logRingLines) || DEFAULTS.logRingLines,
