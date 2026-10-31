@@ -19,6 +19,6 @@ coverage/
 Thumbs.db
 desktop.ini
 
-# ��������
-lib/
-dist/
+# 构建产物（只忽略仓库根目录的 lib/ 与 dist/，src/lib 是源码）
+/lib/
+/dist/
