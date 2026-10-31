@@ -30,8 +30,36 @@ function fakeApi(overrides = {}) {
         },
       ],
     }),
+    'projects.detail': async (payload) => ({
+      root: payload?.root ?? 'C:/p',
+      name: 'demo',
+      modName: 'Demo Mod',
+      kind: 'mod',
+      loader: 'neoforge',
+      loaders: ['neoforge'],
+      minecraftVersion: '1.21.1',
+      confidence: 0.95,
+      modules: [{ path: '.', platform: 'neoforge', targets: [{ taskPath: 'runClient' }] }],
+      evidence: [{ file: 'build.gradle', kind: 'plugin', detail: '插件 net.neoforged.moddev' }],
+      warnings: ['没找到可用的 JDK 21'],
+      conflicts: [],
+      java: { required: 21, selected: 'C:/jdk-21', exact: true, available: [{ major: 21 }, { major: 17 }] },
+    }),
     'launch.start': async () => ({ id: 'launch-1', status: 'starting', taskPath: 'runClient', pid: 123, logPath: 'C:/logs/launch-1.log' }),
-    'launch.list': async () => [{ id: 'launch-1', status: 'running', taskPath: 'runClient', pid: 123, logPath: 'C:/logs/launch-1.log' }],
+    'launch.list': async () => [
+      {
+        id: 'launch-2',
+        status: 'exited',
+        outcome: 'normal',
+        taskPath: 'runClient',
+        label: 'Client',
+        pid: null,
+        startedAt: '2026-10-31T01:28:24.500Z',
+        endedAt: '2026-10-31T01:29:08.665Z',
+        logPath: 'C:/logs/launch-2.log',
+      },
+      { id: 'launch-1', status: 'running', taskPath: 'runClient', label: 'Client', startedAt: '2026-10-31T01:20:00.000Z', logPath: 'C:/logs/launch-1.log' },
+    ],
     'launch.current': async () => ({ id: 'launch-1' }),
     'launch.logs': async () => ({
       launchId: 'launch-1',
@@ -63,9 +91,16 @@ function assertLossless(value) {
   assert.deepEqual(roundTrip, value, `输出里含非 JSON 值：${JSON.stringify(value)}`)
 }
 
-test('注册四个工具并且参数已转成 JSON Schema', () => {
+test('注册六个工具并且参数已转成 JSON Schema', () => {
   const { byName } = build()
-  assert.deepEqual(Object.keys(byName).sort(), ['mc_launch', 'mc_launch_logs', 'mc_launch_stop', 'mc_projects'])
+  assert.deepEqual(Object.keys(byName).sort(), [
+    'mc_launch',
+    'mc_launch_list',
+    'mc_launch_logs',
+    'mc_launch_stop',
+    'mc_project_detail',
+    'mc_projects',
+  ])
   const launch = byName.mc_launch
   assert.equal(launch.parameters.type, 'object')
   assert.ok(launch.parameters.properties.taskPath)
@@ -156,4 +191,59 @@ test('省略 id 的工具把会话 cwd 传给宿主', async () => {
   await byName.mc_launch_logs.execute({}, exec)
   await byName.mc_launch_stop.execute({}, exec)
   assert.deepEqual(seen.map((payload) => payload.root), ['C:/agent', 'C:/agent'])
+})
+
+// ── 新增：历史列表与工程详情 ──────────────────────────────────────────
+
+test('mc_launch_list 列出实例并渲染状态', async () => {
+  const { byName } = build()
+  const value = await byName.mc_launch_list.execute({}, {})
+  assert.equal(value.launches.length, 2)
+  assert.equal(value.launches[0].id, 'launch-2')
+  assert.equal(value.launches[0].outcome, 'normal')
+  assertLossless(value)
+  const blocks = byName.mc_launch_list.output.render({}, value)
+  assert.match(blocks[0].text, /launch-2/)
+  assert.match(blocks[0].text, /已退出/)
+})
+
+test('mc_launch_list 支持 limit', async () => {
+  const { byName } = build()
+  const value = await byName.mc_launch_list.execute({ limit: 1 }, {})
+  assert.equal(value.launches.length, 1)
+})
+
+test('mc_project_detail 输出证据、JDK 与警告', async () => {
+  const { byName } = build()
+  const value = await byName.mc_project_detail.execute({ root: 'C:/p' }, {})
+  assert.equal(value.name, 'Demo Mod')
+  assert.equal(value.loader, 'neoforge')
+  assert.deepEqual(value.modules[0].targets, ['runClient'])
+  assert.equal(value.java.required, 21)
+  assert.deepEqual(value.java.available, [21, 17])
+  assert.match(value.evidence[0], /build\.gradle/)
+  assert.match(value.warnings[0], /JDK/)
+  assertLossless(value)
+  const blocks = byName.mc_project_detail.output.render({}, value)
+  assert.match(blocks[0].text, /置信度 95%/)
+  assert.match(blocks[0].text, /需要 21/)
+})
+
+test('mc_launch_logs 把归因输出为结构化对象', async () => {
+  const { byName } = build({
+    'launch.logs': async () => ({
+      launchId: 'launch-1',
+      status: 'exited',
+      outcome: 'crashed',
+      exitCode: 1,
+      lines: ['Could not resolve net.neoforged:neoforge:21.1.251'],
+      total: 1,
+      diagnosis: { code: 'DEPENDENCY_UNRESOLVED', hint: '依赖解析失败', suggestion: '检查网络', line: 'Could not resolve …' },
+    }),
+  })
+  const value = await byName.mc_launch_logs.execute({ id: 'launch-1' }, {})
+  assert.equal(value.diagnosis.code, 'DEPENDENCY_UNRESOLVED')
+  assert.equal(value.diagnosis.suggestion, '检查网络')
+  assertLossless(value)
+  assert.match(byName.mc_launch_logs.output.render({}, value)[0].text, /建议：检查网络/)
 })

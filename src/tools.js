@@ -76,8 +76,9 @@ function renderProjects(value) {
   const lines = [`工作区 ${value.root}：${projects.length} 个工程`]
   for (const project of projects) {
     const targets = /** @type {string[]} */ (project.targets ?? [])
+    const version = project.minecraftVersion === undefined || project.minecraftVersion === '' ? '' : ` ${project.minecraftVersion}`
     lines.push(
-      `- ${project.name} · ${project.loader} ${project.minecraftVersion ?? '?'} · ${targets.length} 个目标：${targets.length === 0 ? '无可运行目标' : targets.join(', ')}`,
+      `- ${project.name} · ${project.loader}${version} · ${targets.length} 个目标：${targets.length === 0 ? '无可运行目标' : targets.join(', ')}`,
     )
   }
   return lines.join('\n')
@@ -96,7 +97,7 @@ export function applyTools(ctx, deps) {
       name: 'mc_projects',
       description:
         '列出当前工作区里识别到的 Minecraft 工程（Fabric/Forge/NeoForge/Paper/Architectury）以及每个工程可运行的目标（runClient、runServer…）。'
-        + ' 只读。要构建用 mc_gradle，要真正起客户端/服务端用 mc_launch。',
+        + ' 只读。要看某个工程的证据与警告用 mc_project_detail；要启动用 mc_launch。',
       parameters: {
         root: { type: 'string', description: '工作区目录；省略则用当前会话的工作区' },
         refresh: { type: 'boolean', description: '跳过 5 秒缓存重新扫描' },
@@ -148,14 +149,15 @@ export function applyTools(ctx, deps) {
     defineTool({
       name: 'mc_launch',
       description:
-        '在后台启动一个 Minecraft 开发工程的运行目标（默认等它进入运行态再返回）。'
+        '在后台启动一个 Minecraft 开发工程的运行目标（默认等它进入运行态再返回，最长 10 分钟）。'
         + ' 同一个工程同时只能有一个实例；任务路径必须是 mc_projects 列出的那些（形如 runClient 或 :fabric:runClient）。'
+        + ' 首次构建需要下载依赖，耗时可能数分钟；超时只代表还没看到就绪标记，不代表失败。'
         + ' 启动后可用 mc_launch_logs 看日志、mc_launch_stop 停止。',
       parameters: {
         root: { type: 'string', description: '工程根目录；省略则用当前工作区' },
         taskPath: { type: 'string', required: true, description: 'Gradle 任务路径，例如 runClient、:fabric:runClient' },
         wait: { type: 'string', enum: ['ready', 'detach'], description: 'ready（默认）等到运行态或结束；detach 立刻返回' },
-        timeoutMs: { type: 'number', description: '等就绪的上限，默认 60000' },
+        timeoutMs: { type: 'number', description: '等就绪的上限，默认 600000（10 分钟）' },
       },
       output: {
         schema: {
@@ -184,7 +186,7 @@ export function applyTools(ctx, deps) {
         if (args.wait === 'detach') {
           return launchValue(record, false)
         }
-        const timeoutMs = Number.isFinite(args.timeoutMs) ? Number(args.timeoutMs) : 60_000
+        const timeoutMs = Number.isFinite(args.timeoutMs) ? Number(args.timeoutMs) : 600_000
         const settled = await waitForSettle(api, record.id, timeoutMs, exec.signal)
         return launchValue(settled ?? record, settled === undefined)
       },
@@ -212,7 +214,15 @@ export function applyTools(ctx, deps) {
             exitCode: { type: 'integer' },
             lines: { type: 'array', required: true, items: { type: 'string' } },
             total: { type: 'integer', required: true },
-            diagnosis: { type: 'string' },
+            diagnosis: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                code: { type: 'string' },
+                hint: { type: 'string', required: true },
+                suggestion: { type: 'string' },
+              },
+            },
           },
         },
         render: (_args, value) => [
@@ -220,7 +230,8 @@ export function applyTools(ctx, deps) {
             type: 'text',
             text:
               `${value.launchId} · ${value.status}${value.outcome === undefined ? '' : `/${value.outcome}`}`
-              + `${value.diagnosis === undefined ? '' : `\n归因：${value.diagnosis}`}`
+              + `${value.diagnosis === undefined ? '' : `\n归因：${value.diagnosis.hint}`}`
+              + `${value.diagnosis?.suggestion === undefined ? '' : `\n建议：${value.diagnosis.suggestion}`}`
               + `\n${value.lines.slice(-40).join('\n')}`,
           },
         ],
@@ -247,7 +258,14 @@ export function applyTools(ctx, deps) {
         }
         if (result.outcome !== null && result.outcome !== undefined) value.outcome = result.outcome
         if (typeof result.exitCode === 'number') value.exitCode = result.exitCode
-        if (result.diagnosis?.hint !== undefined) value.diagnosis = result.diagnosis.hint
+        if (result.diagnosis !== undefined) {
+          // 结构化：模型不用解析中文就能决定下一步
+          /** @type {Record<string, any>} */
+          const diagnosis = { hint: result.diagnosis.hint }
+          if (result.diagnosis.code !== undefined) diagnosis.code = result.diagnosis.code
+          if (result.diagnosis.suggestion !== undefined) diagnosis.suggestion = result.diagnosis.suggestion
+          value.diagnosis = diagnosis
+        }
         return value
       },
     }),
@@ -288,4 +306,190 @@ export function applyTools(ctx, deps) {
       },
     }),
   )
+
+  ctx.tools.register(
+    defineTool({
+      name: 'mc_launch_list',
+      description:
+        '列出运行实例（默认当前工程，最近在前）。用于查历史：某个实例为什么退出、上次跑的是哪个目标。只读。',
+      parameters: {
+        root: { type: 'string', description: '工程根目录；省略则用当前会话的工作区' },
+        limit: { type: 'number', description: '最多返回多少条，默认 10' },
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            root: { type: 'string', required: true },
+            launches: {
+              type: 'array',
+              required: true,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  id: { type: 'string', required: true },
+                  taskPath: { type: 'string', required: true },
+                  label: { type: 'string', required: true },
+                  status: { type: 'string', required: true },
+                  outcome: { type: 'string' },
+                  exitCode: { type: 'integer' },
+                  startedAt: { type: 'string', required: true },
+                  endedAt: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        render: (_args, value) => [
+          {
+            type: 'text',
+            text:
+              `工作区 ${value.root} 的实例（${value.launches.length} 条）`
+              + (value.launches.length === 0
+                ? ''
+                : `\n${value.launches
+                    .map((entry) => `- ${entry.id} · ${entry.label} · ${statusText(entry)} · ${clock(entry.startedAt)}`)
+                    .join('\n')}`),
+          },
+        ],
+      },
+      async execute(args, exec) {
+        const root = await api['projects.scan']({ root: agentRoot(args, exec) }).then((scan) => scan.root)
+        const all = await api['launch.list']({ root })
+        const limit = Number.isFinite(args.limit) && args.limit > 0 ? Math.floor(args.limit) : 10
+        const launches = all.slice(0, limit).map((record) => {
+          /** @type {Record<string, any>} */
+          const value = {
+            id: record.id,
+            taskPath: record.taskPath,
+            label: record.label,
+            status: record.status,
+            startedAt: record.startedAt,
+          }
+          if (record.outcome !== null && record.outcome !== undefined) value.outcome = record.outcome
+          if (typeof record.exitCode === 'number') value.exitCode = record.exitCode
+          if (record.endedAt !== null && record.endedAt !== undefined) value.endedAt = record.endedAt
+          return value
+        })
+        return { root, launches }
+      },
+    }),
+  )
+
+  ctx.tools.register(
+    defineTool({
+      name: 'mc_project_detail',
+      description:
+        '查看单个工程的完整画像：loader 判定依据、模块与目标、JDK 需求与选择、证据、冲突与警告。只读。'
+        + ' 用于回答"为什么判成这个 loader""为什么启动不了""缺哪个 JDK"。',
+      parameters: {
+        root: { type: 'string', description: '工程根目录；省略则用当前会话的工作区' },
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            root: { type: 'string', required: true },
+            name: { type: 'string', required: true },
+            loader: { type: 'string', required: true },
+            loaders: { type: 'array', items: { type: 'string' } },
+            minecraftVersion: { type: 'string' },
+            kind: { type: 'string', required: true },
+            confidence: { type: 'number', required: true },
+            modules: {
+              type: 'array',
+              required: true,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  path: { type: 'string', required: true },
+                  platform: { type: 'string', required: true },
+                  targets: { type: 'array', required: true, items: { type: 'string' } },
+                },
+              },
+            },
+            java: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                required: { type: 'number' },
+                selected: { type: 'string' },
+                exact: { type: 'boolean' },
+                available: { type: 'array', items: { type: 'number' } },
+              },
+            },
+            evidence: { type: 'array', required: true, items: { type: 'string' } },
+            warnings: { type: 'array', required: true, items: { type: 'string' } },
+            conflicts: { type: 'array', required: true, items: { type: 'string' } },
+          },
+        },
+        render: (_args, value) => [
+          {
+            type: 'text',
+            text:
+              `${value.name} · ${value.loader}${value.minecraftVersion === undefined ? '' : ` ${value.minecraftVersion}`} · 置信度 ${Math.round(value.confidence * 100)}%`
+              + `\n模块：${value.modules.map((module) => `${module.path}(${module.platform})`).join('、')}`
+              + `\nJDK：需要 ${value.java?.required ?? '?'}，选中 ${value.java?.selected ?? '无'}`
+              + (value.warnings.length === 0 ? '' : `\n警告：${value.warnings.join('；')}`),
+          },
+        ],
+      },
+      async execute(args, exec) {
+        const root = args.root ?? (await api['projects.scan']({ root: agentRoot(args, exec) }).then((scan) => scan.root))
+        const profile = await api['projects.detail']({ root })
+        /** @type {Record<string, any>} */
+        const value = {
+          root: profile.root,
+          name: profile.modName ?? profile.name,
+          loader: profile.loader,
+          kind: profile.kind,
+          confidence: profile.confidence,
+          modules: (profile.modules ?? []).map((module) => ({
+            path: module.path,
+            platform: module.platform,
+            targets: (module.targets ?? []).map((target) => target.taskPath),
+          })),
+          evidence: (profile.evidence ?? []).map((entry) => `${entry.file} — ${entry.detail}`),
+          warnings: profile.warnings ?? [],
+          conflicts: profile.conflicts ?? [],
+        }
+        if (Array.isArray(profile.loaders) && profile.loaders.length > 0) value.loaders = profile.loaders
+        if (profile.minecraftVersion !== undefined && profile.minecraftVersion !== '') value.minecraftVersion = profile.minecraftVersion
+        if (profile.java !== undefined) {
+          value.java = { required: profile.java.required, exact: profile.java.exact === true }
+          if (profile.java.selected !== undefined) value.java.selected = profile.java.selected
+          value.java.available = (profile.java.available ?? []).map((jdk) => jdk.major)
+        }
+        return value
+      },
+    }),
+  )
+}
+
+/**
+ * 实例状态的中文短标签。
+ * @param {{ status?: string, outcome?: string, exitCode?: number }} entry
+ * @returns {string}
+ */
+function statusText(entry) {
+  if (entry.status === 'starting') return '启动中'
+  if (entry.status === 'running') return '运行中'
+  if (entry.status === 'unknown') return '状态未知'
+  if (entry.outcome === 'killed') return '已停止'
+  if (entry.outcome === 'normal') return '已退出'
+  return entry.exitCode === undefined ? '已退出' : `已退出(${entry.exitCode})`
+}
+
+/**
+ * @param {string} iso
+ * @returns {string}
+ */
+function clock(iso) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '--:--'
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
