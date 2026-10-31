@@ -14,7 +14,13 @@ import { applyTools } from './tools.js'
 export const name = 'mcdev-host'
 
 /** 依赖的宿主服务。 */
-export const inject = ['webServer', 'sessions', 'tools']
+/**
+ * 必需服务：会话（取工作区）与工具注册表。
+ *
+ * `webServer` 不在这里——它是可选的（纯 CLI profile 没有 web 层），
+ * 由 `apply` 里的 `ctx.inject(['webServer'], …)` 单独等。
+ */
+export const inject = ['sessions', 'tools']
 
 /** 插件版本；客户端会显示，用来确认两边同一份代码。 */
 const VERSION = '0.1.0'
@@ -119,9 +125,14 @@ export function apply(ctx, config = {}) {
   // 面板与模型共用同一套服务；工具只是薄封装（M5）
   applyTools(ctx, { api })
 
-  ctx.effect(
-    () =>
-      ctx.webServer.register({
+  // webServer 是**可选**的：纯 CLI / headless profile 里没有它，
+  // 这时插件应当照常激活（工具可用），只是没有 HTTP 路由。
+  // 早期把它写进 inject 会让整个 profile 加载失败（"pending: waiting for service"）。
+  ctx.effect(() => {
+    const mount = (scoped) => {
+      const webServer = scoped?.webServer
+      if (webServer === undefined || typeof webServer.register !== 'function') return undefined
+      const dispose = webServer.register({
         kind: 'prefix',
         path: '/mcdev/api',
         handler: async (req, res) => {
@@ -157,9 +168,26 @@ export function apply(ctx, config = {}) {
             writeJson(res, 500, { ok: false, error: { code: 'internal', message } })
           }
         },
-      }),
-    'mcdev: /mcdev/api routes',
-  )
+      })
+      console.log('[mcdev] http routes mounted at /mcdev/api')
+      return () => {
+        try {
+          dispose?.()
+        } catch {
+          /* 已经在卸载 */
+        }
+      }
+    }
+
+    if (typeof ctx.inject === 'function') {
+      return ctx.inject(['webServer'], (scoped) => mount(scoped))
+    }
+    try {
+      return mount(ctx)
+    } catch {
+      return undefined
+    }
+  }, 'mcdev: /mcdev/api routes')
 
   console.log(`[mcdev] host ready (${VERSION}) — /mcdev/api/{projects.scan,projects.detail,state.info}`)
 }
