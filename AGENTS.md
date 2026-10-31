@@ -166,6 +166,11 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
   `ctx.inject(['webServer'], …)` 可选等待。原来在没有 web 层的 profile（只有 `dsh-base`）里会
   `pending (waiting for service: webServer)`，整个 plugin tree 加载失败。
 - `0.1.2` → 修「装 0.1.1 却打印 0.1.0」：`VERSION` 改为启动时读 `package.json`。
+- `0.1.3` → peer 依赖、仓库元数据、截图与 README 重写；详情页去掉过期文案。
+- `0.1.4` → 运行日志按级别着色（`src/client/logFormat.js`）。
+- `0.1.5` → `logDock` 配置：日志可落原生右侧栏或 better-sidebar 底部工作台。
+- 待发：装 better-sidebar 时默认落底部（`chooseLogDock` 默认改为 bottom），与其他改动
+  一起攒到 `0.1.6` 再发。
 
 发版注意：
 
