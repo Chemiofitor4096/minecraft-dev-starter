@@ -2,7 +2,7 @@
   "name": "minecraft-dev-starter",
   "version": "0.1.0",
   "private": false,
-  "description": "DSH 插件：识别 Minecraft 模组工程并在会话标题栏启动 Client，日志进右侧栏",
+  "description": "DSH plugin that detects Minecraft mod projects and launches the client from the session header, with live logs in the sidebar",
   "type": "module",
   "main": "src/index.js",
   "exports": {
