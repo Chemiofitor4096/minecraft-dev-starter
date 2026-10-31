@@ -60,7 +60,7 @@ dsh plugin --profile desktop remove minecraft-dev-starter
   name: minecraft-dev-starter
   config:
     autoOpenLogTab: true
-    logDock: right          # right：DSH 原生右侧栏；bottom：dsh-better-sidebar 的底部工作台
+    # logDock: right        # 默认：装了 dsh-better-sidebar 落底部工作台，没有则落右侧栏
     readyTimeoutMs: 90000
     logRingLines: 2000
 ```
@@ -68,7 +68,7 @@ dsh plugin --profile desktop remove minecraft-dev-starter
 | 配置项 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `autoOpenLogTab` | boolean | `true` | 启动后自动打开运行日志标签页 |
-| `logDock` | `right` \| `bottom` | `right` | 日志打开位置。`bottom` 需要安装 dsh-better-sidebar；未安装时自动回退到右侧栏 |
+| `logDock` | `right` \| `bottom` | 自动 | 日志打开位置。未配置时安装 dsh-better-sidebar 则落其底部工作台，否则落原生右侧栏；写入 `right` 可强制回到右侧栏 |
 | `readyTimeoutMs` | number | `90000` | 等待进入运行状态的超时时间；超时不计为失败 |
 | `logRingLines` | number | `2000` | 内存中保留的日志行数；磁盘上的日志始终完整 |
 

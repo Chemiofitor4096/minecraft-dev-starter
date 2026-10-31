@@ -26,7 +26,7 @@ export const store = createStore({
   /** @type {Record<string, string>} 每个工程记住的目标 key */
   selection: readSelection(),
   /** @type {{ autoOpenLogTab?: boolean, logDock?: 'right' | 'bottom' }} 宿主下发的部署配置 */
-  config: { autoOpenLogTab: true, logDock: 'right' },
+  config: { autoOpenLogTab: true },
   /** @type {string | undefined} 当前会话的工作区（由胶囊从会话上下文注入） */
   workspaceRoot: undefined,
 })
@@ -37,7 +37,7 @@ export const store = createStore({
 export async function loadStateInfo() {
   try {
     const info = await call('state.info', {})
-    store.set({ config: { autoOpenLogTab: true, logDock: 'right', ...(info?.config ?? {}) } })
+    store.set({ config: { autoOpenLogTab: true, ...(info?.config ?? {}) } })
   } catch {
     /* 拉不到就用默认值 */
   }

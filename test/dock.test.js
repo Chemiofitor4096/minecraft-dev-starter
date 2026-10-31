@@ -5,21 +5,24 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { chooseLogDock } from '../src/client/dock.js'
 
-test('默认落在原生右侧栏', () => {
-  assert.equal(chooseLogDock({}, true), 'right')
-  assert.equal(chooseLogDock(undefined, true), 'right')
-  assert.equal(chooseLogDock({ logDock: 'right' }, true), 'right')
-})
-
-test('配置为 bottom 且装了 better-sidebar 时落到底部工作台', () => {
+test('装了 better-sidebar 时默认落底部工作台', () => {
+  assert.equal(chooseLogDock(undefined, true), 'bottom')
+  assert.equal(chooseLogDock({}, true), 'bottom')
   assert.equal(chooseLogDock({ logDock: 'bottom' }, true), 'bottom')
 })
 
-test('没装 better-sidebar 时忽略 bottom 配置，避免日志打不开', () => {
-  assert.equal(chooseLogDock({ logDock: 'bottom' }, false), 'right')
+test('显式配置 right 时尊重配置', () => {
+  assert.equal(chooseLogDock({ logDock: 'right' }, true), 'right')
 })
 
-test('非法值回退到右侧栏', () => {
-  assert.equal(chooseLogDock({ logDock: 'sidebar' }, true), 'right')
-  assert.equal(chooseLogDock({ logDock: '' }, true), 'right')
+test('没装 better-sidebar 时一律落右侧栏', () => {
+  assert.equal(chooseLogDock(undefined, false), 'right')
+  assert.equal(chooseLogDock({ logDock: 'bottom' }, false), 'right')
+  assert.equal(chooseLogDock({ logDock: 'right' }, false), 'right')
+})
+
+test('非法值按默认处理：有 better-sidebar 落底部，没有落右侧栏', () => {
+  assert.equal(chooseLogDock({ logDock: 'sidebar' }, true), 'bottom')
+  assert.equal(chooseLogDock({ logDock: '' }, true), 'bottom')
+  assert.equal(chooseLogDock({ logDock: 'sidebar' }, false), 'right')
 })

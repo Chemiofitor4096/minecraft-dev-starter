@@ -117,7 +117,8 @@ function resolveWorkspaceRoot(ctx) {
 /** 部署配置默认值；patch 行的 `config` 会覆盖同名项。 */
 const DEFAULTS = {
   autoOpenLogTab: true,
-  logDock: 'right',
+  // logDock 不设默认值：由客户端按"是否装了 better-sidebar"决定落点，
+  // 只有用户显式写 right / bottom 才下发给面板。
   readyTimeoutMs: 90_000,
   logRingLines: 2_000,
 }
@@ -134,7 +135,8 @@ export function apply(ctx, config = {}) {
     resolveRoots: () => sessionCwds(ctx),
     config: {
       autoOpenLogTab: settings.autoOpenLogTab !== false,
-      logDock: settings.logDock === 'bottom' ? 'bottom' : 'right',
+      // 只在显式配置时下发，缺省交给客户端按 better-sidebar 是否存在决定
+      ...(settings.logDock === 'bottom' || settings.logDock === 'right' ? { logDock: settings.logDock } : {}),
     },
     launchService: createLaunchService({
       readyTimeoutMs: Number(settings.readyTimeoutMs) || DEFAULTS.readyTimeoutMs,
