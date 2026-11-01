@@ -5,7 +5,8 @@
  * @module minecraft-dev-starter/client/DetailTab
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { call } from './api.js'
 import { h } from './h.js'
 import { kindLabel, loaderLabel, PANEL_TITLE, projectSubtitle, projectTitle, text } from './format.js'
 import { IconRefresh, IconWarning } from './icons.js'
@@ -82,8 +83,9 @@ export function DetailTab() {
     section('构建环境', [
       row('Gradle', `${text(project.gradleVersion)}${project.wrapper === true ? '（wrapper）' : '（无 wrapper）'}`),
       row('JDK 需求', text(java.required)),
-      row('JDK 选中', `${text(java.selected)}${java.exact === true ? '' : '（不完全匹配）'}`),
+      h(JdkPicker, { key: 'jdk', project, java }),
       row('本机 JDK', java.available?.length > 0 ? java.available.map((jdk) => `${jdk.major}`).join(' / ') : '未发现'),
+      h('div', { key: 'jdk-note', className: 'mcdev-hint' }, '手动指定只影响本机，不写进 gradle.properties；启动时会以 -Dorg.gradle.java.home 与 JAVA_HOME 传给 Gradle。'),
     ]),
 
     section('运行', [
@@ -113,6 +115,7 @@ export function DetailTab() {
             row('实例', `${running.id} · ${running.taskPath}`),
             row('状态', `${running.status === 'starting' ? '启动中' : '运行中'}${running.readyTimedOut === true ? '（还没看到启动信号，可能仍在构建）' : ''}`),
             row('PID', text(running.pid)),
+            ...(typeof running.javaHome === 'string' && running.javaHome !== '' ? [row('JDK', running.javaHome)] : []),
             h(
               'div',
               { className: 'mcdev-actions', style: { marginTop: 6 } },
@@ -210,6 +213,103 @@ export function DetailTab() {
       ? undefined
       : h('div', { className: 'mcdev-muted mcdev-hint', style: { marginTop: 4 } }, `扫描于 ${state.scan.scannedAt}`),
   )
+}
+
+/**
+ * JDK 选择：下拉 + 手动添加路径。
+ *
+ * 选择存在宿主侧（`jdk.json`），改完重扫一次，面板与下一次启动都拿到新值。
+ * 没有本地 state 缓存"选中项"——真相只有宿主那一份，避免两处不一致。
+ * @param {{ project: Record<string, any>, java: Record<string, any> }} props
+ */
+function JdkPicker({ project, java }) {
+  const [path, setPath] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(undefined)
+  const jdks = Array.isArray(java.available) ? java.available : []
+  const override = typeof java.override === 'string' ? java.override : ''
+  const known = jdks.some((jdk) => String(jdk.home).toLowerCase() === override.toLowerCase())
+
+  async function apply(action) {
+    setBusy(true)
+    setError(undefined)
+    try {
+      await action()
+      await loadScan({ refresh: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function addFromInput() {
+    const trimmed = path.trim()
+    if (trimmed === '') return
+    void apply(() => call('projects.jdk.add', { path: trimmed }))
+  }
+
+  return h(
+    'div',
+    { className: 'mcdev-row' },
+    h('span', { className: 'mcdev-key' }, 'JDK'),
+    h(
+      'div',
+      { className: 'mcdev-jdk' },
+      h(
+        'select',
+        {
+          className: 'mcdev-select',
+          value: override,
+          disabled: busy,
+          onChange: (event) => {
+            const next = event.target.value
+            void apply(() => call('projects.jdk.set', { root: project.root, home: next }))
+          },
+        },
+        h('option', { value: '' }, java.required === undefined ? '自动' : `自动（按 MC 版本选 ${java.required}）`),
+        ...jdks.map((jdk) =>
+          h(
+            'option',
+            { key: jdk.home, value: jdk.home },
+            `${jdk.major}${String(jdk.version) === String(jdk.major) ? '' : ` · ${jdk.version}`} — ${jdk.home}`,
+          ),
+        ),
+        override !== '' && !known ? h('option', { key: 'missing', value: override }, `已失效 — ${override}`) : undefined,
+      ),
+      h('div', { className: 'mcdev-hint' }, jdkSummary(java)),
+      h(
+        'div',
+        { className: 'mcdev-jdk-add' },
+        h('input', {
+          className: 'mcdev-input',
+          type: 'text',
+          value: path,
+          placeholder: 'JDK 根目录（含 release 文件），例如 C:\\Program Files\\Java\\jdk-21',
+          disabled: busy,
+          onChange: (event) => setPath(event.target.value),
+          onKeyDown: (event) => {
+            if (event.key === 'Enter') addFromInput()
+          },
+        }),
+        h('button', { type: 'button', className: 'mcdev-mini', disabled: busy || path.trim() === '', onClick: addFromInput }, busy ? '处理中…' : '添加'),
+      ),
+      error === undefined ? undefined : h('div', { className: 'mcdev-error' }, error),
+    ),
+  )
+}
+
+/**
+ * 一句话说明当前生效的是哪个 JDK、依据是什么。
+ * @param {Record<string, any>} java
+ * @returns {string}
+ */
+function jdkSummary(java) {
+  const selected = typeof java.selected === 'string' ? java.selected : ''
+  if (selected === '') return '没有可用的 JDK：装一个，或把路径加进来'
+  if (java.source === 'override') return `生效：${selected}（手动指定）`
+  if (java.source === 'configured') return `生效：${selected}（来自 gradle.properties）`
+  return `生效：${selected}（自动）${java.exact === true ? '' : '（大版本不完全匹配）'}`
 }
 
 /**

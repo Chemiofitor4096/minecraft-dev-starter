@@ -36,6 +36,7 @@ export function logPath(dir, launchId) {
  * @property {string} label
  * @property {string} kind        client | server | data | gameTestServer
  * @property {'daemon' | 'oneshot'} [mode] 常驻还是会跑完；旧记录没有这个字段时按 kind 推
+ * @property {string | null} [javaHome] 启动时用的 JDK；没指定就是继承环境
  * @property {string} module
  * @property {number | null} pid
  * @property {string} startedAt

@@ -75,3 +75,17 @@ test('缺失目录不会抛异常', async () => {
   assert.equal(profile.loader, 'unknown')
   assert.ok(Array.isArray(profile.warnings))
 })
+
+test('手动指定 JDK 时画像标为 override', async () => {
+  const profile = await detectProject(join(fixtures, 'fabric'), { jdks, overrideJavaHome: 'C:/fake/jdk21' })
+  assert.equal(profile.java.source, 'override')
+  assert.equal(profile.java.override, 'C:/fake/jdk21')
+  assert.equal(profile.java.selected, 'C:/fake/jdk21')
+  assert.equal(profile.java.exact, true)
+})
+
+test('自动挑选的 JDK 标为 auto', async () => {
+  const profile = await detectProject(join(fixtures, 'fabric'), { jdks })
+  assert.equal(profile.java.source, 'auto')
+  assert.equal(profile.java.override, undefined)
+})

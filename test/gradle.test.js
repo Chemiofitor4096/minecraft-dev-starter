@@ -74,6 +74,45 @@ test('parseRuns 在嵌套花括号里不会数错', () => {
   assert.equal(runs[0].task, 'runClient')
 })
 
+test('parseRuns 不把 runs 容器 API 当成运行目标', () => {
+  // 真实踩坑：ProtectionEngineering 的 runs.configureEach 曾产出 runConfigureEach，
+  // 选中启动得到 "Task 'runConfigureEach' not found"。
+  const text = `
+    runs {
+      configureEach { systemProperty "a", "b" }
+      all { jvmArgumentProviders.clear() }
+      client { client() }
+    }
+  `
+  assert.deepEqual(parseRuns(text).map((run) => run.task), ['runClient'])
+})
+
+test('parseRuns 认 create("name") 这类工厂写法', () => {
+  const text = `
+    runs {
+      create("benchmark") { server() }
+      register("probe") { }
+    }
+  `
+  const runs = parseRuns(text)
+  assert.deepEqual(runs.map((run) => run.task), ['runBenchmark', 'runProbe'])
+  assert.equal(runs[0].kind, 'server')
+  // 块体里没有类型调用时，类型退回块名
+  assert.equal(runs[1].kind, 'probe')
+})
+
+test('parseRuns 忽略 run 配置内部的嵌套块', () => {
+  const text = `
+    runs {
+      client {
+        mods { create("foo") { } }
+        client()
+      }
+    }
+  `
+  assert.deepEqual(parseRuns(text).map((run) => run.task), ['runClient'])
+})
+
 test('parseJavaLevel 认 toolchain 与 compatibility', () => {
   assert.equal(parseJavaLevel('java.toolchain.languageVersion = JavaLanguageVersion.of(21)'), 21)
   assert.equal(parseJavaLevel('sourceCompatibility = JavaVersion.VERSION_17'), 17)

@@ -164,6 +164,69 @@ const LABELS = {
   datagen: 'Data',
 }
 
+/** 认得的运行类型；用来判断块体里"这个 run 是什么"。 */
+const RUN_TYPES = new Set(['client', 'server', 'data', 'datagen', 'gameTest', 'gameTestServer', 'junit'])
+
+/**
+ * `runs` 是个 NamedDomainObjectContainer，块里合法出现的**容器 API** 不是运行目标。
+ * `runs { configureEach { systemProperty … } }` 曾因此被识别成 `runConfigureEach`，
+ * 选中启动会得到 "Task not found"。
+ */
+const CONTAINER_API = new Set([
+  'all',
+  'each',
+  'configure',
+  'configureEach',
+  'matching',
+  'withType',
+  'whenObjectAdded',
+  'whenObjectRemoved',
+  'add',
+  'addAll',
+  'remove',
+  'clear',
+  'filter',
+  'findAll',
+  'forEach',
+  'collect',
+  'sort',
+  'where',
+])
+
+/** 显式工厂：`create("benchmark") { … }` / `register("x") { … }` / `named("x") { … }`。 */
+const FACTORY = /(?:^|[^\w.])(?:create|register|named)\s*\(\s*["']([^"']+)["']\s*\)\s*\{/g
+
+/**
+ * 每个字符处的花括号深度。用来只收集 `runs` 体里**顶层**的块——
+ * run 配置内部也可能有块（`runs { client { mods { … } } }`），那不是运行目标。
+ * @param {string} text
+ * @returns {number[]}
+ */
+function braceDepths(text) {
+  const depths = new Array(text.length)
+  let depth = 0
+  for (let i = 0; i < text.length; i += 1) {
+    depths[i] = depth
+    if (text[i] === '{') depth += 1
+    else if (text[i] === '}') depth = Math.max(0, depth - 1)
+  }
+  return depths
+}
+
+/**
+ * 块体里的运行类型：优先认得的类型，认不出就用块名（不再拿"第一个调用"兜底，
+ * 否则 `systemProperty(` 这种会被当成类型）。
+ * @param {string} inner
+ * @param {string} fallback
+ * @returns {string}
+ */
+function runKind(inner, fallback) {
+  for (const match of inner.matchAll(/(?:^|[^\w.])([A-Za-z_][\w]*)\s*\(/g)) {
+    if (RUN_TYPES.has(match[1])) return match[1]
+  }
+  return fallback
+}
+
 /**
  * 解析 `runs { client { client() } ... }`，得到可运行目标。
  * 任务名规则：`runs` 块名首字母大写后拼到 `run` 后面（Gradle 的 RunConfig 约定）。
@@ -174,22 +237,40 @@ export function parseRuns(raw) {
   const text = stripComments(raw)
   /** @type {RunTarget[]} */
   const targets = []
+
+  /**
+   * @param {string} name 运行名（块名或工厂参数）
+   * @param {string} inner 块体
+   */
+  function add(name, inner) {
+    if (!/^[A-Za-z_][\w]*$/.test(name)) return
+    const kind = runKind(inner, name)
+    targets.push({
+      block: name,
+      kind,
+      task: `run${name[0].toUpperCase()}${name.slice(1)}`,
+      label: LABELS[kind] ?? LABELS[name] ?? `${kind}`,
+    })
+  }
+
   for (const body of findBlocks(text, 'runs')) {
-    for (const match of body.matchAll(/(^|[^\w.])("?)([A-Za-z_][\w]*)\2\s*\{/g)) {
-      const name = match[3]
-      const open = body.indexOf('{', match.index + match[0].length - 1)
-      if (open < 0) continue
-      const close = matchBrace(body, open)
+    const depths = braceDepths(body)
+    for (const match of body.matchAll(/([A-Za-z_][\w]*)\s*\{/g)) {
+      const name = match[1]
+      if (match.index > 0 && /[\w.]/.test(body[match.index - 1])) continue
+      if (depths[match.index] !== 0) continue
+      if (CONTAINER_API.has(name)) continue
+      const open = body.indexOf('{', match.index)
+      const close = open < 0 ? -1 : matchBrace(body, open)
       if (close < 0) continue
-      const inner = body.slice(open + 1, close)
-      const call = /(^|[^\w.])([A-Za-z_][\w]*)\s*\(/.exec(inner)
-      const kind = call?.[2] ?? name
-      targets.push({
-        block: name,
-        kind,
-        task: `run${name[0].toUpperCase()}${name.slice(1)}`,
-        label: LABELS[kind] ?? LABELS[name] ?? `${kind}`,
-      })
+      add(name, body.slice(open + 1, close))
+    }
+    for (const match of body.matchAll(FACTORY)) {
+      if (depths[match.index] !== 0) continue
+      const open = body.indexOf('{', match.index + match[0].length - 1)
+      const close = open < 0 ? -1 : matchBrace(body, open)
+      if (close < 0) continue
+      add(match[1], body.slice(open + 1, close))
     }
   }
   // 同名任务去重（多模块时由调用方按模块分组）

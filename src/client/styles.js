@@ -130,6 +130,22 @@ export const CSS = `
 .mcdev-row { display: flex; align-items: baseline; gap: 8px; }
 .mcdev-key { flex: none; width: 78px; color: var(--dsw-alias-label-tertiary); }
 
+/* JDK 选择：一行里放下拉 + 说明 + 手动添加 */
+.mcdev-jdk { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.mcdev-jdk-add { display: flex; align-items: center; gap: 6px; }
+.mcdev-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxxs-11);
+}
+.mcdev-input::placeholder { color: var(--dsw-alias-label-tertiary); }
+
 .mcdev-mini {
   display: inline-flex;
   align-items: center;

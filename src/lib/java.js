@@ -159,10 +159,11 @@ async function safeReaddir(dir) {
 
 /**
  * 读一个目录像不像 JDK，并拿到版本。
+ * 面板里"手动添加 JDK"也走这里：加之前先确认它真的是个 JDK。
  * @param {string} home
  * @returns {Promise<JdkInfo | undefined>}
  */
-async function readJdk(home) {
+export async function readJdk(home) {
   const release = await readText(join(home, 'release'))
   if (release !== undefined) {
     const match = /JAVA_VERSION="([^"]+)"/.exec(release)

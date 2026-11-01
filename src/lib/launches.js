@@ -121,18 +121,20 @@ export function diagnose(lines) {
  * @property {string} label
  * @property {string} kind
  * @property {'daemon' | 'oneshot'} [mode] 省略时按 kind 推
+ * @property {string} [javaHome] 用哪个 JDK 跑构建（透传成 -Dorg.gradle.java.home 与 JAVA_HOME）
  * @property {string} [module]
  * @property {string[]} [extraArgs]
  */
 
 /**
- * @param {{ dir?: string, platform?: string, spawnImpl?: typeof spawn, maxLogLines?: number, readyTimeoutMs?: number, commandFor?: typeof gradlewCommand }} [options]
+ * @param {{ dir?: string, platform?: string, spawnImpl?: typeof spawn, maxLogLines?: number, readyTimeoutMs?: number, commandFor?: typeof gradlewCommand, env?: NodeJS.ProcessEnv }} [options]
  */
 export function createLaunchService(options = {}) {
   const dir = options.dir ?? stateDir()
   const platform = options.platform ?? process.platform
   const spawnImpl = options.spawnImpl ?? spawn
   const commandFor = options.commandFor ?? gradlewCommand
+  const baseEnv = options.env ?? process.env
   const maxLogLines = options.maxLogLines ?? 2000
   const readyTimeoutMs = options.readyTimeoutMs ?? 90_000
 
@@ -222,6 +224,7 @@ export function createLaunchService(options = {}) {
         label: request.label,
         kind: request.kind,
         mode: request.mode ?? modeOf(request.kind),
+        javaHome: request.javaHome ?? null,
         module: request.module ?? '.',
         pid: null,
         startedAt: new Date().toISOString(),
@@ -233,7 +236,8 @@ export function createLaunchService(options = {}) {
         logPath: file,
       }
 
-      const command = commandFor({ platform, projectDir: request.root, taskPath: request.taskPath, extraArgs: request.extraArgs })
+      const javaHome = typeof request.javaHome === 'string' && request.javaHome !== '' ? request.javaHome : undefined
+      const command = commandFor({ platform, projectDir: request.root, taskPath: request.taskPath, javaHome, extraArgs: request.extraArgs })
       /** @type {Runtime} */
       const runtime = { ring: [], ready: false, readyTimer: undefined, child: undefined }
 
@@ -242,6 +246,9 @@ export function createLaunchService(options = {}) {
           cwd: command.cwd,
           windowsHide: true,
           windowsVerbatimArguments: command.windowsVerbatimArguments,
+          // 指定了 JDK 就一起接管 JAVA_HOME：gradlew 自己要用它找 java，
+          // 只传 -Dorg.gradle.java.home 在"默认 java 太老"的机器上连 wrapper 都起不来。
+          env: javaHome === undefined ? baseEnv : { ...baseEnv, JAVA_HOME: javaHome },
           // Windows 上不能 detached：DETACHED_PROCESS 与 CREATE_NO_WINDOW 组合后
           // 子进程的标准输出会整个丢掉（实测同一命令 detached 拿到 0 字节、
           // attached 拿到完整输出），顺带还会让 java 自己新开一个可见控制台。
@@ -422,6 +429,7 @@ export function createLaunchService(options = {}) {
       outcome: record.outcome ?? null,
       exitCode: record.exitCode ?? null,
       mode: record.mode ?? modeOf(record.kind),
+      javaHome: record.javaHome ?? null,
       verdict: record.verdict ?? null,
       summary: record.summary ?? null,
       failures: record.failures ?? [],
@@ -448,6 +456,7 @@ export function createLaunchService(options = {}) {
       label: record.label,
       kind: record.kind,
       mode: record.mode ?? modeOf(record.kind),
+      javaHome: record.javaHome ?? null,
       module: record.module,
       pid: record.pid,
       status: record.status,

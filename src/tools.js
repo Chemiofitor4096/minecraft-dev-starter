@@ -504,6 +504,8 @@ export function applyTools(ctx, deps) {
                 required: { type: 'number' },
                 selected: { type: 'string' },
                 exact: { type: 'boolean' },
+                source: { type: 'string', enum: ['override', 'configured', 'auto', 'none'] },
+                override: { type: 'string' },
                 available: { type: 'array', items: { type: 'number' } },
               },
             },
@@ -521,7 +523,7 @@ export function applyTools(ctx, deps) {
               + (value.targets === undefined
                 ? ''
                 : `\n目标：${value.targets.map((target) => `${target.taskPath}（${target.mode === 'oneshot' ? '会跑完' : '常驻'}${target.guessed ? '，未验证' : ''}）`).join('、')}`)
-              + `\nJDK：需要 ${value.java?.required ?? '?'}，选中 ${value.java?.selected ?? '无'}`
+              + `\nJDK：需要 ${value.java?.required ?? '?'}，选中 ${value.java?.selected ?? '无'}${javaSourceText(value.java?.source)}`
               + (value.warnings.length === 0 ? '' : `\n警告：${value.warnings.join('；')}`),
           },
         ],
@@ -557,12 +559,26 @@ export function applyTools(ctx, deps) {
         if (profile.java !== undefined) {
           value.java = { required: profile.java.required, exact: profile.java.exact === true }
           if (profile.java.selected !== undefined) value.java.selected = profile.java.selected
+          if (profile.java.source !== undefined) value.java.source = profile.java.source
+          if (profile.java.override !== undefined) value.java.override = profile.java.override
           value.java.available = (profile.java.available ?? []).map((jdk) => jdk.major)
         }
         return value
       },
     }),
   )
+}
+
+/**
+ * JDK 从哪来的：模型据此判断"是不是人在面板里指定过"。
+ * @param {string | undefined} source
+ * @returns {string}
+ */
+function javaSourceText(source) {
+  if (source === 'override') return '（手动指定）'
+  if (source === 'configured') return '（来自 gradle.properties）'
+  if (source === 'auto') return '（自动）'
+  return ''
 }
 
 /**

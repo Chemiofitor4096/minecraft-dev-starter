@@ -34,6 +34,7 @@ src/lib/
   gradle.js           build.gradle / settings.gradle / gradle.properties 的解析
   metadata.js         mods.toml / fabric.mod.json / plugin.yml / archive.yml
   java.js             JDK 探测与版本匹配（读 <jdk>/release，不起进程）
+  jdks.js             每个工程的 JDK 选择（优先级、jdk.json 持久化、要不要注入）
   verify.js           目标分类（daemon / oneshot）与一次性任务的裁决（verdict）
   launches.js         启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
   state.js            ~/.dsh/mc-dev-starter 下的状态与日志文件
@@ -47,7 +48,7 @@ src/client/
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 97 个测试 + fixtures（真实工程形态的假仓库）
+test/                 114 个测试 + fixtures（真实工程形态的假仓库）
 doc/                  策划与调研
 ```
 
@@ -88,6 +89,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 侧栏标签打不开 | `openTab` 的展开是异步的 | 打开后等一帧再断言 `isExpanded()` |
 | 发版后装不到新版本 | pnpm 缓存了 registry 元数据（`%LOCALAPPDATA%\pnpm-cache\metadata-v1.3\registry.npmjs.org\<pkg>.json`），`dsh plugin add` 会报 "latest is 0.1.2"、甚至"只有 4 个版本" | 删掉那个 `<pkg>.json` 再装；同时确认 `.npmrc` 里的代理是通的 |
 | 一次性任务被当成守护进程 | 用"等就绪"的语义管 `runData` / `runGameTestServer`：`BUILD SUCCESSFUL` 是**终止**信号却被当成**就绪**信号，而且跑完拿不到"过没过" | 目标带 `mode`（daemon / oneshot），oneshot 生下来就是 running、结束即算 `verdict`；见 `src/lib/verify.js` |
+| `runs { configureEach { } }` 变成假目标 | `runs` 是 NamedDomainObjectContainer，容器 API 的块也被当成 run 配置，产出 `runConfigureEach`（启动报 Task not found） | 容器 API 名单 + 只收顶层块 + 认 `create("name")`；见 `parseRuns` |
 | 测试挂了却判通过 | 部分 GameTest 运行器失败时进程仍退 0 | 裁决先看失败特征行、再看退出码；`readVerdict` 里顺序不能调 |
 
 其他约定：
@@ -197,6 +199,23 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
   成功收尾（`BUILD SUCCESSFUL in 38s`）判 passed，依赖解析崩溃判 failed 并取到 `BUILD FAILED`。
 - 97 个测试；`test/verify.test.js` 覆盖分类与裁决，`test/launch.test.js` 用真子进程跑通 oneshot 的两种结局。
 
+### M11 解析修正与 JDK 选择（2026-11-01）
+
+两件"说了但没做到"的事收口：
+
+- **`runs` 容器 API 不再变成目标**：`runs { configureEach { … } }` 曾产出 `runConfigureEach`。
+  现在按容器 API 名单跳过、只收 `runs` 体里的顶层块（run 配置内部的嵌套块不算），
+  并支持 `create("name")` / `register("name")` 这类工厂写法。真机验证：ProtectionEngineering
+  从 5 个目标回到 4 个。
+- **JDK 真正参与启动**：以前只识别不注入，面板说"选中 21"而实际跑的是环境里的 java。
+  现在 `jdk.json` 记每个工程的指定（手动 > `gradle.properties` > 自动），启动时以
+  `-Dorg.gradle.java.home` 与 `JAVA_HOME` 传给 Gradle；面板的「构建环境」可以直接选、也可以
+  填路径添加。自动挑选只在"大版本完全匹配且 wrapper 的 Gradle 跑得动"时接管——宁可不接管，
+  也不把一个本来能跑的工程换成不兼容的 JVM。
+
+114 个测试；`test/jdks.test.js` 覆盖优先级与注入条件，`test/api.test.js` 走真 api 表把 JDK 选择链路串起来，
+`test/gradle.test.js` 覆盖解析修正。
+
 ## 发布记录
 
 - `0.1.0` → 首版。
@@ -211,6 +230,7 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
   日志级别过滤、六个工具与结构化归因、`mc_launch` 默认超时 10 分钟、描述与格式修正。
 - `0.1.7` → 验证回路：目标分类 daemon / oneshot、一次性任务的 `verdict`、
   `mc_launch` 的 `wait: exit`、面板状态词；顺带修 `.gitignore` 误伤 `src/lib` 并补入引擎源码。
+- 待发 `0.1.8` → M11：`runs` 容器 API 修正、JDK 选择与注入（面板可选可加）、范围只保留 Gradle 工程。
 
 发版注意：
 
@@ -238,8 +258,6 @@ npm 包页面上会出现两条告警，都来自 peer 依赖图，不是本包�
 
 ## 还没做的事
 
-- **M6 通用启动器**：HMCL 实例库 + 直启 java，让面板也能起非 Gradle 工程（估 5–8 天）。
-  优先级下调：它服务"人想玩"，与模型的验证回路无关，排在 oneshot 结论之后。
 - 跨 profile 共用 `~/.dsh/mc-dev-starter/state.json`：不同 profile 的实例记录会混在一起，
   日志标签已按工程过滤，暂不影响使用，但值得按 profile 分目录。
 - 桌面版目前仍用 `link:` 安装（改代码即时生效）；切到 npm 版本需要每次改完都发版。

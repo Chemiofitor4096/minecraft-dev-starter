@@ -61,7 +61,7 @@ const DEFAULT_TARGETS = {
 /**
  * 识别一个工程。
  * @param {string} root 工程根目录（绝对路径）
- * @param {{ jdks?: import('./java.js').JdkInfo[], maxModules?: number }} [options]
+ * @param {{ jdks?: import('./java.js').JdkInfo[], maxModules?: number, overrideJavaHome?: string }} [options]
  * @returns {Promise<Record<string, unknown>>}
  */
 export async function detectProject(root, options = {}) {
@@ -230,9 +230,23 @@ export async function detectProject(root, options = {}) {
   const toolchain = parseJavaLevel(gradleText ?? '') ?? (moduleJavaLevels.length > 0 ? Math.max(...moduleJavaLevels) : undefined)
   const javaRequired = toolchain ?? requiredJava(/** @type {string | undefined} */ (minecraftVersion))
   const configuredJavaHome = pickProperty(properties, ['org.gradle.java.home'])
+  const overrideJavaHome = typeof options.overrideJavaHome === 'string' && options.overrideJavaHome !== ''
+    ? options.overrideJavaHome
+    : undefined
   const jdks = options.jdks ?? []
-  const picked = pickJdk(jdks, javaRequired, configuredJavaHome)
-  if (picked === undefined) {
+  const picked = pickJdk(jdks, javaRequired, overrideJavaHome ?? configuredJavaHome)
+  /** @type {'override' | 'configured' | 'auto' | 'none'} */
+  const javaSource = overrideJavaHome !== undefined
+    ? 'override'
+    : configuredJavaHome !== undefined
+      ? 'configured'
+      : picked === undefined
+        ? 'none'
+        : 'auto'
+  if (overrideJavaHome !== undefined) {
+    const installed = jdks.some((jdk) => jdk.home.toLowerCase() === overrideJavaHome.toLowerCase())
+    if (!installed) warnings.push(`手动指定的 JDK 不在已探测列表里：${overrideJavaHome}（启动时仍会使用它）`)
+  } else if (picked === undefined) {
     warnings.push(`没找到可用的 JDK${javaRequired === undefined ? '' : ` ${javaRequired}`}`)
   } else if (!picked.exact && javaRequired !== undefined) {
     warnings.push(`JDK ${javaRequired} 未找到，退而使用 ${picked.home}`)
@@ -264,9 +278,11 @@ export async function detectProject(root, options = {}) {
       required: javaRequired,
       toolchain,
       configured: configuredJavaHome,
+      override: overrideJavaHome,
+      source: javaSource,
       selected: picked?.home,
       exact: picked?.exact ?? false,
-      available: jdks.map((jdk) => ({ home: jdk.home, major: jdk.major })),
+      available: jdks.map((jdk) => ({ home: jdk.home, major: jdk.major, version: jdk.version })),
     },
     gradleVersion,
     wrapper: gradleVersion !== undefined,

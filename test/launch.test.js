@@ -5,6 +5,7 @@
  * 这样能真实验证 spawn/日志/停止/状态机，而不用等 Gradle 构建。
  */
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -39,6 +40,21 @@ test('POSIX 下直接调用 wrapper', () => {
   const command = gradlewCommand({ platform: 'linux', projectDir: '/home/u/demo', taskPath: 'runClient' })
   assert.deepEqual(command.argv, ['/home/u/demo/gradlew', 'runClient'])
   assert.equal(command.windowsVerbatimArguments, false)
+})
+
+test('指定 JDK 时把它放在任务名前面（含空格的路径也带引号）', () => {
+  const win = gradlewCommand({
+    platform: 'win32',
+    projectDir: 'C:\\Projects\\demo',
+    taskPath: 'runClient',
+    javaHome: 'C:\\Program Files\\Java\\jdk-21',
+  })
+  assert.match(win.argv[4], /"-Dorg\.gradle\.java\.home=C:\\Program Files\\Java\\jdk-21"/)
+  // 整条命令外面还有一层给 cmd /s 剥的引号，所以结尾是 `"runClient""`
+  assert.match(win.argv[4], /"runClient""$/)
+
+  const posix = gradlewCommand({ platform: 'linux', projectDir: '/home/u/demo', taskPath: 'runClient', javaHome: '/opt/jdk-21' })
+  assert.deepEqual(posix.argv, ['/home/u/demo/gradlew', '-Dorg.gradle.java.home=/opt/jdk-21', 'runClient'])
 })
 
 test('任务路径白名单只放 run*', () => {
@@ -185,8 +201,45 @@ test('会跑完的目标：测试挂了但退了 0，也要判失败', async () 
   }
 })
 
-test('宿主重启后对账：进程没了就标 unknown，不伪造结局', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'mcdev-reconcile-'))
+test('指定 JDK 时透传到 spawn：命令行参数 + JAVA_HOME', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mcdev-jdk-'))
+  /** @type {{ options?: any, env?: any }} */
+  const captured = {}
+  const service = createLaunchService({
+    dir,
+    commandFor: (options) => {
+      captured.options = options
+      return { argv: [process.execPath, '-e', 'setTimeout(() => {}, 400)'], cwd: process.cwd(), windowsVerbatimArguments: false }
+    },
+    spawnImpl: (command, args, spawnOptions) => {
+      captured.env = spawnOptions.env
+      return spawn(command, args, spawnOptions)
+    },
+  })
+  try {
+    const record = await service.start({
+      root: 'C:\\fake\\demo',
+      taskPath: 'runData',
+      label: 'Data',
+      kind: 'data',
+      javaHome: 'C:\\jdk\\jdk-21',
+    })
+    assert.equal(captured.options.javaHome, 'C:\\jdk\\jdk-21')
+    assert.equal(captured.env.JAVA_HOME, 'C:\\jdk\\jdk-21')
+    assert.equal(record.javaHome, 'C:\\jdk\\jdk-21')
+    await service.stop(record.id)
+    // 等进程真的退出、状态落盘后再删目录，否则会撞上 ENOTEMPTY
+    await waitFor(async () => {
+      const entry = (await service.list()).find((item) => item.id === record.id)
+      return entry?.status === 'exited'
+    })
+    await sleep(150)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('宿主重启后对账：进程没了就标 unknown，不伪造结局', async () => {  const dir = await mkdtemp(join(tmpdir(), 'mcdev-reconcile-'))
   try {
     // 先写一条"运行中但 pid 已经不存在"的记录
     const { saveState, emptyState } = await import('../src/lib/state.js')

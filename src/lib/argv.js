@@ -16,16 +16,19 @@ import { posix, resolve, win32 } from 'node:path'
 export const TASK_PATH_PATTERN = /^(?::[A-Za-z0-9_.-]+)*:?run[A-Za-z0-9_]+$/
 
 /**
- * @param {{ platform?: string, projectDir: string, gradlew?: string, taskPath: string, extraArgs?: string[] }} options
+ * @param {{ platform?: string, projectDir: string, gradlew?: string, taskPath: string, javaHome?: string, extraArgs?: string[] }} options
  * @returns {{ argv: string[], windowsVerbatimArguments: boolean, cwd: string }}
  */
 export function gradlewCommand(options) {
   const platform = options.platform ?? process.platform
+  // `-Dorg.gradle.java.home` 是 Gradle 的"用哪个 JVM 跑构建"，等价于 IDEA 里的 Gradle JVM。
+  // 放在任务名前面：它是 gradlew 自己的参数，不是任务参数。
+  const jvmArgs = options.javaHome === undefined || options.javaHome === '' ? [] : [`-Dorg.gradle.java.home=${options.javaHome}`]
   const extraArgs = options.extraArgs ?? []
 
   if (platform === 'win32') {
     const wrapper = win32.resolve(options.projectDir, options.gradlew ?? 'gradlew.bat')
-    const parts = [quoteCmdArg(wrapper), quoteCmdArg(options.taskPath), ...extraArgs.map(quoteCmdArg)]
+    const parts = [quoteCmdArg(wrapper), ...jvmArgs.map(quoteCmdArg), quoteCmdArg(options.taskPath), ...extraArgs.map(quoteCmdArg)]
     return {
       // `/s` 会剥掉最外层的一对引号，所以这里要包两层：cmd /c ""prog" "arg""
       argv: ['cmd.exe', '/d', '/s', '/c', `"${parts.join(' ')}"`],
@@ -35,7 +38,7 @@ export function gradlewCommand(options) {
   }
 
   return {
-    argv: [posix.join(options.projectDir, options.gradlew ?? 'gradlew'), options.taskPath, ...extraArgs],
+    argv: [posix.join(options.projectDir, options.gradlew ?? 'gradlew'), ...jvmArgs, options.taskPath, ...extraArgs],
     windowsVerbatimArguments: false,
     cwd: options.projectDir,
   }
