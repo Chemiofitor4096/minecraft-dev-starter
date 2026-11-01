@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { createApi } from './lib/api.js'
 import { createLaunchService } from './lib/launches.js'
+import { profileName, stateDir } from './lib/state.js'
 import { applyTools } from './tools.js'
 
 /** Cordis 插件名。 */
@@ -212,4 +213,6 @@ export function apply(ctx, config = {}) {
   }, 'mcdev: /mcdev/api routes')
 
   console.log(`[mcdev] host ready (${VERSION}) — /mcdev/api/{projects.scan,projects.detail,state.info}`)
+  // 把状态目录打出来：查日志、确认 profile 隔离都靠这一行
+  console.log(`[mcdev] state dir: ${stateDir()}${profileName() === undefined ? '（未识别 profile，沿用共用目录）' : `（profile: ${profileName()}）`}`)
 }

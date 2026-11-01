@@ -37,7 +37,7 @@ src/lib/
   jdks.js             每个工程的 JDK 选择（优先级、jdk.json 持久化、要不要注入）
   verify.js           目标分类（daemon / oneshot）与一次性任务的裁决（verdict）
   launches.js         启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
-  state.js            ~/.dsh/mc-dev-starter 下的状态与日志文件
+  state.js            ~/.dsh/mc-dev-starter 下的状态与日志（运行记录按 profile 分目录）
   argv.js             gradlew 命令行构造（含 Windows 引号规则）
   text.js / toml.js   小工具
 src/client/
@@ -48,7 +48,7 @@ src/client/
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 114 个测试 + fixtures（真实工程形态的假仓库）
+test/                 118 个测试 + fixtures（真实工程形态的假仓库）
 doc/                  策划与调研
 ```
 
@@ -216,6 +216,22 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 114 个测试；`test/jdks.test.js` 覆盖优先级与注入条件，`test/api.test.js` 走真 api 表把 JDK 选择链路串起来，
 `test/gradle.test.js` 覆盖解析修正。
 
+### M12 状态按 profile 隔离（2026-11-01）
+
+运行记录以前所有 profile 共用一份，切 profile 会看到别的 profile 的实例。现在：
+
+- **目录**：`~/.dsh/mc-dev-starter/profiles/<name>/`（state.json + logs/）。
+- **怎么认 profile**：argv 里的 `…/.dsh/profiles/<name>`（桌面版）或 `--profile <name>`（CLI），
+  都认不出才退回共用目录。**argv 优先于 `DSH_PROFILE`**——桌面版会给自己的子进程设
+  `DSH_PROFILE=desktop`，从桌面里启动的 CLI 会继承到它，而 CLI 自己的 argv 才是真相
+  （实测踩过：`dsh --profile m10smoke` 一开始被判成 desktop）。
+- **旧记录**：第一次在某个 profile 下启动时，把拆分前的 `state.json` + `logs/` 搬进来一次；
+  只有"新目录还没有 state.json、旧目录有"才动，搬不动就放弃（不影响启动）。
+- **JDK 选择不跟着分**：`jdk.json` 留在根目录，它是机器级偏好——同一个工程换 profile 不该换 JDK。
+
+验证：真机起 `dsh --profile m10smoke`，启动日志打印
+`state dir: …\mc-dev-starter\profiles\m10smoke（profile: m10smoke）`；118 个测试。
+
 ## 发布记录
 
 - `0.1.0` → 首版。
@@ -230,7 +246,8 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
   日志级别过滤、六个工具与结构化归因、`mc_launch` 默认超时 10 分钟、描述与格式修正。
 - `0.1.7` → 验证回路：目标分类 daemon / oneshot、一次性任务的 `verdict`、
   `mc_launch` 的 `wait: exit`、面板状态词；顺带修 `.gitignore` 误伤 `src/lib` 并补入引擎源码。
-- 待发 `0.1.8` → M11：`runs` 容器 API 修正、JDK 选择与注入（面板可选可加）、范围只保留 Gradle 工程。
+- `0.1.8`（已提交暂存）→ M11 + M12：`runs` 容器 API 修正、JDK 选择与注入（面板可选可加）、
+  运行记录按 profile 分目录、范围只保留 Gradle 工程。
 
 发版注意：
 
@@ -258,6 +275,4 @@ npm 包页面上会出现两条告警，都来自 peer 依赖图，不是本包�
 
 ## 还没做的事
 
-- 跨 profile 共用 `~/.dsh/mc-dev-starter/state.json`：不同 profile 的实例记录会混在一起，
-  日志标签已按工程过滤，暂不影响使用，但值得按 profile 分目录。
 - 桌面版目前仍用 `link:` 安装（改代码即时生效）；切到 npm 版本需要每次改完都发版。

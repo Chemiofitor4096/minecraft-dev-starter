@@ -8,7 +8,8 @@
 import { detectProject } from './detect.js'
 import { discoverJdks, readJdk } from './java.js'
 import { loadJdkPrefs, overrideFor, projectKey, saveJdkPrefs, shouldInjectJdk, withExtra } from './jdks.js'
-import { createLaunchService } from './launches.js'
+import { createLaunchService } from './launches.js';
+import { baseStateDir } from './state.js'
 import { scanWorkspace } from './scanner.js'
 
 /** 扫描结果的短缓存：面板打开/切会话会连着问几次，没必要每次重扫。 */
@@ -37,7 +38,8 @@ export function createApi(options) {
   /** @type {Map<string, { at: number, value: unknown }>} */
   const cache = new Map()
   const launches = options.launchService ?? createLaunchService()
-  const stateDir = launches.stateDir
+  // JDK 选择是**机器级**偏好：同一个工程换 profile 不该换 JDK，所以不跟着 profile 分目录
+  const jdkDir = options.jdkDir ?? baseStateDir()
   /** JDK 探测可替换：单测不想依赖本机装了什么。 */
   const listJdks = options.listJdks ?? ((extraDirs) => discoverJdks({ extraDirs }))
 
@@ -58,7 +60,7 @@ export function createApi(options) {
    * 手动添加过的 JDK 目录也在这里并进探测结果。
    */
   async function environment() {
-    const prefs = await loadJdkPrefs(stateDir)
+    const prefs = await loadJdkPrefs(jdkDir)
     const jdks = await listJdks(prefs.extra)
     return { prefs, jdks }
   }
@@ -139,7 +141,7 @@ export function createApi(options) {
       const input = /** @type {{ root?: string, home?: string }} */ (payload ?? {})
       const root = await resolveRoot(input.root)
       const home = typeof input.home === 'string' ? input.home.trim() : ''
-      let prefs = await loadJdkPrefs(stateDir)
+      let prefs = await loadJdkPrefs(jdkDir)
       /** @type {Record<string, string>} */
       const projects = { ...prefs.projects }
       const key = projectKey(root)
@@ -154,7 +156,7 @@ export function createApi(options) {
         projects[key] = info.home
         prefs = withExtra({ ...prefs, projects }, info.home)
       }
-      await saveJdkPrefs(stateDir, prefs)
+      await saveJdkPrefs(jdkDir, prefs)
       dropCache()
       const { jdks } = await environment()
       return {
@@ -177,8 +179,8 @@ export function createApi(options) {
       if (info === undefined) {
         throw Object.assign(new Error(`这个目录不像 JDK（没有 release 文件，目录名里也没有版本号）：${path}`), { code: 'BAD_JDK' })
       }
-      const prefs = withExtra(await loadJdkPrefs(stateDir), info.home)
-      await saveJdkPrefs(stateDir, prefs)
+      const prefs = withExtra(await loadJdkPrefs(jdkDir), info.home)
+      await saveJdkPrefs(jdkDir, prefs)
       dropCache()
       return { jdk: { home: info.home, version: info.version, major: info.major } }
     },

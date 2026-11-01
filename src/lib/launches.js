@@ -18,7 +18,7 @@ import { createWriteStream } from 'node:fs'
 import { mkdir, readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { gradlewCommand, isAlive, TASK_PATH_PATTERN } from './argv.js'
-import { loadState, logPath, saveState, stateDir } from './state.js'
+import { adoptLegacyState, baseStateDir, loadState, logPath, saveState, stateDir } from './state.js'
 import { modeOf, readVerdict } from './verify.js'
 
 /**
@@ -127,10 +127,13 @@ export function diagnose(lines) {
  */
 
 /**
- * @param {{ dir?: string, platform?: string, spawnImpl?: typeof spawn, maxLogLines?: number, readyTimeoutMs?: number, commandFor?: typeof gradlewCommand, env?: NodeJS.ProcessEnv }} [options]
+ * @param {{ dir?: string, legacyDir?: string, platform?: string, spawnImpl?: typeof spawn, maxLogLines?: number, readyTimeoutMs?: number, commandFor?: typeof gradlewCommand, env?: NodeJS.ProcessEnv }} [options]
  */
 export function createLaunchService(options = {}) {
   const dir = options.dir ?? stateDir()
+  // profile 分目录之前的位置：第一次启动时把旧记录搬进来。
+  // 显式给了 dir（测试、独立实例）就默认没有旧记录可搬，别去碰真实的状态目录。
+  const legacyDir = options.legacyDir ?? (options.dir === undefined ? baseStateDir() : dir)
   const platform = options.platform ?? process.platform
   const spawnImpl = options.spawnImpl ?? spawn
   const commandFor = options.commandFor ?? gradlewCommand
@@ -169,6 +172,8 @@ export function createLaunchService(options = {}) {
 
   async function ensureState() {
     if (state !== undefined) return state
+    // profile 分目录前留下的旧记录：搬一次，之后各 profile 各管各的
+    await adoptLegacyState(dir, legacyDir)
     state = await loadState(dir)
     for (const record of state.launches) {
       if (record.status !== 'starting' && record.status !== 'running') continue

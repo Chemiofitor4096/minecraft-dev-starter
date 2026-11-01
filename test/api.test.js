@@ -33,6 +33,8 @@ function build(dir) {
     resolveRoot: async () => fabricRoot,
     version: '0.0.0-test',
     launchService: createLaunchService({ dir }),
+    // JDK 偏好默认在机器级目录；测试必须指到临时目录，别碰真实的 ~/.dsh
+    jdkDir: dir,
     listJdks: fakeListJdks,
   })
 }
