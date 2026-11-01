@@ -86,6 +86,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 改 profile 后启动失败 | `package.json` 写入了 BOM | 用无 BOM 的 UTF-8 写；改完必须重启 DSH |
 | 仓库的 `node_modules` 神秘消失 | 在某个 profile 里把 `link:` 依赖换成 `file:`/npm 包时，pnpm 解链会**删掉被链接目录的 `node_modules`**（实测：`plugin add link:` → 在 → `plugin add file:tgz` → 没了） | 别在同一 profile 里来回切换安装方式；tarball/registry 验证用独立 profile；发现消失就 `npm install --ignore-scripts` 重装 |
 | 侧栏标签打不开 | `openTab` 的展开是异步的 | 打开后等一帧再断言 `isExpanded()` |
+| 发版后装不到新版本 | pnpm 缓存了 registry 元数据（`%LOCALAPPDATA%\pnpm-cache\metadata-v1.3\registry.npmjs.org\<pkg>.json`），`dsh plugin add` 会报 "latest is 0.1.2"、甚至"只有 4 个版本" | 删掉那个 `<pkg>.json` 再装；同时确认 `.npmrc` 里的代理是通的 |
 | 一次性任务被当成守护进程 | 用"等就绪"的语义管 `runData` / `runGameTestServer`：`BUILD SUCCESSFUL` 是**终止**信号却被当成**就绪**信号，而且跑完拿不到"过没过" | 目标带 `mode`（daemon / oneshot），oneshot 生下来就是 running、结束即算 `verdict`；见 `src/lib/verify.js` |
 | 测试挂了却判通过 | 部分 GameTest 运行器失败时进程仍退 0 | 裁决先看失败特征行、再看退出码；`readVerdict` 里顺序不能调 |
 
@@ -208,7 +209,7 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 - `0.1.5` → `logDock` 配置：日志可落原生右侧栏或 better-sidebar 底部工作台。
 - `0.1.6` → 装 better-sidebar 时默认落底部（`chooseLogDock` 默认 bottom）、
   日志级别过滤、六个工具与结构化归因、`mc_launch` 默认超时 10 分钟、描述与格式修正。
-- `0.1.7`（已提交暂存，等人工批准）→ 验证回路：目标分类 daemon / oneshot、一次性任务的 `verdict`、
+- `0.1.7` → 验证回路：目标分类 daemon / oneshot、一次性任务的 `verdict`、
   `mc_launch` 的 `wait: exit`、面板状态词；顺带修 `.gitignore` 误伤 `src/lib` 并补入引擎源码。
 
 发版注意：
