@@ -36,13 +36,16 @@ export function apply(ctx) {
   ensureStyles()
   report('apply')
 
-  // 1) 标题栏胶囊
+  // 1) 标题栏胶囊：放右侧工具簇（utilities）。
+  //    语义上"启动"确实算 actions，但 actions 紧贴会话标题，而胶囊宽度随工程名/目标名变化，
+  //    窄窗口下会挤到标题；实测放 utilities 更稳。要改回去只动这两处。
   try {
     ctx.slots.inject('conversation.session.header.utilities', () =>
       ctx.slots.register(
         {
           name: 'conversation.session.header.utilities',
           id: 'mc-dev-starter:run-capsule',
+          // utilities 区里 open-in-app 是 -10，我们排在它右边
           order: 15,
           registrant: 'minecraft-dev-starter',
         },
