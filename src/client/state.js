@@ -83,12 +83,14 @@ export async function loadScan(options = {}) {
       const scan = /** @type {NonNullable<ReturnType<typeof store.get>['scan']>} */ (result)
       const current = store.get().selectedRoot
       const stillThere = scan.projects.some((project) => project.root === current)
+      // 默认选第一个"能跑的"工程：扫描顺序是 BFS，未必第一个就有 run 目标
+      const fallback = scan.projects.find((project) => (project.runTargets?.length ?? 0) > 0) ?? scan.projects[0]
       store.set({
         loading: false,
         scan,
         workspaceRoot: scan.root,
         error: undefined,
-        selectedRoot: stillThere ? current : scan.projects[0]?.root,
+        selectedRoot: stillThere ? current : fallback?.root,
       })
     })
     .catch((error) => {

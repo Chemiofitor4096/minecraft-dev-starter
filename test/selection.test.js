@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { capsuleParts, capsuleSummary, capsuleText, groupByModule, launchStatusText, pickLogTarget, selectedTarget, targetKey } from '../src/client/selection.js'
+import { capsuleParts, capsuleSummary, capsuleText, groupByModule, hasActiveLaunch, hasRunnableProject, launchStatusText, pickLogTarget, selectedTarget, targetKey } from '../src/client/selection.js'
 
 const project = {
   root: 'C:\\Projects\\rationality',
@@ -121,4 +121,19 @@ test('实例状态的中文标签', () => {
   assert.equal(launchStatusText({ status: 'exited', verdict: 'passed' }), '通过')
   assert.equal(launchStatusText({ status: 'exited', verdict: 'failed', exitCode: 1 }), '失败')
   assert.equal(launchStatusText({ status: 'exited', verdict: 'aborted', outcome: 'killed' }), '已停止')
+})
+
+test('有没有能跑的工程：看 runTargets，不看 loader', () => {
+  assert.equal(hasRunnableProject(undefined), false)
+  assert.equal(hasRunnableProject([]), false)
+  // 库工程识别得出 loader，但没有可运行目标：胶囊不该出现
+  assert.equal(hasRunnableProject([{ loader: 'fabric', runTargets: [] }]), false)
+  assert.equal(hasRunnableProject([{ loader: 'unknown', runTargets: [] }, project]), true)
+})
+
+test('有实例在跑时胶囊必须留着（否则没有停止按钮）', () => {
+  assert.equal(hasActiveLaunch(undefined), false)
+  assert.equal(hasActiveLaunch([{ status: 'exited' }]), false)
+  assert.equal(hasActiveLaunch([{ status: 'starting' }]), true)
+  assert.equal(hasActiveLaunch([{ status: 'running' }]), true)
 })

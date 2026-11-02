@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react'
 import { h } from './h.js'
 import { IconPlay, IconStop } from './icons.js'
 import { report } from './debug.js'
-import { capsuleParts, selectedTarget } from './selection.js'
+import { capsuleParts, hasActiveLaunch, hasRunnableProject, selectedTarget } from './selection.js'
 import {
   activeLaunchFor,
   loadScan,
@@ -79,6 +79,11 @@ function CapsuleBody({ cwd }) {
     document.addEventListener('pointerdown', onPointerDown)
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [state.flyoutOpen])
+
+  // 没有可运行的工程、也没有在跑的实例时不占位：头上挂个"未检测到 MC 工程"只是噪音。
+  // 扫描中（scan 还没有）同样不占位，避免先闪一下灰胶囊再消失。
+  const hasWork = hasRunnableProject(state.scan?.projects) || hasActiveLaunch(launches.list)
+  if (!hasWork && state.error === undefined) return null
 
   const project = selectedProject()
   const target = selectedTarget(project, state.selection)

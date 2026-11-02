@@ -128,6 +128,29 @@ export function launchStatusText(entry) {
 }
 
 /**
+ * 工作区里有没有"能跑的"工程。
+ *
+ * 胶囊只在有活可干时出现：扫描到一堆普通 Gradle 目录、或者干脆不是 MC 工程时，
+ * 头上挂一个"未检测到 MC 工程"的灰胶囊只是噪音——面板里已经写得很清楚。
+ * 判据用 runTargets 而不是 loader：库工程识别得出 loader，但没有可运行目标。
+ * @param {Array<Record<string, any>> | undefined} projects
+ * @returns {boolean}
+ */
+export function hasRunnableProject(projects) {
+  return (projects ?? []).some((project) => (project?.runTargets?.length ?? 0) > 0)
+}
+
+/**
+ * 有没有正在跑/启动中的实例。胶囊即使没有可运行工程也要留着——
+ * 否则用户手上那个正在跑的游戏就没有停止按钮了。
+ * @param {Array<Record<string, any>> | undefined} launches
+ * @returns {boolean}
+ */
+export function hasActiveLaunch(launches) {
+  return (launches ?? []).some((entry) => entry.status === 'starting' || entry.status === 'running')
+}
+
+/**
  * 胶囊的两段文案。窄的时候应该让"工程名"省略，而不是把目标名截掉——
  * 目标名才是可操作的那部分，工程名只是上下文。
  * @param {Record<string, any> | undefined} project

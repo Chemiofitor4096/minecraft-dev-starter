@@ -48,7 +48,7 @@ src/client/
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 118 个测试 + fixtures（真实工程形态的假仓库）
+test/                 120 个测试 + fixtures（真实工程形态的假仓库）
 doc/                  策划与调研
 ```
 
@@ -232,6 +232,17 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 验证：真机起 `dsh --profile m10smoke`，启动日志打印
 `state dir: …\mc-dev-starter\profiles\m10smoke（profile: m10smoke）`；118 个测试。
 
+### M13 胶囊空态（2026-11-02）
+
+非 Minecraft 工作区里标题栏也挂着一个「未检测到 MC 工程」的灰胶囊，纯噪音。现在：
+
+- 判据是 `runTargets` 而不是 loader：库工程识别得出 loader 但跑不了，同样不显示。
+- 有实例在跑（`starting` / `running`）时**必须留着**，否则那个正在跑的游戏没有停止按钮。
+- 扫描中不占位，避免先闪一下再消失。
+- 顺带修了默认选中：以前取扫描顺序里的第一个（BFS 顺序），现在优先取第一个有 run 目标的工程。
+
+120 个测试。
+
 ## 发布记录
 
 - `0.1.0` → 首版。
@@ -246,8 +257,8 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
   日志级别过滤、六个工具与结构化归因、`mc_launch` 默认超时 10 分钟、描述与格式修正。
 - `0.1.7` → 验证回路：目标分类 daemon / oneshot、一次性任务的 `verdict`、
   `mc_launch` 的 `wait: exit`、面板状态词；顺带修 `.gitignore` 误伤 `src/lib` 并补入引擎源码。
-- `0.1.8`（已提交暂存）→ M11 + M12：`runs` 容器 API 修正、JDK 选择与注入（面板可选可加）、
-  运行记录按 profile 分目录、范围只保留 Gradle 工程。
+- `0.1.8`（已提交暂存）→ M11 + M12 + M13：`runs` 容器 API 修正、JDK 选择与注入（面板可选可加）、
+  运行记录按 profile 分目录、没有可运行工程时不显示胶囊、范围只保留 Gradle 工程。
 
 发版注意：
 
