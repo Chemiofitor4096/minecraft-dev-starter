@@ -89,3 +89,14 @@ test('自动挑选的 JDK 标为 auto', async () => {
   assert.equal(profile.java.source, 'auto')
   assert.equal(profile.java.override, undefined)
 })
+
+test('画像里带声明依赖：元数据的 depends 拉成列表', async () => {
+  const profile = await detectProject(join(fixtures, 'fabric'), { jdks })
+  const dependencies = /** @type {Record<string, any>} */ (profile.dependencies)
+  assert.deepEqual(dependencies.build, [])
+  assert.deepEqual(
+    dependencies.mods.map((entry) => `${entry.modId}:${entry.range}`),
+    ['fabricloader:>=0.16.10', 'minecraft:~1.21.1'],
+  )
+  assert.equal(dependencies.catalogFile, null)
+})

@@ -2,8 +2,8 @@
  * TOML 子集解析器：只覆盖 `mods.toml` / `neoforge.mods.toml` 实际用到的语法。
  *
  * 支持：注释、`key = value`、基本字符串（含 `"""` / `'''` 多行）、布尔、数字、
- * 简单数组、`[table]`、`[[array.of.tables]]`。
- * 不支持：内联表、日期、十六进制、转义 unicode——模组元数据里没有。
+ * 简单数组、内联表 `{ a = 1, b = "x" }`、`[table]`、`[[array.of.tables]]`。
+ * 不支持：日期、十六进制、转义 unicode——模组元数据与版本目录里没有。
  *
  * @module minecraft-dev-starter/lib/toml
  */
@@ -162,11 +162,78 @@ function parseValue(raw) {
   if (text.startsWith('"') || text.startsWith("'") || text.startsWith('"""') || text.startsWith("'''")) {
     return parseString(text)
   }
+  if (text.startsWith('{')) return parseInlineTable(text)
   if (text.startsWith('[')) return parseArray(text)
   if (text === 'true') return true
   if (text === 'false') return false
   const number = Number(text)
   return Number.isNaN(number) ? text : number
+}
+
+/**
+ * 内联表：`{ module = "a:b", version.ref = "v" }`。
+ * 版本目录（`libs.versions.toml`）大量用这个写法。
+ * @param {string} text
+ * @returns {TomlTable}
+ */
+function parseInlineTable(text) {
+  const close = text.lastIndexOf('}')
+  const inner = close > 0 ? text.slice(1, close) : text.slice(1)
+  /** @type {TomlTable} */
+  const out = {}
+  for (const chunk of splitTopLevel(inner)) {
+    const eq = indexOfEquals(chunk)
+    if (eq <= 0) continue
+    const path = splitKey(chunk.slice(0, eq).trim())
+    if (path.length === 0) continue
+    const value = parseValue(stripTrailingComment(chunk.slice(eq + 1).trim()))
+    if (path.length === 1) {
+      out[path[0]] = value
+      continue
+    }
+    const table = ensureTable(out, path.slice(0, -1))
+    table[path.at(-1) ?? ''] = value
+  }
+  return out
+}
+
+/**
+ * 按顶层逗号切分（跳过引号与嵌套的 `{}` / `[]`）。
+ * @param {string} text
+ * @returns {string[]}
+ */
+function splitTopLevel(text) {
+  /** @type {string[]} */
+  const parts = []
+  let buffer = ''
+  let quote
+  let depth = 0
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]
+    if (quote !== undefined) {
+      buffer += ch
+      if (ch === '\\') {
+        buffer += text[i + 1] ?? ''
+        i += 1
+      } else if (ch === quote) quote = undefined
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      buffer += ch
+      continue
+    }
+    if (ch === '{' || ch === '[') depth += 1
+    else if (ch === '}' || ch === ']') depth = Math.max(0, depth - 1)
+    if (ch === ',' && depth === 0) {
+      if (buffer.trim() !== '') parts.push(buffer.trim())
+      buffer = ''
+      continue
+    }
+    buffer += ch
+  }
+  if (buffer.trim() !== '') parts.push(buffer.trim())
+  return parts
 }
 
 /**

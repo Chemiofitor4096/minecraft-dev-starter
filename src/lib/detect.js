@@ -20,6 +20,7 @@ import {
   parseWrapperVersion,
 } from './gradle.js'
 import { dependencyRanges, locateMetadata, primaryMetadata } from './metadata.js'
+import { parseBuildDependencies, parseVersionCatalog, resolveCatalogRefs, toModDependencies } from './deps.js'
 import { readText, resolvePlaceholders, parseProperties } from './text.js'
 import { gradleSupportsJava, pickJdk, requiredJava } from './java.js'
 import { modeOf } from './verify.js'
@@ -79,6 +80,8 @@ export async function detectProject(root, options = {}) {
   const properties = parseProperties(await readText(join(root, 'gradle.properties')))
   const wrapperProperties = parseProperties(await readText(join(root, 'gradle/wrapper/gradle-wrapper.properties')))
   const gradleVersion = parseWrapperVersion(wrapperProperties)
+  const catalogFile = await pickExisting(root, ['gradle/libs.versions.toml', 'libs.versions.toml'])
+  const catalogText = catalogFile === undefined ? undefined : await readText(join(root, catalogFile))
 
   const pluginIds = [...parsePluginIds(gradleText ?? ''), ...parsePluginIds(settingsText ?? '')]
   const includes = parseSettingsIncludes(settingsText ?? '')
@@ -260,6 +263,10 @@ export async function detectProject(root, options = {}) {
 
   const kind = classify({ modules, loader, loaders, metadataKind })
   const confidence = scoreConfidence({ loader, metadataKind, configuredJavaHome })
+  // 声明的依赖：只读窗口，用来核对"agent 说加好了"到底写进去没有
+  const catalog = catalogText === undefined ? [] : parseVersionCatalog(catalogText)
+  const buildDependencies = resolveCatalogRefs(parseBuildDependencies(gradleText ?? '', gradleFile ?? 'build.gradle'), catalog)
+  const modDependencies = toModDependencies(dependencyRanges(primaryMetadata(allMetadata)))
 
   return {
     root,
@@ -274,6 +281,12 @@ export async function detectProject(root, options = {}) {
     modName: identity.modName,
     modVersion: identity.modVersion,
     javaVersion: javaRequired,
+    dependencies: {
+      build: buildDependencies,
+      mods: modDependencies,
+      catalogFile: catalogFile ?? null,
+      catalogSize: catalog.length,
+    },
     java: {
       required: javaRequired,
       toolchain,

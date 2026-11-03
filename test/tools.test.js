@@ -322,6 +322,39 @@ test('mc_project_detail 输出证据、JDK 与警告', async () => {
   assert.match(blocks[0].text, /runData（会跑完）/)
 })
 
+test('mc_project_detail 输出声明的依赖（构建 + 模组）', async () => {
+  const { byName } = build({
+    'projects.detail': async () => ({
+      root: 'C:/p',
+      name: 'demo',
+      kind: 'mod',
+      loader: 'fabric',
+      confidence: 0.9,
+      modules: [],
+      runTargets: [],
+      evidence: [],
+      warnings: [],
+      conflicts: [],
+      dependencies: {
+        catalogFile: 'gradle/libs.versions.toml',
+        catalogSize: 2,
+        build: [
+          { configuration: 'modImplementation', notation: 'net.fabricmc:fabric-loader:0.16.9', file: 'build.gradle', line: 14, catalogRef: 'libs.fabric.loader' },
+        ],
+        mods: [{ modId: 'minecraft', range: '~1.21.1' }],
+      },
+    }),
+  })
+  const value = await byName.mc_project_detail.execute({ root: 'C:/p' }, {})
+  assert.equal(value.dependencies.build[0].notation, 'net.fabricmc:fabric-loader:0.16.9')
+  assert.equal(value.dependencies.build[0].line, 14)
+  assert.equal(value.dependencies.build[0].catalogRef, 'libs.fabric.loader')
+  assert.equal(value.dependencies.mods[0].modId, 'minecraft')
+  assert.equal(value.dependencies.catalogFile, 'gradle/libs.versions.toml')
+  assertLossless(value)
+  assert.match(byName.mc_project_detail.output.render({}, value)[0].text, /依赖：构建 1 条、模组声明 1 条/)
+})
+
 test('mc_launch_logs 把归因输出为结构化对象', async () => {
   const { byName } = build({
     'launch.logs': async () => ({

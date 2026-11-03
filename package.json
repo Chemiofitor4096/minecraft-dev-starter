@@ -1,6 +1,6 @@
 {
   "name": "minecraft-dev-starter",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": false,
   "description": "DSH plugin that detects Minecraft mod projects, launches run targets from the session header, keeps live logs in the sidebar, and returns pass/fail verdicts for one-shot tasks",
   "type": "module",
@@ -15,6 +15,7 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
+    "README.zh_CN.md",
     "AGENTS.md"
   ],
   "engines": {

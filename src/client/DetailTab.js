@@ -59,6 +59,9 @@ export function DetailTab() {
   const evidence = /** @type {Array<Record<string, any>>} */ (project.evidence ?? [])
   const warnings = /** @type {string[]} */ (project.warnings ?? [])
   const conflicts = /** @type {string[]} */ (project.conflicts ?? [])
+  const dependencies = /** @type {Record<string, any>} */ (project.dependencies ?? {})
+  const buildDeps = /** @type {Array<Record<string, any>>} */ (dependencies.build ?? [])
+  const modDeps = /** @type {Array<Record<string, any>>} */ (dependencies.mods ?? [])
 
   return h(
     'div',
@@ -163,6 +166,59 @@ export function DetailTab() {
             ),
           ]),
       h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '带 ? 的任务是按 loader 惯例推测的，尚未真实运行验证；可以直接启动试，失败时日志里会给出原因。'),
+    ]),
+
+    section('依赖', [
+      h(
+        'div',
+        { className: 'mcdev-hint' },
+        '只显示构建脚本与元数据里声明的依赖，用来核对「加进去了没有」；Gradle 解析后的传递依赖不在这里。',
+      ),
+      ...(buildDeps.length === 0
+        ? [h('div', { className: 'mcdev-muted' }, '构建脚本里没有读到 dependencies 块')]
+        : [
+            h(
+              'table',
+              { className: 'mcdev-table' },
+              h('thead', undefined, h('tr', undefined, h('th', undefined, '配置'), h('th', undefined, '坐标'), h('th', undefined, '位置'))),
+              h(
+                'tbody',
+                undefined,
+                buildDeps.slice(0, 40).map((dependency, index) =>
+                  h(
+                    'tr',
+                    { key: `${dependency.file}:${dependency.line}:${index}` },
+                    h('td', undefined, String(dependency.configuration)),
+                    h('td', { className: 'mcdev-code' }, String(dependency.notation)),
+                    h('td', { className: 'mcdev-code mcdev-muted' }, `${dependency.file}:${dependency.line}`),
+                  ),
+                ),
+              ),
+            ),
+            buildDeps.length > 40
+              ? h('div', { className: 'mcdev-hint', style: { marginTop: 4 } }, `还有 ${buildDeps.length - 40} 条未显示`)
+              : undefined,
+          ]),
+      dependencies.catalogSize > 0
+        ? h('div', { className: 'mcdev-hint', style: { marginTop: 4 } }, `版本目录 ${dependencies.catalogFile}（${dependencies.catalogSize} 条），libs.xxx 已解析成坐标`)
+        : undefined,
+      ...(modDeps.length === 0
+        ? []
+        : [
+            h('div', { className: 'mcdev-hint', style: { marginTop: 8 } }, '模组声明（mods.toml / fabric.mod.json 的 depends）'),
+            h(
+              'div',
+              { className: 'mcdev-stack' },
+              modDeps.slice(0, 24).map((dependency, index) =>
+                h(
+                  'div',
+                  { key: `m${index}` },
+                  h('span', { className: 'mcdev-code' }, String(dependency.modId)),
+                  h('span', { className: 'mcdev-muted' }, `  ${dependency.range}`),
+                ),
+              ),
+            ),
+          ]),
     ]),
 
     section(

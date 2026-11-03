@@ -509,6 +509,40 @@ export function applyTools(ctx, deps) {
                 available: { type: 'array', items: { type: 'number' } },
               },
             },
+            dependencies: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                catalogFile: { type: 'string' },
+                build: {
+                  type: 'array',
+                  required: true,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      configuration: { type: 'string', required: true },
+                      notation: { type: 'string', required: true },
+                      file: { type: 'string', required: true },
+                      line: { type: 'integer', required: true },
+                      catalogRef: { type: 'string' },
+                    },
+                  },
+                },
+                mods: {
+                  type: 'array',
+                  required: true,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      modId: { type: 'string', required: true },
+                      range: { type: 'string', required: true },
+                    },
+                  },
+                },
+              },
+            },
             evidence: { type: 'array', required: true, items: { type: 'string' } },
             warnings: { type: 'array', required: true, items: { type: 'string' } },
             conflicts: { type: 'array', required: true, items: { type: 'string' } },
@@ -524,6 +558,9 @@ export function applyTools(ctx, deps) {
                 ? ''
                 : `\n目标：${value.targets.map((target) => `${target.taskPath}（${target.mode === 'oneshot' ? '会跑完' : '常驻'}${target.guessed ? '，未验证' : ''}）`).join('、')}`)
               + `\nJDK：需要 ${value.java?.required ?? '?'}，选中 ${value.java?.selected ?? '无'}${javaSourceText(value.java?.source)}`
+              + (value.dependencies === undefined
+                ? ''
+                : `\n依赖：构建 ${value.dependencies.build.length} 条、模组声明 ${value.dependencies.mods.length} 条`)
               + (value.warnings.length === 0 ? '' : `\n警告：${value.warnings.join('；')}`),
           },
         ],
@@ -562,6 +599,27 @@ export function applyTools(ctx, deps) {
           if (profile.java.source !== undefined) value.java.source = profile.java.source
           if (profile.java.override !== undefined) value.java.override = profile.java.override
           value.java.available = (profile.java.available ?? []).map((jdk) => jdk.major)
+        }
+        if (profile.dependencies !== undefined) {
+          const decl = /** @type {Record<string, any>} */ (profile.dependencies)
+          /** @type {{ build: Array<Record<string, any>>, mods: Array<Record<string, any>>, catalogFile?: string }} */
+          const dependencies = { build: [], mods: [] }
+          for (const entry of (decl.build ?? []).slice(0, 60)) {
+            /** @type {Record<string, any>} */
+            const item = {
+              configuration: entry.configuration,
+              notation: entry.notation,
+              file: entry.file,
+              line: entry.line,
+            }
+            if (entry.catalogRef !== undefined) item.catalogRef = entry.catalogRef
+            dependencies.build.push(item)
+          }
+          for (const entry of (decl.mods ?? []).slice(0, 30)) {
+            dependencies.mods.push({ modId: entry.modId, range: entry.range })
+          }
+          if (typeof decl.catalogFile === 'string' && decl.catalogFile !== '') dependencies.catalogFile = decl.catalogFile
+          value.dependencies = dependencies
         }
         return value
       },

@@ -1,146 +1,151 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/banner.png" alt="minecraft-dev-starter" width="100%">
-</p>
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/banner.png" width="100%" alt="minecraft-dev-starter">
 
 # minecraft-dev-starter
 
-为 DeepSeek Harness 添加 Minecraft 模组开发运行控件。
+**Run and verify Minecraft mod builds from the DeepSeek Harness session header.**
 
-插件识别当前工作区中的 Minecraft 模组与插件工程，在会话标题栏提供运行目标的选择与启动、停止操作，并将运行日志输出到侧边栏标签页。
+English | [简体中文](README.zh_CN.md)
 
-面板服务于人，工具服务于模型，两者共用同一份运行状态和同一把锁：同一工程同时只有一个实例，谁先起的，另一方都看得见，也不会把对方的进程踩掉。
+</div>
 
-运行目标分两类，生命周期不同。`runClient` / `runServer` 是常驻进程，启动后一直运行到人关闭窗口；`runData` / `runGameTestServer` 会跑完，插件在它们结束时给出通过或失败的结论。模型因此可以自己完成「改代码 → 跑一遍 → 看结论」这一环，而不必让窗口里的画面承担它判断不了的事情。
+The plugin detects Minecraft mod and plugin projects in the current workspace, offers run-target selection plus start/stop controls in the session header, and streams launch logs into a sidebar tab.
 
-## 功能
+The panel serves people, the tools serve the model, and both share one run state and one lock: a project has at most one instance, whoever started it, and neither side kills the other's process.
 
-- **工程识别**：支持 Fabric、Forge、NeoForge、Architectury、Paper 与 Spigot，覆盖 Minecraft 1.7.10 至 26.x。支持单模块、多模块与聚合仓库；loader 声明位于子模块时同样可以识别。
-- **运行目标**：从 Gradle 配置中提取 Client、Server、Data、GameTestServer 等任务，并区分常驻（`daemon`）与会跑完（`oneshot`）两类。按 loader 惯例推测的目标会标记为未验证，不影响选择与启动。
-- **托管启动**：通过 Gradle Wrapper 启动任务。常驻目标依据日志标记判定是否进入运行状态，而非仅依据进程存活；一次性目标跑完即给出结论，成功、失败、被停止、起不来分别可辨。停止时终止 Gradle 及其全部子进程。
-- **JDK 选择**：按 MC 版本与 `toolchain` 推断所需 JDK 大版本，在面板里列出本机探测到的 JDK 供选择，也可以直接填入 JDK 根目录把它加进列表。指定结果只存本机（`~/.dsh/mc-dev-starter/jdk.json`），不写进 `gradle.properties`；启动时以 `-Dorg.gradle.java.home` 与 `JAVA_HOME` 传给 Gradle，因此面板显示的就是实际使用的。自动挑选只在"大版本完全匹配且 Gradle 跑得动"时接管，避免把本来能跑的工程换成不兼容的 JVM。
-- **状态保持**：运行记录持久化到本地，并按 profile 分目录（`~/.dsh/mc-dev-starter/profiles/<name>/`），不同 profile 的实例互不干扰。宿主重启后按进程 ID 校验：确认存活则继续跟踪，无法确认则记为未知，不推测退出原因。
-- **运行日志**：独立侧边栏标签页或 better-sidebar 底部工作台，按工程展示启动历史，支持跟随输出。日志按级别着色：WARN 与 ERROR 高亮，堆栈帧与 Gradle 任务行区分显示，时间、线程与 logger 弱化；可按级别过滤（全部 / INFO+ / WARN+ / ERROR），选择会被记住。异常退出时给出可能原因，覆盖依赖解析失败、JDK 版本不匹配、端口占用、认证失败等情况。
-- **工作区跟随**：以当前会话的工作目录作为工作区，切换会话时自动重新扫描，无需手动刷新。工作区里没有可运行的工程时不显示标题栏胶囊，避免在非 Minecraft 项目里占位；面板标签仍可打开。
-- **模型工具**（可选）：提供六个工具，与面板共用同一套服务——`mc_projects`（列出工程与目标）、`mc_project_detail`（loader 依据、模块、JDK、证据与警告，并标明每个目标是常驻还是会跑完）、`mc_launch`（启动；常驻目标默认等到运行态，一次性目标默认等到结束并返回 `verdict` 与失败行）、`mc_launch_logs`（读日志，异常退出时附带结构化归因与建议）、`mc_launch_list`（历史实例与状态，含验证结论）、`mc_launch_stop`（停止整棵进程树）。
-- **扩展集成**：安装 [dsh-better-sidebar](https://github.com/topics/dsh-better-sidebar) 后，面板与日志可在其侧边栏中作为带图标的标签页打开。
+Run targets have two lifecycles. `runClient` / `runServer` are daemons that keep running until the window is closed; `runData` / `runGameTestServer` finish and produce a pass or fail verdict. That is what lets the model close its own "change code → run it → read the verdict" loop instead of asking a human to judge a game window.
 
-## 安装
+## Features
 
-要求 DSH 桌面版 0.2.1 或更高版本，或对应的 `dsh` CLI。
+- **Project detection**: Fabric, Forge, NeoForge, Architectury, Paper and Spigot, from Minecraft 1.7.10 to 26.x. Single-module, multi-module and composite builds are supported, including repositories that declare their loader only in a submodule.
+- **Run targets**: extracted from the Gradle build, split into `daemon` and `oneshot`. Targets inferred by loader convention are marked unverified, and remain selectable and launchable.
+- **Managed launches**: tasks are started through the Gradle wrapper. Daemons become "running" when their readiness markers appear in the log, not merely when the process is alive; one-shot tasks report success, failure, being stopped, or failing to start as distinct outcomes. Stopping kills Gradle and its whole process tree.
+- **JDK selection**: the required JDK major is inferred from the Minecraft version and `toolchain`. The panel lists the JDKs found on this machine and can also register a JDK root directory you type in. Choices stay local (`~/.dsh/mc-dev-starter/jdk.json`), never in `gradle.properties`, and are passed to Gradle as `-Dorg.gradle.java.home` plus `JAVA_HOME`, so what the panel shows is what actually runs. Automatic selection only takes over when the major version matches exactly and the wrapper's Gradle can run it.
+- **Declared dependencies**: `dependencies { }` blocks, `gradle/libs.versions.toml` and the metadata `depends` are parsed and shown with configuration, coordinate and `file:line`, so you can confirm that a dependency was really added. Only declarations are shown — resolved transitive graphs require running Gradle.
+- **State persistence**: run records are stored per profile (`~/.dsh/mc-dev-starter/profiles/<name>/`), so profiles do not see each other's instances. After a host restart records are reconciled against the process id; when liveness cannot be confirmed the outcome is reported as unknown instead of being invented.
+- **Run logs**: a sidebar tab, or a better-sidebar bottom workbench. Launch history per project, follow mode, level colouring (WARN and ERROR highlighted, stack frames and Gradle task lines distinguished, timestamps and loggers de-emphasised) and level filtering (All / INFO+ / WARN+ / ERROR) that is remembered. Abnormal exits come with a probable cause: dependency resolution, JDK mismatch, port in use, authentication failure.
+- **Workspace following**: the workspace is the current session's working directory; switching sessions rescans automatically. When the workspace has no runnable project the header capsule is not rendered, so it does not take up space in non-Minecraft projects; the panel tab stays available.
+- **Model tools** (optional): six tools backed by the same service as the panel — `mc_projects` (projects and targets), `mc_project_detail` (loader evidence, modules, JDK, declared dependencies, targets with their modes), `mc_launch` (start; daemons wait for readiness, one-shot targets wait for completion and return a `verdict` plus failing lines), `mc_launch_logs` (log tail with structured diagnosis), `mc_launch_list` (history including verdicts), `mc_launch_stop` (kill the process tree).
+- **Optional integration**: with [dsh-better-sidebar](https://github.com/topics/dsh-better-sidebar) installed, the panel and the log open as icon tabs in its sidebar.
+
+## Installation
+
+Requires DSH Desktop 0.2.1 or newer, or the matching `dsh` CLI.
 
 ```powershell
-# 从 npm 安装
+# From npm
 dsh plugin --profile desktop add minecraft-dev-starter
 
-# 本地仓库（修改后即时生效）
+# Local repository (edits take effect immediately)
 dsh plugin --profile desktop add link:C:/Projects/minecraft-dev-starter
 
-# 使用打包文件
-dsh plugin --profile desktop add file:./minecraft-dev-starter-0.1.3.tgz
+# From a packed tarball
+dsh plugin --profile desktop add file:./minecraft-dev-starter-0.1.10.tgz
 ```
 
-安装完成后需重启 DSH 生效。卸载：
+Restart DSH afterwards. To uninstall:
 
 ```powershell
 dsh plugin --profile desktop remove minecraft-dev-starter
 ```
 
-`dsh plugin` 是 pnpm 的封装：将插件加入 profile 的依赖，并把声明了 `dsh.bundle` 的包加入 `dsh.profile.bundles` 列表。直接编辑 profile 的 `package.json` 后执行 `pnpm install`，效果相同。
+`dsh plugin` is a wrapper around pnpm: it adds the plugin to the profile's dependencies and appends packages that declare `dsh.bundle` to `dsh.profile.bundles`. Editing the profile's `package.json` and running `pnpm install` has the same effect.
 
-## 使用
+## Usage
 
-1. 打开包含 Minecraft 工程的工作区会话。
-2. 标题栏显示当前选中的运行目标。点击目标名称打开浮层，从中选择工程与任务。
-3. 需要换 JDK 时，在右侧栏「Mod Dev」面板的「构建环境」里选择：下拉列出本机 JDK，也可以在下方输入 JDK 根目录并添加。
-4. 点击启动按钮开始构建并运行。启动后自动打开「运行日志」标签页，该行为可通过配置关闭。
-5. 运行期间按钮切换为停止；点击后终止 Gradle 及其子进程。
+1. Open a session whose workspace contains a Minecraft project.
+2. The header shows the currently selected run target. Click its name to open the flyout and pick a project and task.
+3. To change the JDK, use the "Build environment" section of the "Mod Dev" panel: pick one of the detected JDKs, or type a JDK root directory and add it.
+4. Press play to build and run. The run log tab opens automatically; this can be disabled by configuration.
+5. While running, the button turns into stop, which terminates Gradle and its children.
 
-浮层布局随工程数量变化：单工程工作区不显示工程列表，表头直接呈现工程名称、loader 与版本、路径；多工程工作区显示固定高度的列表，切换工程时仅更新下方目标区域，页面不会跳动。
+Flyout layout follows the number of projects: a single-project workspace skips the project list and lets the header carry the project identity (name, loader and version, path); a multi-project workspace shows a fixed-height list, and switching projects only updates the target area below it, so the page does not jump.
 
-### 验证改动
+### Verifying changes
 
-对会跑完的目标，模型可以直接拿到结论，不需要人盯着窗口：
+For targets that finish, the model gets a verdict without anyone watching a window:
 
-1. `mc_project_detail` 看哪些目标是 `oneshot`，即 `runData`、`runGameTestServer`，以及工程里自建的 `runGametest`；
-2. `mc_launch` 启动它。这类目标默认等到结束，返回 `verdict`：`passed` / `failed` / `aborted` / `error`；
-3. 失败时 `summary` 是第一处失败特征行，`failures` 是命中的若干行；需要全文用 `mc_launch_logs`。
+1. `mc_project_detail` shows which targets are `oneshot` — `runData`, `runGameTestServer`, and any `runGametest` defined by the project;
+2. `mc_launch` starts one. These targets wait for completion by default and return a `verdict`: `passed` / `failed` / `aborted` / `error`;
+3. on failure, `summary` is the first failing line and `failures` holds the matched lines; `mc_launch_logs` reads the rest.
 
-常驻目标（`runClient`）能自动断言的只有「是否进入运行状态」与日志里的异常。画面、手感这类判断仍由人完成：模型把客户端起起来，人看一眼，再让模型回去读日志。
+What a daemon (`runClient`) can assert automatically is whether it reached the running state and whether the log contains exceptions. Visuals and feel stay a human judgement: the model starts the client, a human looks, then the model goes back to the log.
 
-## 配置
+## Configuration
 
-在 profile 的 `cordis.patch.yml` 中为该插件条目添加 `config` 字段：
+Add a `config` block to the plugin entry in the profile's `cordis.patch.yml`:
 
 ```yaml
 - id: mcdev-host
   name: minecraft-dev-starter
   config:
     autoOpenLogTab: true
-    # logDock: right        # 默认：装了 dsh-better-sidebar 落底部工作台，没有则落右侧栏
+    # logDock: right        # default: bottom workbench with dsh-better-sidebar, native sidebar otherwise
     readyTimeoutMs: 90000
     logRingLines: 2000
 ```
 
-| 配置项 | 类型 | 默认值 | 说明 |
+| Key | Type | Default | Description |
 |---|---|---|---|
-| `autoOpenLogTab` | boolean | `true` | 启动后自动打开运行日志标签页 |
-| `logDock` | `right` \| `bottom` | 自动 | 日志打开位置。未配置时安装 dsh-better-sidebar 则落其底部工作台，否则落原生右侧栏；写入 `right` 可强制回到右侧栏 |
-| `readyTimeoutMs` | number | `90000` | 等待进入运行状态的超时时间；超时不计为失败 |
-| `logRingLines` | number | `2000` | 内存中保留的日志行数；磁盘上的日志始终完整 |
+| `autoOpenLogTab` | boolean | `true` | Open the run log tab after a launch |
+| `logDock` | `right` \| `bottom` | automatic | Where the log opens. Unset means the better-sidebar bottom workbench when installed, otherwise the native right sidebar; `right` forces the native sidebar |
+| `readyTimeoutMs` | number | `90000` | How long to wait for the running state; a timeout is not a failure |
+| `logRingLines` | number | `2000` | Log lines kept in memory; the on-disk log is always complete |
 
-`logDock` 只影响「自动打开」与面板里的「打开日志」按钮；无论配置为何，两个标签页都同时存在于原生右侧栏与 better-sidebar 的页签列表中，可随时手动打开。
+`logDock` only affects automatic opening and the panel's "open log" button. Both tabs exist in the native sidebar and in better-sidebar's tab list regardless of the setting.
 
-## 兼容范围
+## Compatibility
 
-| 平台 | 版本范围 | 说明 |
+| Platform | Versions | Notes |
 |---|---|---|
-| Fabric | 1.14 – 26.x | loom 提供的 `runClient` 等任务 |
-| Forge | 1.7.10 / 1.12.2 / 1.16.5 / 1.20.1 | 包含 legacyforge |
-| NeoForge | 1.20.1 – 26.x | moddev 插件 |
-| Architectury | 1.16 – 26.x | 按子模块拆分任务 |
-| Paper / Spigot | 1.7.10 – 26.x | 服务端插件工程 |
+| Fabric | 1.14 – 26.x | `runClient` and friends from loom |
+| Forge | 1.7.10 / 1.12.2 / 1.16.5 / 1.20.1 | including legacyforge |
+| NeoForge | 1.20.1 – 26.x | moddev plugin |
+| Architectury | 1.16 – 26.x | targets split per submodule |
+| Paper / Spigot | 1.7.10 – 26.x | server plugin projects |
 
-JDK 版本按 Minecraft 版本推断：1.7.10 与 1.12.2 需要 Java 8，1.18 至 1.20.4 需要 Java 17，1.20.5 及以上需要 Java 21，26.x 需要 Java 25。插件将需求与已安装的 JDK 比对，缺失或版本不符时在面板中提示。
+The JDK level is inferred from the Minecraft version: 1.7.10 and 1.12.2 need Java 8, 1.18 to 1.20.4 need Java 17, 1.20.5 and above need Java 21, 26.x needs Java 25. The requirement is compared against installed JDKs and mismatches are surfaced in the panel.
 
-## 开发
+## Development
 
 ```powershell
 npm install
-npm run build        # 构建客户端到 lib/client.js；修改 src/client 后必须执行
-npm test             # 97 个测试
+npm run build        # builds the client into lib/client.js; required after editing src/client
+npm test             # 128 tests
 npm run build -- --watch
 ```
 
-`lib/client.js` 被 `.gitignore` 忽略，只在打包时通过 `package.json` 的 `files` 进入 npm 包。因此新 clone 的仓库要先执行一次 `npm run build`，否则 `link:` 安装的插件拿不到客户端产物。
+`lib/client.js` is git-ignored and only enters the npm package through the `files` field, so a fresh clone has to run `npm run build` once before a `link:` install can load the client bundle.
 
-仓库结构、已知问题与历次验证结论见 [AGENTS.md](./AGENTS.md)。设计文档：[策划](./doc/策划.md)、[DSH 插件机制调研](./doc/调研-DSH插件机制.md)。
+Repository layout, pitfalls and verification records live in [AGENTS.md](./AGENTS.md). Design documents: [plan](./doc/策划.md) and [DSH plugin mechanics](./doc/调研-DSH插件机制.md) (both in Chinese).
 
-## 发布
+## Publishing
 
-DSH 插件以 npm 包形式分发，不需要独立注册流程。
+DSH plugins are distributed as npm packages; there is no separate registration.
 
-1. **清单**：`package.json` 声明 `dsh.bundle.patch`（指向 `cordis.patch.yml`）；提供浏览器界面时同时声明 `dsh.client.platform`。宿主依据这两项识别插件。
-2. **产物**：执行 `npm run build` 生成 `lib/client.js`。该文件被 `.gitignore` 忽略，通过 `package.json` 的 `files` 字段进入 npm 包。运行时直接读取产物，不安装依赖，也不执行构建。
-3. **校验**：执行 `npm test`；使用 `npm pack --dry-run` 确认包内容（`files` 字段已限定为 `src`、`lib`、`cordis.patch.yml`、README 与 AGENTS）。
-4. **发布**：`npm publish --access public`。若使用仅允许暂存的 granular token，改为以下流程：
+1. **Manifest**: `package.json` declares `dsh.bundle.patch` (pointing at `cordis.patch.yml`), plus `dsh.client.platform` when the plugin ships a browser UI.
+2. **Artifacts**: `npm run build` produces `lib/client.js`. It is git-ignored and included in the package through the `files` field. The runtime reads it directly; nothing is installed or built on the user's machine.
+3. **Checks**: `npm test`; `npm pack --dry-run` to confirm the contents (`files` limits the package to `src`, `lib`, `cordis.patch.yml`, README and AGENTS).
+4. **Publish**: `npm publish --access public`. With a stage-only granular token, use the staged flow instead:
 
    ```powershell
-   npm stage publish                 # 提交到暂存区
-   npm stage list                   # 等待状态变为 validated
-   npm stage approve <stage-id>      # 人工完成 2FA 确认
+   npm stage publish                 # submit to the staging area
+   npm stage list                   # wait until validation finishes
+   npm stage approve <stage-id>     # human 2FA confirmation
    ```
 
-   暂存后由人工批准是 npm 的设计：机器提交、人工确认，即使 token 泄露也无法直接发布正式版本。批准后 `latest` 标签自动指向新版本。
-5. **兼容性**：宿主 API 会持续演进。发布前将 `@deepseek-ai/dsh-tools` 与 `@deepseek-ai/cordis` 的版本范围对齐目标运行时；跨大版本时应分别发布版本，而非放宽范围强行兼容。
-6. **安装**：用户执行 `dsh plugin --profile <name> add <包名>` 后重启，或在 Plugins 面板中安装。
+   Machine submits, human approves: a leaked token still cannot publish on its own. Approval moves the `latest` tag.
+5. **Compatibility**: host APIs keep moving. Align `@deepseek-ai/dsh-tools` and `@deepseek-ai/cordis` ranges with the target runtime before publishing, and release separately across major versions rather than widening the range.
+6. **Install**: users run `dsh plugin --profile <name> add <package>` and restart, or install from the Plugins panel.
 
-在本地验证发布形态时，可先 `npm pack`，再通过 `dsh plugin add file:<tarball>` 安装；该路径与 npm 安装完全一致。
+To verify the packaged form locally, `npm pack` and `dsh plugin add file:<tarball>` exercise the same path as an npm install.
 
-## 已知限制
+## Known limitations
 
-- 原生右侧栏的标签类型不提供图标字段，图标仅支持 `dsh-better-sidebar` 中的标签。
-- 一次性目标的结论由退出码与日志特征共同判定：退出码非零必为失败；退出码为零但日志里出现测试失败特征（如 `N required tests failed`）同样判为失败，以免把「测试挂了但进程退了 0」当成通过。两者都缺失时记为未知，不猜。
-- 在 Windows 上首次构建需要下载 Gradle 与项目依赖，耗时可能达到数分钟；后续构建可使用 Gradle daemon。
+- Native sidebar tab types have no icon field; icons only appear on `dsh-better-sidebar` tabs.
+- One-shot verdicts combine the exit code with log markers: a non-zero exit is always a failure, and a zero exit is still a failure when test-failure markers appear (for example `N required tests failed`), so a runner that swallows a failure does not look like a pass. When neither is available the verdict is unknown.
+- The first build on Windows downloads Gradle and the project's dependencies, which can take several minutes; later builds reuse the Gradle daemon.
 
 ## License
 

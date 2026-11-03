@@ -34,6 +34,7 @@ src/lib/
   gradle.js           build.gradle / settings.gradle / gradle.properties 的解析
   metadata.js         mods.toml / fabric.mod.json / plugin.yml / archive.yml
   java.js             JDK 探测与版本匹配（读 <jdk>/release，不起进程）
+  deps.js             声明依赖：dependencies 块、libs.versions.toml、元数据 depends
   jdks.js             每个工程的 JDK 选择（优先级、jdk.json 持久化、要不要注入）
   verify.js           目标分类（daemon / oneshot）与一次性任务的裁决（verdict）
   launches.js         启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
@@ -48,7 +49,7 @@ src/client/
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 120 个测试 + fixtures（真实工程形态的假仓库）
+test/                 128 个测试 + fixtures（真实工程形态的假仓库）
 doc/                  策划与调研
 ```
 
@@ -91,6 +92,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 一次性任务被当成守护进程 | 用"等就绪"的语义管 `runData` / `runGameTestServer`：`BUILD SUCCESSFUL` 是**终止**信号却被当成**就绪**信号，而且跑完拿不到"过没过" | 目标带 `mode`（daemon / oneshot），oneshot 生下来就是 running、结束即算 `verdict`；见 `src/lib/verify.js` |
 | `runs { configureEach { } }` 变成假目标 | `runs` 是 NamedDomainObjectContainer，容器 API 的块也被当成 run 配置，产出 `runConfigureEach`（启动报 Task not found） | 容器 API 名单 + 只收顶层块 + 认 `create("name")`；见 `parseRuns` |
 | 测试挂了却判通过 | 部分 GameTest 运行器失败时进程仍退 0 | 裁决先看失败特征行、再看退出码；`readVerdict` 里顺序不能调 |
+| `libs.versions.toml` 解析成一整条字符串 | `parseToml` 不支持内联表，`{ module = "a:b", version = "1" }` 原样返回 | 已补 `parseInlineTable`；回归见 `test/toml.test.js` 与 `test/deps.test.js` |
 
 其他约定：
 
@@ -241,7 +243,19 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 - 扫描中不占位，避免先闪一下再消失。
 - 顺带修了默认选中：以前取扫描顺序里的第一个（BFS 顺序），现在优先取第一个有 run 目标的工程。
 
-120 个测试。
+### M14 声明依赖与双语 README（2026-11-03）
+
+- **声明依赖**（`src/lib/deps.js`）：解析 `dependencies { }` 块（行号精确到声明那一行）、
+  `gradle/libs.versions.toml`（内联表 + `version.ref`）、元数据 `depends`。
+  `libs.xxx` 的两种访问器写法（`libs.fabric.loader` / `libs.fabricLoader`）都能解析成真实坐标，
+  解析不出来就保留原引用，不猜。面板「依赖」区块与 `mc_project_detail` 都输出这份清单。
+- **TOML 补内联表**：`parseToml` 以前把 `{ module = "…", version = "…" }` 当字符串返回，
+  版本目录因此整块失效；现在支持内联表（含 `version.ref` 点号键）。
+- **README 默认英文**：`README.md` 英文、`README.zh_CN.md` 中文，顶部互链，npm 包跟着带两份。
+- 不做「依赖管理 / 依赖编辑」与「Gradle 同步」：改构建脚本是 agent 的事，
+  这里只给一个可以核对的窗口。
+
+128 个测试。
 
 ## 发布记录
 
@@ -259,7 +273,8 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
   `mc_launch` 的 `wait: exit`、面板状态词；顺带修 `.gitignore` 误伤 `src/lib` 并补入引擎源码。
 - `0.1.8` → M11 + M12：`runs` 容器 API 修正、JDK 选择与注入（面板可选可加）、
   运行记录按 profile 分目录、范围只保留 Gradle 工程。
-- 待发 `0.1.9` → M13：没有可运行工程时不显示胶囊（0.1.8 打包后才发现的空态噪音）。
+- `0.1.9` → M13：没有可运行工程时不显示胶囊（0.1.8 打包后才发现的空态噪音）。
+- 待发 `0.1.10` → M14：声明依赖视图（构建依赖 + 模组声明）、README 默认英文并保留中文。
 
 发版注意：
 
