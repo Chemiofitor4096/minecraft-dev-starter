@@ -16,6 +16,14 @@
 
 运行目标分两类，生命周期不同。`runClient` / `runServer` 是常驻进程，启动后一直运行到人关闭窗口；`runData` / `runGameTestServer` 会跑完，插件在它们结束时给出通过或失败的结论。模型因此可以自己完成"改代码 → 跑一遍 → 看结论"这一环，而不必让窗口里的画面承担它判断不了的事情。
 
+## 截图
+
+![客户端运行中，日志落在底部工作台](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-1-overview.png)
+
+![Mod Dev 面板：工程画像、运行目标与声明依赖](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-2-detail.png)
+
+![标题栏胶囊的浮层：选择工程与运行目标](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-3-flyout.png)
+
 ## 功能
 
 - **工程识别**：支持 Fabric、Forge、NeoForge、Architectury、Paper 与 Spigot，覆盖 Minecraft 1.7.10 至 26.x。支持单模块、多模块与聚合仓库；loader 声明位于子模块时同样可以识别。

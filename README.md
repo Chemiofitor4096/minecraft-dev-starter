@@ -16,6 +16,14 @@ The panel serves people, the tools serve the model, and both share one run state
 
 Run targets have two lifecycles. `runClient` / `runServer` are daemons that keep running until the window is closed; `runData` / `runGameTestServer` finish and produce a pass or fail verdict. That is what lets the model close its own "change code → run it → read the verdict" loop instead of asking a human to judge a game window.
 
+## Screenshots
+
+![Run log in the bottom workbench while a client is running](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-1-overview.png)
+
+![Mod Dev panel: project profile, targets and declared dependencies](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-2-detail.png)
+
+![Capsule flyout: pick a project and a run target](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-3-flyout.png)
+
 ## Features
 
 - **Project detection**: Fabric, Forge, NeoForge, Architectury, Paper and Spigot, from Minecraft 1.7.10 to 26.x. Single-module, multi-module and composite builds are supported, including repositories that declare their loader only in a submodule.
