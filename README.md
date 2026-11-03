@@ -18,11 +18,13 @@ Run targets have two lifecycles. `runClient` / `runServer` are daemons that keep
 
 ## Screenshots
 
-![Run log in the bottom workbench while a client is running](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-1-overview.png)
-
-![Mod Dev panel: project profile, targets and declared dependencies](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-2-detail.png)
-
-![Capsule flyout: pick a project and a run target](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-3-flyout.png)
+<table>
+<tr><td colspan="2"><img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-1-overview.png" width="820" alt="Run log in the bottom workbench while a client is running"></td></tr>
+<tr>
+<td width="50%"><img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-2-detail.png" width="400" alt="Mod Dev panel: project profile, targets and declared dependencies"></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-3-flyout.png" width="400" alt="Capsule flyout: pick a project and a run target"></td>
+</tr>
+</table>
 
 ## Features
 

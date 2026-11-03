@@ -18,11 +18,13 @@
 
 ## 截图
 
-![客户端运行中，日志落在底部工作台](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-1-overview.png)
-
-![Mod Dev 面板：工程画像、运行目标与声明依赖](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-2-detail.png)
-
-![标题栏胶囊的浮层：选择工程与运行目标](https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-3-flyout.png)
+<table>
+<tr><td colspan="2"><img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-1-overview.png" width="820" alt="客户端运行中，日志落在底部工作台"></td></tr>
+<tr>
+<td width="50%"><img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-2-detail.png" width="400" alt="Mod Dev 面板：工程画像、运行目标与声明依赖"></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-3-flyout.png" width="400" alt="标题栏胶囊的浮层：选择工程与运行目标"></td>
+</tr>
+</table>
 
 ## 功能
 
