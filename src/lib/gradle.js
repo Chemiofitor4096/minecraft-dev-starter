@@ -119,6 +119,21 @@ export function parsePluginIds(raw) {
 }
 
 /**
+ * settings.gradle(.kts) 里的 `rootProject.name`。
+ *
+ * 聚合工程的根目录往往没有自己的元数据（mods.toml 都在子模块里），
+ * 这时工程名只能从这里取——否则会被子模块的 modName 顶掉。
+ * @param {string} raw
+ * @returns {string | undefined}
+ */
+export function parseRootProjectName(raw) {
+  const text = stripComments(raw)
+  const match = /rootProject\.name\s*[=:]\s*["']([^"']+)["']/.exec(text)
+  const name = match?.[1].trim()
+  return name === undefined || name === '' ? undefined : name
+}
+
+/**
  * settings.gradle(.kts) 里的 include 列表。
  * @param {string} raw
  * @returns {string[]} 形如 `fabric`、`common`（去掉前导冒号）

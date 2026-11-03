@@ -6,6 +6,7 @@
  */
 
 import { detectProject } from './detect.js'
+import { resolveProjectDir } from './idea.js'
 import { discoverJdks, readJdk } from './java.js'
 import { loadJdkPrefs, overrideFor, projectKey, saveJdkPrefs, shouldInjectJdk, withExtra } from './jdks.js'
 import { createLaunchService } from './launches.js';
@@ -52,7 +53,8 @@ export function createApi(options) {
     if (root === undefined || root === '') {
       throw new Error('找不到工作区目录：请求里没带 root，宿主也没有活跃会话')
     }
-    return root
+    // 传进来的是 `.idea`（从 IDE 里复制路径很常见）时退回工程根
+    return resolveProjectDir(root)
   }
 
   /**
@@ -193,12 +195,12 @@ export function createApi(options) {
     }),
 
     /**
-     * 启动实例：`{ root, taskPath, label?, kind?, module?, extraArgs? }`。
+     * 启动实例：`{ root, taskPath, label?, kind?, module?, gradleRoot?, extraArgs? }`。
      * 只允许启动"识别得出的目标"，并且工程必须落在当前工作区之内。
      * @param {unknown} payload
      */
     'launch.start': async (payload) => {
-      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, extraArgs?: string[] }} */ (payload ?? {})
+      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, gradleRoot?: string, extraArgs?: string[] }} */ (payload ?? {})
       const root = await resolveRoot(input.root)
       // 工作区可能不止一个（每个会话一个 cwd）：只要落在其中任意一个之内就放行，
       // 否则切到另一个工程的会话后会被误判成"越界"。
@@ -228,6 +230,8 @@ export function createApi(options) {
         // 只有"人明确选的"或"完全匹配且 Gradle 跑得动"的自动选择才接管 JDK
         javaHome: shouldInjectJdk(choice, profile.gradleVersion) ? choice.home : undefined,
         module: input.module ?? target.module ?? '.',
+        // 子模块工程：任务在聚合根目录里执行（识别结果优先，不由调用方决定）
+        gradleRoot: typeof profile.gradleRoot === 'string' && profile.gradleRoot !== root ? profile.gradleRoot : undefined,
         extraArgs: Array.isArray(input.extraArgs) ? input.extraArgs.filter((entry) => typeof entry === 'string') : [],
       })
       console.log(`[mcdev] launch.start ${record.id} ${record.taskPath} @ ${root} (pid ${record.pid}${record.javaHome === null ? '' : `, jdk ${record.javaHome}`})`)

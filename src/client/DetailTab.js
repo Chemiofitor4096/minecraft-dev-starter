@@ -59,6 +59,7 @@ export function DetailTab() {
   const busy = launches.busy !== undefined
 
   const java = /** @type {Record<string, any>} */ (project.java ?? {})
+  const idea = /** @type {Record<string, any> | undefined} */ (project.idea)
   const modules = /** @type {Array<Record<string, any>>} */ (project.modules ?? [])
   const evidence = /** @type {Array<Record<string, any>>} */ (project.evidence ?? [])
   const warnings = /** @type {string[]} */ (project.warnings ?? [])
@@ -161,11 +162,50 @@ export function DetailTab() {
       h('h4', undefined, '环境'),
       kv([
         ['Gradle', `${text(project.gradleVersion)}${project.wrapper === true ? ' (wrapper)' : ' (无 wrapper)'}`],
+        ...(typeof project.gradleRoot === 'string' && project.gradleRoot !== String(project.root)
+          ? [['Gradle 根', project.gradleRoot]]
+          : []),
         ['JDK 需要', text(java.required)],
         ['本机 JDK', availableMajors(java)],
+        ...(idea === undefined ? [] : [['IDE', ideaSummary(idea)]]),
       ]),
       h(JdkPicker, { key: 'jdk', project, java }),
     ),
+
+    // ── IDE 工程模型 ──────────────────────────────────────────────────
+    // 有 .idea 才出现：它是识别引擎的第二证据源，把"读到了什么"摊开给人核对
+    idea === undefined
+      ? undefined
+      : h(
+          Fold,
+          {
+            key: 'idea',
+            title: '.idea 工程模型',
+            info: '从 IntelliJ 的 .idea 读到的已解析结果：模块清单、facet 平台、工程 JDK、人跑过的运行配置。识别只用它补漏，构建脚本优先。',
+          },
+          kv([
+            ['工程名', text(idea.name)],
+            ...(typeof idea.gradleRoot === 'string' && idea.gradleRoot !== String(project.root)
+              ? [['Gradle 根', idea.gradleRoot]]
+              : []),
+            ['构建 JVM', text(idea.gradleJvm)],
+            ['工程 JDK', text(idea.jdkName)],
+            [
+              'Java',
+              `languageLevel ${text(idea.languageLevel)} · 字节码 ${text(idea.bytecodeTarget)}`,
+            ],
+            ['模块', `${text(idea.modules)} 个（${text(idea.imls)} 个 iml）`],
+            ['运行配置', `${text(idea.runConfigurations)} 个`],
+            ...(Array.isArray(idea.platforms) && idea.platforms.length > 0 ? [['facet 平台', idea.platforms.join(' / ')]] : []),
+            ...(Array.isArray(idea.linkedProjects) && idea.linkedProjects.length > 0
+              ? [['链接工程', idea.linkedProjects.join('、')]]
+              : []),
+            ['目录', text(idea.dir)],
+          ]),
+          Array.isArray(idea.files) && idea.files.length > 0
+            ? h('div', { className: 'mcdev-hint', style: { marginTop: 4 } }, `读到：${idea.files.join('、')}`)
+            : undefined,
+        ),
 
     // ── 目标 ──────────────────────────────────────────────────────────
     modules.length === 0
@@ -173,7 +213,7 @@ export function DetailTab() {
       : h(
           'div',
           { className: 'mcdev-sec' },
-          h('h4', undefined, '目标', hint('带 ? 的是按 loader 惯例推测的目标，尚未真实运行验证。')),
+          h('h4', undefined, '目标', hint('带 ? 的是按 loader 惯例推测的目标，尚未真实运行验证；带 ✓ 的是 IDE 里跑过的运行配置对应的目标。')),
           h(
             'table',
             { className: 'mcdev-table' },
@@ -185,13 +225,13 @@ export function DetailTab() {
                 h(
                   'tr',
                   { key: module.path },
-                  h('td', undefined, module.path),
+                  h('td', undefined, module.gradlePath ?? module.path),
                   h('td', undefined, module.platform),
                   h(
                     'td',
                     { className: 'mcdev-code' },
                     module.targets?.length > 0
-                      ? module.targets.map((target) => `${target.taskPath}${target.guessed === true ? ' ?' : ''}`).join('  ')
+                      ? module.targets.map((target) => `${target.taskPath}${targetMark(target)}`).join('  ')
                       : '—',
                   ),
                 ),
@@ -435,10 +475,32 @@ function hint(title, leading = true) {
 
 
 /**
+ * 目标来源标记：推测的 `?`、IDE 里跑过的 `✓`，构建脚本里直接读到的什么也不加。
+ * @param {Record<string, any>} target
+ * @returns {string}
+ */
+function targetMark(target) {
+  if (target.guessed === true) return ' ?'
+  if (target.source === 'idea-run-config') return ' ✓'
+  return ''
+}
+
+/**
+ * 环境区那一行 IDE 摘要：只放最有辨识度的三样，细节在 .idea 折叠区里。
+ * @param {Record<string, any>} idea
+ * @returns {string}
+ */
+function ideaSummary(idea) {
+  const parts = [text(idea.name)]
+  if (typeof idea.jdkName === 'string' && idea.jdkName !== '') parts.push(idea.jdkName)
+  if (typeof idea.runConfigurations === 'number') parts.push(`${idea.runConfigurations} 个运行配置`)
+  return parts.join(' · ')
+}
+
+/**
  * @param {Array<Record<string, any>>} jdks
  */
-function dedupeByHome(jdks) {
-  /** @type {Map<string, Record<string, any>>} */
+function dedupeByHome(jdks) {  /** @type {Map<string, Record<string, any>>} */
   const seen = new Map()
   for (const jdk of jdks) {
     const home = String(jdk.home)
