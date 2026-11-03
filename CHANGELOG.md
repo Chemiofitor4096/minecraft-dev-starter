@@ -1,0 +1,114 @@
+# Changelog
+
+User-visible changes only. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+versions follow [Semantic Versioning](https://semver.org/).
+
+The host is still pre-1.0, so **raising the supported DSH range counts as a breaking change** — the
+plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
+break installations that look unrelated.
+
+## [0.1.10] — 2026-11-03
+
+### Added
+
+- Declared dependencies view: `dependencies { }` blocks, `gradle/libs.versions.toml` (inline tables
+  and `version.ref`) and mod metadata `depends`, each with `file:line`, deduplicated per module.
+- `mc_project_detail` reports the same dependency list.
+- `README.zh_CN.md`; the npm package ships both languages.
+
+### Changed
+
+- `README.md` is English by default.
+- Project panel rebuilt: header with loader / version / kind / path, collapsible dependency and
+  evidence sections, every explanation moved into a tooltip.
+- Sidebar tabs render an icon + label title chip through `sidebar.right.pane.tab.title`.
+
+### Fixed
+
+- Dependency rows no longer repeat per configuration and no longer overflow the panel.
+
+## [0.1.9] — 2026-11-02
+
+### Fixed
+
+- The session header capsule no longer appears in workspaces without a runnable Minecraft project
+  (library modules that only declare a loader no longer count).
+- Default selection prefers the first project that actually has run targets.
+
+## [0.1.8] — 2026-11-01
+
+### Added
+
+- Per-project JDK selection: pick an installed JDK or add one by path; the choice is injected as
+  `-Dorg.gradle.java.home` and `JAVA_HOME`. Auto-selection only takes over on an exact major match
+  whose Gradle can run that JVM.
+
+### Changed
+
+- Run state and logs are stored per profile (`~/.dsh/mc-dev-starter/profiles/<name>/`); pre-split
+  state is moved in once on first start.
+
+### Fixed
+
+- `runs { configureEach { … } }` no longer produces a bogus `runConfigureEach` target.
+- Scope narrowed to Gradle projects.
+
+## [0.1.7] — 2026-10-31
+
+### Added
+
+- Run targets carry a lifecycle: `daemon` (client/server) and `oneshot` (data, datagen, game test).
+  One-shot runs end with a `verdict` (`passed` / `failed` / `aborted` / `error` / `unknown`).
+- `mc_launch` waits for readiness on daemons and for exit on one-shot tasks; `wait: exit` is honoured
+  for both, and `mc_project_detail` / `mc_launch_list` / `mc_launch_logs` expose the verdict.
+
+## [0.1.6] — 2026-10-31
+
+### Added
+
+- Log level filtering, six model tools, structured crash attribution.
+- `mc_launch` default timeout of 10 minutes.
+
+### Changed
+
+- With `dsh-better-sidebar` installed, logs default to its bottom workbench.
+
+## [0.1.5] — 2026-10-31
+
+### Added
+
+- `logDock`: send logs to the native right sidebar or to better-sidebar's bottom workbench.
+
+## [0.1.4] — 2026-10-31
+
+### Added
+
+- Log lines coloured by level.
+
+## [0.1.3] — 2026-10-31
+
+### Changed
+
+- Peer dependency ranges, repository metadata, screenshots and README rewritten.
+
+## [0.1.2] — 2026-10-31
+
+### Fixed
+
+- Installing 0.1.1 while the host reported 0.1.0: the version is now read from `package.json` at
+  startup.
+
+## [0.1.1] — 2026-10-31
+
+### Fixed
+
+- Minimal profiles (no web layer) failed to load the plugin tree; `webServer` is now an optional
+  injection instead of a required one.
+
+## [0.1.0] — 2026-10-31
+
+### Added
+
+- First release: detect Fabric / Forge / NeoForge / Architectury / Paper projects, launch
+  `runClient` / `runServer` from the session header capsule, logs in a sidebar tab, four model
+  tools.

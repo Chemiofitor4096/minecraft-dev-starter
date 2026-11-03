@@ -117,16 +117,21 @@ dsh plugin --profile desktop remove minecraft-dev-starter
 
 JDK 版本按 Minecraft 版本推断：1.7.10 与 1.12.2 需要 Java 8，1.18 至 1.20.4 需要 Java 17，1.20.5 及以上需要 Java 21，26.x 需要 Java 25。插件将需求与已安装的 JDK 比对，缺失或版本不符时在面板中提示。
 
+已在 **dsh 0.2.1-rc.4**（DSH NEXT 2.0.21-next）+ Windows 11 上验证。宿主侧的变化记在 [CHANGELOG](./CHANGELOG.md)；上调支持范围按破坏性变更处理。
+
 ## 开发
 
 ```powershell
 npm install
 npm run build        # 构建客户端到 lib/client.js；修改 src/client 后必须执行
-npm test             # 128 个测试
+npm test             # 135 个测试
+npm run check:pack   # 校验 npm 包里真的有客户端产物与源码
 npm run build -- --watch
 ```
 
-`lib/client.js` 被 `.gitignore` 忽略，只在打包时通过 `package.json` 的 `files` 进入 npm 包。因此新 clone 的仓库要先执行一次 `npm run build`，否则 `link:` 安装的插件拿不到客户端产物。
+`lib/client.js` 被 `.gitignore` 忽略，只在打包时通过 `package.json` 的 `files` 进入 npm 包。因此新 clone 的仓库要先执行一次 `npm run build`，否则 `link:` 安装的插件拿不到客户端产物。`prepack` 会在 `npm pack` / `npm publish` 之前自动构建；`test/bundle.test.js` 按宿主的加载协议真跑一遍产物，客户端坏掉会在测试里失败，而不是等用户装完才发现。
+
+CI 在 ubuntu、windows、macOS 三个平台与 Node 20/22/24 上跑测试，另有一个打包内容校验任务。
 
 仓库结构、已知坑与历次验证结论见 [AGENTS.md](./AGENTS.md)。设计文档：[策划](./doc/策划.md)、[DSH 插件机制调研](./doc/调研-DSH插件机制.md)。
 
@@ -136,7 +141,7 @@ DSH 插件以 npm 包形式分发，不需要独立注册流程。
 
 1. **清单**：`package.json` 声明 `dsh.bundle.patch`（指向 `cordis.patch.yml`）；提供浏览器界面时同时声明 `dsh.client.platform`。宿主依据这两项识别插件。
 2. **产物**：执行 `npm run build` 生成 `lib/client.js`。该文件被 `.gitignore` 忽略，通过 `package.json` 的 `files` 字段进入 npm 包。运行时直接读取产物，不安装依赖，也不执行构建。
-3. **校验**：执行 `npm test`；使用 `npm pack --dry-run` 确认包内容（`files` 字段已限定为 `src`、`lib`、`cordis.patch.yml`、README 与 AGENTS）。
+3. **校验**：执行 `npm test` 与 `npm run check:pack`（直接问 npm 实际会打包哪些文件：缺 `lib/client.js`、源码或 README，或多带了 `test/`，都会失败）。
 4. **发布**：`npm publish --access public`。若使用仅允许暂存的 granular token，改为以下流程：
 
    ```powershell
@@ -150,6 +155,19 @@ DSH 插件以 npm 包形式分发，不需要独立注册流程。
 6. **安装**：用户执行 `dsh plugin --profile <name> add <包名>` 后重启，或在 Plugins 面板中安装。
 
 在本地验证发布形态时，可先 `npm pack`，再通过 `dsh plugin add file:<tarball>` 安装；该路径与 npm 安装完全一致。
+
+## 安全
+
+- **会执行什么**：启动目标时会在工程目录里运行该工程自带的 Gradle wrapper（`gradlew.bat` / `gradlew`），环境变量继承自 DSH 宿主。也就是说工作区的构建脚本以你的用户权限运行——这与你自行执行 `gradle` 是同一种信任。插件只提供工作区内识别到的目标。
+- **会写什么**：运行记录与日志写在 `~/.dsh/mc-dev-starter`（按 profile 分目录），JDK 选择记在同目录的 `jdk.json`。除 Gradle 自身产物外，不改动工程目录。
+- **会发送什么**：不向外发送任何数据。`/mcdev/api` 由本机 DSH Web 服务提供并受其鉴权保护，客户端产物只向这些路由上报自身诊断。
+- **子进程**：同一工程同时只有一个目标；停止时杀掉整棵进程树（Windows `taskkill /T`，POSIX 进程组），不留孤儿 `java` 进程。不做隐含的 `clean`，不删除构建目录。
+- **包内容**：不声明任何依赖；用户机器上不执行安装脚本或 postinstall——`prepack` 只在发布者的工作区运行。
+
+npm 页面上的两条告警来自宿主运行时，不是本包代码：
+
+- `zod`（GHSA-mrhx-c7xc-m3w5）经 `@deepseek-ai/dsh-tools` → `@deepseek-ai/dsh-llm` 传导。本包不声明依赖，无法锁定它。
+- 「Uses eval」是误报：命中的是 `@deepseek-ai/dsh-ptc-runtime` 保留字表里的一个字符串常量。本仓库与构建产物中都不出现 `eval`。
 
 ## 已知限制
 

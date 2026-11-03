@@ -117,16 +117,21 @@ Add a `config` block to the plugin entry in the profile's `cordis.patch.yml`:
 
 The JDK level is inferred from the Minecraft version: 1.7.10 and 1.12.2 need Java 8, 1.18 to 1.20.4 need Java 17, 1.20.5 and above need Java 21, 26.x needs Java 25. The requirement is compared against installed JDKs and mismatches are surfaced in the panel.
 
+Verified against **dsh 0.2.1-rc.4** (DSH NEXT 2.0.21-next) on Windows 11. Host-side changes are recorded in [CHANGELOG](./CHANGELOG.md); raising the supported range is treated as a breaking change.
+
 ## Development
 
 ```powershell
 npm install
 npm run build        # builds the client into lib/client.js; required after editing src/client
-npm test             # 128 tests
+npm test             # 135 tests
+npm run check:pack   # asserts the npm tarball really contains the client and the sources
 npm run build -- --watch
 ```
 
-`lib/client.js` is git-ignored and only enters the npm package through the `files` field, so a fresh clone has to run `npm run build` once before a `link:` install can load the client bundle.
+`lib/client.js` is git-ignored and only enters the npm package through the `files` field, so a fresh clone has to run `npm run build` once before a `link:` install can load the client bundle. `prepack` builds it automatically on `npm pack` / `npm publish`, and `test/bundle.test.js` loads the built bundle the way the host does, so a broken client fails the test suite instead of the user's install.
+
+CI runs the suite on ubuntu, windows and macOS against Node 20/22/24, plus a package-contents job.
 
 Repository layout, pitfalls and verification records live in [AGENTS.md](./AGENTS.md). Design documents: [plan](./doc/策划.md) and [DSH plugin mechanics](./doc/调研-DSH插件机制.md) (both in Chinese).
 
@@ -136,7 +141,7 @@ DSH plugins are distributed as npm packages; there is no separate registration.
 
 1. **Manifest**: `package.json` declares `dsh.bundle.patch` (pointing at `cordis.patch.yml`), plus `dsh.client.platform` when the plugin ships a browser UI.
 2. **Artifacts**: `npm run build` produces `lib/client.js`. It is git-ignored and included in the package through the `files` field. The runtime reads it directly; nothing is installed or built on the user's machine.
-3. **Checks**: `npm test`; `npm pack --dry-run` to confirm the contents (`files` limits the package to `src`, `lib`, `cordis.patch.yml`, README and AGENTS).
+3. **Checks**: `npm test` and `npm run check:pack` (asks npm what would actually be packed and fails when `lib/client.js`, the sources or the READMEs are missing, or when `test/` leaks in).
 4. **Publish**: `npm publish --access public`. With a stage-only granular token, use the staged flow instead:
 
    ```powershell
@@ -150,6 +155,19 @@ DSH plugins are distributed as npm packages; there is no separate registration.
 6. **Install**: users run `dsh plugin --profile <name> add <package>` and restart, or install from the Plugins panel.
 
 To verify the packaged form locally, `npm pack` and `dsh plugin add file:<tarball>` exercise the same path as an npm install.
+
+## Security
+
+- **What it executes.** Launching a target runs the project's own Gradle wrapper (`gradlew.bat` / `gradlew`) in the project directory, with the environment of the DSH host. That means the workspace's build script runs with your user permissions — the same trust you extend by invoking `gradle` yourself. Only targets discovered inside the workspace are offered.
+- **What it touches.** Run state and logs are written under `~/.dsh/mc-dev-starter` (per profile); the JDK choice lives in `jdk.json` next to it. Nothing is written into the project beyond what Gradle itself writes.
+- **What it sends.** Nothing leaves the machine. The `/mcdev/api` routes are served by the local DSH web server behind its own authentication, and the client bundle posts diagnostics only to those routes.
+- **Subprocesses.** At most one target per project; stopping kills the whole process tree (Windows `taskkill /T`, POSIX process group) so no orphan `java` process survives. No implicit `clean`, build directories are never deleted.
+- **Package contents.** No dependencies are declared, and no install or post-install script runs on your machine — `prepack` only executes in the publisher's workspace.
+
+Two advisories shown on the npm page are inherited from the host runtime, not from this package:
+
+- `zod` (GHSA-mrhx-c7xc-m3w5) arrives via `@deepseek-ai/dsh-tools` → `@deepseek-ai/dsh-llm`. This package declares no dependencies and cannot pin it.
+- "Uses eval" is a false positive on a string literal in `@deepseek-ai/dsh-ptc-runtime`'s reserved-word table; `eval` does not appear in this repository or in the built bundle.
 
 ## Known limitations
 

@@ -16,6 +16,7 @@
     "cordis.patch.yml",
     "README.md",
     "README.zh_CN.md",
+    "CHANGELOG.md",
     "AGENTS.md"
   ],
   "engines": {
