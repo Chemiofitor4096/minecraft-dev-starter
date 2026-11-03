@@ -44,7 +44,8 @@
     "build": "node scripts/build-client.mjs",
     "build:client": "node scripts/build-client.mjs",
     "prepack": "node scripts/build-client.mjs",
-    "test": "node --test \"test/*.test.js\"",
+    "pretest": "node scripts/build-client.mjs",
+    "test": "node --test",
     "check:pack": "node scripts/check-pack.mjs"
   },
   "license": "MIT",

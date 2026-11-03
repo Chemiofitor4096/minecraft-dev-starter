@@ -56,7 +56,8 @@ doc/                  策划与调研
 ## 命令
 
 ```powershell
-node --test "test/*.test.js"      # 全部测试
+node --test                       # 全部测试（默认发现 test/*.test.js；Node 20 不认 glob，别写 "test/*.test.js"）
+npm test                          # 同上，先重建客户端再跑
 node scripts/build-client.mjs     # 构建客户端（改 src/client 后必须跑）
 node scripts/build-client.mjs --watch
 node scripts/check-pack.mjs       # 发布前校验 npm 包内容（缺 lib/client.js、多带 test/ 都会失败）
