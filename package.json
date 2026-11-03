@@ -42,7 +42,9 @@
   "scripts": {
     "build": "node scripts/build-client.mjs",
     "build:client": "node scripts/build-client.mjs",
-    "test": "node --test \"test/*.test.js\""
+    "prepack": "node scripts/build-client.mjs",
+    "test": "node --test \"test/*.test.js\"",
+    "check:pack": "node scripts/check-pack.mjs"
   },
   "license": "MIT",
   "repository": {

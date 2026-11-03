@@ -49,7 +49,7 @@ src/client/
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 132 个测试 + fixtures（真实工程形态的假仓库）
+test/                 135 个测试 + fixtures（真实工程形态的假仓库；含 lib/client.js 的加载守卫）
 doc/                  策划与调研
 ```
 
@@ -59,8 +59,13 @@ doc/                  策划与调研
 node --test "test/*.test.js"      # 全部测试
 node scripts/build-client.mjs     # 构建客户端（改 src/client 后必须跑）
 node scripts/build-client.mjs --watch
+node scripts/check-pack.mjs       # 发布前校验 npm 包内容（缺 lib/client.js、多带 test/ 都会失败）
 node scripts/scan-catalog.mjs     # 扫真实工程，输出识别结果表
 ```
+
+CI 在 `.github/workflows/ci.yml`：ubuntu / windows / macOS × Node 20/22/24 跑构建与测试，
+另有一个 pack 任务跑 `check:pack`。`prepack` 会在打包前自动构建，客户端漏构建发不出去；
+`test/bundle.test.js` 按宿主加载协议真跑一遍产物，客户端挂掉不用等用户装完才发现。
 
 改完客户端**必须**重新构建 `lib/client.js` 并跑测试；样式改动还要过 `test/styles.test.js`
 （颜色/字号必须引用 `--dsw-*` 令牌，不许写字面色值）。
@@ -297,8 +302,10 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 - 账号用的是 **granular token（只允许暂存）**，直接 `npm publish` 会被拒为 `E_STAGE_REQUIRED`。
   流程是 `npm stage publish` → `npm stage list`（等 `validating` 结束）→
   `npm stage approve <stage-id>`（人工过 2FA）。token 不能批准，批准必须是人。
-- 发布前必须 `npm run build`：`lib/client.js` 被 `.gitignore` 忽略，只通过 `package.json` 的 `files` 进包；
-  忘了构建就会发出旧客户端。同理，**新 clone 下来要先构建**，否则 `link:` 安装拿不到客户端。
+- `lib/client.js` 被 `.gitignore` 忽略，只通过 `package.json` 的 `files` 进包。`prepack` 会在
+  打包前自动构建，所以「忘了构建就发布」已经不可能；`npm run check:pack` 再确认包里真的带上了
+  客户端与其余必需文件（多带 `test/`、`.github/` 也会被判失败）。改代码时仍要手动 `npm run build`，
+  否则本机 `link:` 装的还是旧产物。**新 clone 下来要先构建**，否则 `link:` 安装拿不到客户端。
 - 新版本发出去后，用干净 profile 装一次并看启动日志里的 `host ready (x.y.z)`，
   这条同时验证了「版本号读对了」与「包结构完整」。
 - 每个发布版本打 annotated tag `vX.Y.Z`，指向 `package.json` 已是该版本的那个提交。
