@@ -117,6 +117,15 @@ export function IconCheck({ size = 13 } = {}) {
   ])
 }
 
+/** 信息：环形 i，用来替代页面里的说明文字（tooltip 放 title）。 */
+export function IconInfo({ size = 12 } = {}) {
+  return svg(size, [
+    h('circle', { key: 'a', cx: 8, cy: 8, r: 6, stroke: 'currentColor', strokeWidth: 1.3 }),
+    h('path', { key: 'b', d: 'M8 7.2v3.4', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round' }),
+    h('circle', { key: 'c', cx: 8, cy: 5.2, r: 0.85, fill: 'currentColor' }),
+  ])
+}
+
 /** 方块：代表"模组工程"（侧边栏标签图标）。 */
 export function IconCube({ size = 14 } = {}) {
   return svg(size, [

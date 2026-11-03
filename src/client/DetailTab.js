@@ -1,15 +1,17 @@
 /**
- * 右侧栏「MC 工程」标签：单个工程的完整画像——版本、环境、模块与目标、证据、警告。
+ * 右侧栏「Mod Dev」页：单个工程的画像与运行控制。
  *
- * 这是给人核对"你凭什么说它是 Forge 1.20.1"的地方，所以证据永远展开显示。
+ * 排版原则：**一行一件事，解释性文字不占版面**。凡是要说明的（为什么这个提示、
+ * 这列是什么、怎么改 JDK），一律收进 ⓘ 的 tooltip；页面只留数据。
+ * 长列表（依赖、证据）折叠且各自滚动，整页本身也可滚。
  * @module minecraft-dev-starter/client/DetailTab
  */
 
 import { useEffect, useState } from 'react'
 import { call } from './api.js'
 import { h } from './h.js'
-import { kindLabel, loaderLabel, PANEL_TITLE, projectSubtitle, projectTitle, text } from './format.js'
-import { IconRefresh, IconWarning } from './icons.js'
+import { availableMajors, groupDependencies, kindLabel, loaderLabel, PANEL_TITLE, projectTitle, text } from './format.js'
+import { IconChevronDown, IconChevronRight, IconInfo, IconPlay, IconRefresh, IconStop, IconWarning } from './icons.js'
 import { capsuleText, selectedTarget } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { openLogTab } from './runtime.js'
@@ -23,6 +25,9 @@ import {
   useStoreState,
 } from './state.js'
 
+/** 依赖列表一次最多渲染多少行（超出的只报数量）。 */
+const DEP_ROW_LIMIT = 200
+
 export function DetailTab() {
   const state = useStoreState()
   const launches = useLaunches(1500)
@@ -32,15 +37,6 @@ export function DetailTab() {
   }, [state.scan])
 
   const project = selectedProject()
-  const chosen = selectedTarget(project, state.selection)
-
-  const running = project === undefined
-    ? undefined
-    : launches.list.find(
-        (entry) =>
-          String(entry.root).toLowerCase() === String(project.root).toLowerCase() &&
-          (entry.status === 'starting' || entry.status === 'running'),
-      )
 
   if (project === undefined) {
     return h(
@@ -54,196 +50,46 @@ export function DetailTab() {
     )
   }
 
+  const chosen = selectedTarget(project, state.selection)
+  const running = launches.list.find(
+    (entry) =>
+      String(entry.root).toLowerCase() === String(project.root).toLowerCase() &&
+      (entry.status === 'starting' || entry.status === 'running'),
+  )
+  const busy = launches.busy !== undefined
+
   const java = /** @type {Record<string, any>} */ (project.java ?? {})
   const modules = /** @type {Array<Record<string, any>>} */ (project.modules ?? [])
   const evidence = /** @type {Array<Record<string, any>>} */ (project.evidence ?? [])
   const warnings = /** @type {string[]} */ (project.warnings ?? [])
   const conflicts = /** @type {string[]} */ (project.conflicts ?? [])
   const dependencies = /** @type {Record<string, any>} */ (project.dependencies ?? {})
-  const buildDeps = /** @type {Array<Record<string, any>>} */ (dependencies.build ?? [])
+  const buildDeps = groupDependencies(/** @type {Array<Record<string, any>>} */ (dependencies.build ?? []))
   const modDeps = /** @type {Array<Record<string, any>>} */ (dependencies.mods ?? [])
 
   return h(
     'div',
     { className: 'mcdev-detail' },
-    h('div', { className: 'mcdev-title' }, projectTitle(project)),
-    h('div', { className: 'mcdev-sub' }, projectSubtitle(project)),
-    h('div', { className: 'mcdev-muted mcdev-code' }, project.root),
+
     h(
       'div',
-      { className: 'mcdev-muted', style: { marginTop: 2 } },
-      `${kindLabel(project.kind)} · 置信度 ${Math.round(Number(project.confidence ?? 0) * 100)}%`,
-    ),
-
-    section('基本信息', [
-      row('loader', loaderLabel(project.loader)),
-      row('MC 版本', text(project.minecraftVersion)),
-      row('loader 版本', text(project.loaderVersion)),
-      row('mod id', text(project.modId)),
-      row('mod 版本', text(project.modVersion)),
-    ]),
-
-    section('构建环境', [
-      row('Gradle', `${text(project.gradleVersion)}${project.wrapper === true ? '（wrapper）' : '（无 wrapper）'}`),
-      row('JDK 需求', text(java.required)),
-      h(JdkPicker, { key: 'jdk', project, java }),
-      row('本机 JDK', java.available?.length > 0 ? java.available.map((jdk) => `${jdk.major}`).join(' / ') : '未发现'),
-      h('div', { key: 'jdk-note', className: 'mcdev-hint' }, '手动指定只影响本机，不写进 gradle.properties；启动时会以 -Dorg.gradle.java.home 与 JAVA_HOME 传给 Gradle。'),
-    ]),
-
-    section('运行', [
-      ...(running === undefined
-        ? [
-            row('目标', capsuleText(project, chosen)),
-            h(
-              'div',
-              { className: 'mcdev-actions', style: { marginTop: 6 } },
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'mcdev-run',
-                  disabled: chosen === undefined || launches.busy !== undefined,
-                  title: chosen?.taskPath ?? '',
-                  onClick: () => {
-                    if (chosen !== undefined) void startTarget(project, chosen)
-                  },
-                },
-                '▶ 启动',
-              ),
-              h('span', { className: 'mcdev-hint' }, '在标题栏胶囊的浮层里切换目标'),
-            ),
-          ]
-        : [
-            row('实例', `${running.id} · ${running.taskPath}`),
-            row('状态', `${running.status === 'starting' ? '启动中' : '运行中'}${running.readyTimedOut === true ? '（还没看到启动信号，可能仍在构建）' : ''}`),
-            row('PID', text(running.pid)),
-            ...(typeof running.javaHome === 'string' && running.javaHome !== '' ? [row('JDK', running.javaHome)] : []),
-            h(
-              'div',
-              { className: 'mcdev-actions', style: { marginTop: 6 } },
-              h(
-                'button',
-                { type: 'button', className: 'mcdev-run', 'data-tone': 'stop', disabled: launches.busy === running.id, onClick: () => stopLaunch(running.id) },
-                '⏹ 停止',
-              ),
-              h(
-                'button',
-                { type: 'button', className: 'mcdev-run', onClick: () => openLogTab(store.get().config) },
-                '打开日志',
-              ),
-            ),
-          ]),
-    ]),
-
-    section('模块与运行目标', [
-      ...(modules.length === 0
-        ? [h('div', { className: 'mcdev-muted' }, '没有模块信息')]
-        : [
-            h(
-              'table',
-              { className: 'mcdev-table' },
-              h('thead', undefined, h('tr', undefined, h('th', undefined, '模块'), h('th', undefined, '平台'), h('th', undefined, '任务'))),
-              h(
-                'tbody',
-                undefined,
-                modules.map((module) =>
-                  h(
-                    'tr',
-                    { key: module.path },
-                    h('td', undefined, module.path),
-                    h('td', undefined, module.platform),
-                    h(
-                      'td',
-                      { className: 'mcdev-code' },
-                      module.targets?.length > 0
-                        ? module.targets.map((target) => `${target.taskPath}${target.guessed === true ? ' ?' : ''}`).join('  ')
-                        : '—',
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ]),
-      h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '带 ? 的任务是按 loader 惯例推测的，尚未真实运行验证；可以直接启动试，失败时日志里会给出原因。'),
-    ]),
-
-    section('依赖', [
+      { className: 'mcdev-head' },
+      h('div', { className: 'mcdev-title' }, projectTitle(project)),
       h(
         'div',
-        { className: 'mcdev-hint' },
-        '只显示构建脚本与元数据里声明的依赖，用来核对「加进去了没有」；Gradle 解析后的传递依赖不在这里。',
+        { className: 'mcdev-sub' },
+        `${loaderLabel(project.loader)}${project.minecraftVersion === undefined ? '' : ` · ${project.minecraftVersion}`}`,
+        project.loaderVersion === undefined ? undefined : ` · loader ${project.loaderVersion}`,
+        ` · ${kindLabel(project.kind)} · ${Math.round(Number(project.confidence ?? 0) * 100)}%`,
       ),
-      ...(buildDeps.length === 0
-        ? [h('div', { className: 'mcdev-muted' }, '构建脚本里没有读到 dependencies 块')]
-        : [
-            h(
-              'table',
-              { className: 'mcdev-table' },
-              h('thead', undefined, h('tr', undefined, h('th', undefined, '配置'), h('th', undefined, '坐标'), h('th', undefined, '位置'))),
-              h(
-                'tbody',
-                undefined,
-                buildDeps.slice(0, 40).map((dependency, index) =>
-                  h(
-                    'tr',
-                    { key: `${dependency.file}:${dependency.line}:${index}` },
-                    h('td', undefined, String(dependency.configuration)),
-                    h('td', { className: 'mcdev-code' }, String(dependency.notation)),
-                    h('td', { className: 'mcdev-code mcdev-muted' }, `${dependency.file}:${dependency.line}`),
-                  ),
-                ),
-              ),
-            ),
-            buildDeps.length > 40
-              ? h('div', { className: 'mcdev-hint', style: { marginTop: 4 } }, `还有 ${buildDeps.length - 40} 条未显示`)
-              : undefined,
-          ]),
-      dependencies.catalogSize > 0
-        ? h('div', { className: 'mcdev-hint', style: { marginTop: 4 } }, `版本目录 ${dependencies.catalogFile}（${dependencies.catalogSize} 条），libs.xxx 已解析成坐标`)
-        : undefined,
-      ...(modDeps.length === 0
-        ? []
-        : [
-            h('div', { className: 'mcdev-hint', style: { marginTop: 8 } }, '模组声明（mods.toml / fabric.mod.json 的 depends）'),
-            h(
-              'div',
-              { className: 'mcdev-stack' },
-              modDeps.slice(0, 24).map((dependency, index) =>
-                h(
-                  'div',
-                  { key: `m${index}` },
-                  h('span', { className: 'mcdev-code' }, String(dependency.modId)),
-                  h('span', { className: 'mcdev-muted' }, `  ${dependency.range}`),
-                ),
-              ),
-            ),
-          ]),
-    ]),
-
-    section(
-      '证据',
-      evidence.length === 0
-        ? [h('div', { className: 'mcdev-muted' }, '没有证据')]
-        : [
-            h(
-              'div',
-              { className: 'mcdev-stack' },
-              evidence.map((entry, index) =>
-                h(
-                  'div',
-                  { key: `${entry.file}:${index}` },
-                  h('span', { className: 'mcdev-code mcdev-sub' }, entry.file),
-                  h('span', { className: 'mcdev-muted' }, ` — ${entry.detail}`),
-                ),
-              ),
-            ),
-          ],
+      h('div', { className: 'mcdev-path', title: String(project.root) }, String(project.root)),
     ),
 
     warnings.length === 0 && conflicts.length === 0
       ? undefined
-      : section('提示', [
+      : h(
+          'div',
+          { className: 'mcdev-sec' },
           ...warnings.map((warning, index) =>
             h(
               'div',
@@ -252,33 +98,196 @@ export function DetailTab() {
               warning,
             ),
           ),
-          ...conflicts.map((conflict, index) => h('div', { key: `c${index}`, className: 'mcdev-error' }, `· ${conflict}`)),
-        ]),
+          ...conflicts.map((conflict, index) => h('div', { key: `c${index}`, className: 'mcdev-error' }, conflict)),
+        ),
 
+    // ── 运行 ──────────────────────────────────────────────────────────
     h(
       'div',
-      { style: { marginTop: 14 } },
+      { className: 'mcdev-sec' },
+      h('h4', undefined, '运行'),
+      kv([
+        ['目标', running === undefined ? capsuleText(project, chosen) : `${running.taskPath} · ${launchState(running)}`],
+        ...(running === undefined || typeof running.javaHome !== 'string' || running.javaHome === ''
+          ? []
+          : [['JDK', running.javaHome]]),
+      ]),
+      h(
+        'div',
+        { className: 'mcdev-actions', style: { marginTop: 6 } },
+        running === undefined
+          ? h(
+              'button',
+              {
+                type: 'button',
+                className: 'mcdev-run',
+                disabled: chosen === undefined || busy,
+                title: chosen === undefined ? '没有可运行目标' : `启动 ${chosen.taskPath}`,
+                onClick: () => {
+                  if (chosen !== undefined) void startTarget(project, chosen)
+                },
+              },
+              h('span', { className: 'mcdev-icon' }, h(IconPlay, undefined)),
+              '启动',
+            )
+          : [
+              h(
+                'button',
+                {
+                  key: 'stop',
+                  type: 'button',
+                  className: 'mcdev-run',
+                  'data-tone': 'stop',
+                  disabled: launches.busy === running.id,
+                  onClick: () => stopLaunch(running.id),
+                },
+                h('span', { className: 'mcdev-icon' }, h(IconStop, undefined)),
+                '停止',
+              ),
+              h(
+                'button',
+                { key: 'log', type: 'button', className: 'mcdev-mini', onClick: () => openLogTab(store.get().config) },
+                '日志',
+              ),
+            ],
+        hint('目标在标题栏胶囊的浮层里切换；启动后日志会自动打开，可用 autoOpenLogTab 关闭。'),
+      ),
+    ),
+
+    // ── 环境 ──────────────────────────────────────────────────────────
+    h(
+      'div',
+      { className: 'mcdev-sec' },
+      h('h4', undefined, '环境'),
+      kv([
+        ['Gradle', `${text(project.gradleVersion)}${project.wrapper === true ? ' (wrapper)' : ' (无 wrapper)'}`],
+        ['JDK 需要', text(java.required)],
+        ['本机 JDK', availableMajors(java)],
+      ]),
+      h(JdkPicker, { key: 'jdk', project, java }),
+    ),
+
+    // ── 目标 ──────────────────────────────────────────────────────────
+    modules.length === 0
+      ? undefined
+      : h(
+          'div',
+          { className: 'mcdev-sec' },
+          h('h4', undefined, '目标', hint('带 ? 的是按 loader 惯例推测的目标，尚未真实运行验证。')),
+          h(
+            'table',
+            { className: 'mcdev-table' },
+            h('thead', undefined, h('tr', undefined, h('th', undefined, '模块'), h('th', undefined, '平台'), h('th', undefined, '任务'))),
+            h(
+              'tbody',
+              undefined,
+              modules.map((module) =>
+                h(
+                  'tr',
+                  { key: module.path },
+                  h('td', undefined, module.path),
+                  h('td', undefined, module.platform),
+                  h(
+                    'td',
+                    { className: 'mcdev-code' },
+                    module.targets?.length > 0
+                      ? module.targets.map((target) => `${target.taskPath}${target.guessed === true ? ' ?' : ''}`).join('  ')
+                      : '—',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+
+    // ── 依赖 ──────────────────────────────────────────────────────────
+    h(
+      Fold,
+      {
+        key: 'deps',
+        title: '依赖',
+        count: buildDeps.length,
+        info: '构建脚本与元数据里声明的依赖，用来核对是否加进去了；Gradle 解析后的传递依赖不在这里。',
+        open: true,
+      },
+      buildDeps.length === 0
+        ? h('div', { className: 'mcdev-muted' }, '没有读到依赖声明')
+        : h(
+            'div',
+            { className: 'mcdev-dep-list' },
+            buildDeps.slice(0, DEP_ROW_LIMIT).map((dependency) =>
+              h(
+                'div',
+                { className: 'mcdev-dep-row', key: `${dependency.file}:${dependency.line}:${dependency.notation}` },
+                h(
+                  'span',
+                  { className: 'mcdev-dep-conf', title: dependency.configurations.join(', ') },
+                  dependency.configurations.join(' '),
+                ),
+                h('span', { className: 'mcdev-dep-coord', title: dependency.notation }, dependency.notation),
+                h('span', { className: 'mcdev-dep-pos', title: `${dependency.file}:${dependency.line}` }, `:${dependency.line}`),
+              ),
+            ),
+          ),
+      buildDeps.length > DEP_ROW_LIMIT
+        ? h('div', { className: 'mcdev-hint', style: { marginTop: 4 } }, `另有 ${buildDeps.length - DEP_ROW_LIMIT} 条未显示`)
+        : undefined,
+      modDeps.length === 0
+        ? undefined
+        : h(
+            'div',
+            { className: 'mcdev-hint', style: { marginTop: 6 } },
+            `模组声明：${modDeps.map((entry) => `${entry.modId} ${entry.range}`).join('，')}`,
+          ),
+    ),
+
+    // ── 证据 ──────────────────────────────────────────────────────────
+    h(
+      Fold,
+      { key: 'evidence', title: '证据', count: evidence.length, info: '识别结论的依据；面板上每个判断都能在这里找到出处。' },
+      evidence.length === 0
+        ? h('div', { className: 'mcdev-muted' }, '没有证据')
+        : h(
+            'div',
+            { className: 'mcdev-stack' },
+            evidence.map((entry, index) =>
+              h(
+                'div',
+                { key: `${entry.file}:${index}` },
+                h('span', { className: 'mcdev-code mcdev-sub' }, entry.file),
+                h('span', { className: 'mcdev-muted' }, ` — ${entry.detail}`),
+              ),
+            ),
+          ),
+    ),
+
+    // ── 页脚 ──────────────────────────────────────────────────────────
+    h(
+      'div',
+      { className: 'mcdev-sec' },
       h(
         'button',
         { type: 'button', className: 'mcdev-mini', onClick: () => loadScan({ refresh: true }) },
         h('span', { className: 'mcdev-icon' }, h(IconRefresh, { size: 12 })),
-        state.loading ? '重新扫描中…' : '重新扫描',
+        state.loading ? '扫描中…' : '重新扫描',
       ),
+      state.scan?.scannedAt === undefined
+        ? undefined
+        : h(
+            'span',
+            { className: 'mcdev-hint', style: { marginLeft: 8 } },
+            String(state.scan.scannedAt).replace('T', ' ').slice(0, 19),
+          ),
     ),
-    state.scan?.scannedAt === undefined
-      ? undefined
-      : h('div', { className: 'mcdev-muted mcdev-hint', style: { marginTop: 4 } }, `扫描于 ${state.scan.scannedAt}`),
   )
 }
 
 /**
- * JDK 选择：下拉 + 手动添加路径。
- *
- * 选择存在宿主侧（`jdk.json`），改完重扫一次，面板与下一次启动都拿到新值。
- * 没有本地 state 缓存"选中项"——真相只有宿主那一份，避免两处不一致。
+ * JDK 选择：一行下拉，添加路径收在一个小按钮后面，不常驻占位。
  * @param {{ project: Record<string, any>, java: Record<string, any> }} props
  */
 function JdkPicker({ project, java }) {
+  const [adding, setAdding] = useState(false)
   const [path, setPath] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(undefined)
@@ -307,24 +316,24 @@ function JdkPicker({ project, java }) {
 
   return h(
     'div',
-    { className: 'mcdev-row' },
-    h('span', { className: 'mcdev-key' }, 'JDK'),
+    { style: { marginTop: 6 } },
     h(
       'div',
-      { className: 'mcdev-jdk' },
+      { className: 'mcdev-actions' },
       h(
         'select',
         {
           className: 'mcdev-select',
           value: override,
           disabled: busy,
+          title: jdkSummary(java),
           onChange: (event) => {
             const next = event.target.value
             void apply(() => call('projects.jdk.set', { root: project.root, home: next }))
           },
         },
         h('option', { value: '' }, java.required === undefined ? '自动' : `自动（按 MC 版本选 ${java.required}）`),
-        ...jdks.map((jdk) =>
+        ...dedupeByHome(jdks).map((jdk) =>
           h(
             'option',
             { key: jdk.home, value: jdk.home },
@@ -333,30 +342,112 @@ function JdkPicker({ project, java }) {
         ),
         override !== '' && !known ? h('option', { key: 'missing', value: override }, `已失效 — ${override}`) : undefined,
       ),
-      h('div', { className: 'mcdev-hint' }, jdkSummary(java)),
       h(
-        'div',
-        { className: 'mcdev-jdk-add' },
-        h('input', {
-          className: 'mcdev-input',
-          type: 'text',
-          value: path,
-          placeholder: 'JDK 根目录（含 release 文件），例如 C:\\Program Files\\Java\\jdk-21',
+        'button',
+        {
+          type: 'button',
+          className: 'mcdev-mini',
+          title: '添加 JDK 根目录（含 release 文件）',
           disabled: busy,
-          onChange: (event) => setPath(event.target.value),
-          onKeyDown: (event) => {
-            if (event.key === 'Enter') addFromInput()
-          },
-        }),
-        h('button', { type: 'button', className: 'mcdev-mini', disabled: busy || path.trim() === '', onClick: addFromInput }, busy ? '处理中…' : '添加'),
+          onClick: () => setAdding(!adding),
+        },
+        adding ? '取消' : '添加',
       ),
-      error === undefined ? undefined : h('div', { className: 'mcdev-error' }, error),
+      hint(jdkSummary(java)),
     ),
+    adding
+      ? h(
+          'div',
+          { className: 'mcdev-jdk-add', style: { marginTop: 4 } },
+          h('input', {
+            className: 'mcdev-input',
+            type: 'text',
+            value: path,
+            placeholder: 'JDK 根目录，例如 C:\\Program Files\\Java\\jdk-21',
+            disabled: busy,
+            onChange: (event) => setPath(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === 'Enter') addFromInput()
+            },
+          }),
+          h('button', { type: 'button', className: 'mcdev-mini', disabled: busy || path.trim() === '', onClick: addFromInput }, '加入'),
+        )
+      : undefined,
+    error === undefined ? undefined : h('div', { className: 'mcdev-error', style: { marginTop: 4 } }, error),
   )
 }
 
 /**
- * 一句话说明当前生效的是哪个 JDK、依据是什么。
+ * 折叠区块：标题一行，内容按需展开。
+ * @param {{ title: string, count?: number, info?: string, open?: boolean, children?: any }} props
+ */
+function Fold({ title, count, info, open: initiallyOpen = false, children }) {
+  const [open, setOpen] = useState(initiallyOpen)
+  return h(
+    'div',
+    { className: 'mcdev-fold' },
+    h(
+      'button',
+      { type: 'button', className: 'mcdev-fold-head', onClick: () => setOpen(!open) },
+      h('span', { className: 'mcdev-icon' }, h(open ? IconChevronDown : IconChevronRight, { size: 12 })),
+      h('span', undefined, title),
+      count === undefined ? undefined : h('span', { className: 'mcdev-count' }, String(count)),
+      info === undefined ? undefined : hint(info, false),
+    ),
+    open ? h('div', { className: 'mcdev-fold-body' }, children) : undefined,
+  )
+}
+
+/**
+ * 排列成"标签 值"的两列网格。
+ * @param {Array<[string, string]>} entries
+ */
+function kv(entries) {
+  return h(
+    'div',
+    { className: 'mcdev-kv' },
+    ...entries.flatMap(([key, value]) => [
+      h('span', { key: `k-${key}`, className: 'k' }, key),
+      h('span', { key: `v-${key}`, className: 'v', title: value }, value),
+    ]),
+  )
+}
+
+/**
+ * ⓘ 提示：说明文字不进版面，进 tooltip。
+ * @param {string} title
+ * @param {boolean} [leading] 是否留一点左间距
+ */
+function hint(title, leading = true) {
+  return h(
+    'span',
+    {
+      key: `hint-${title}`,
+      className: 'mcdev-info',
+      title,
+      'aria-label': title,
+      style: leading ? { marginLeft: 4 } : undefined,
+    },
+    h(IconInfo, { size: 12 }),
+  )
+}
+
+
+
+/**
+ * @param {Array<Record<string, any>>} jdks
+ */
+function dedupeByHome(jdks) {
+  /** @type {Map<string, Record<string, any>>} */
+  const seen = new Map()
+  for (const jdk of jdks) {
+    const home = String(jdk.home)
+    if (!seen.has(home)) seen.set(home, jdk)
+  }
+  return [...seen.values()]
+}
+
+/**
  * @param {Record<string, any>} java
  * @returns {string}
  */
@@ -365,21 +456,15 @@ function jdkSummary(java) {
   if (selected === '') return '没有可用的 JDK：装一个，或把路径加进来'
   if (java.source === 'override') return `生效：${selected}（手动指定）`
   if (java.source === 'configured') return `生效：${selected}（来自 gradle.properties）`
-  return `生效：${selected}（自动）${java.exact === true ? '' : '（大版本不完全匹配）'}`
+  return `生效：${selected}（自动）${java.exact === true ? '' : '，大版本不完全匹配'}`
 }
 
 /**
- * @param {string} title
- * @param {Array<any>} children
+ * @param {Record<string, any>} entry
+ * @returns {string}
  */
-function section(title, children) {
-  return h('div', { className: 'mcdev-section' }, h('h4', undefined, title), ...children)
-}
-
-/**
- * @param {string} key
- * @param {string} value
- */
-function row(key, value) {
-  return h('div', { className: 'mcdev-row', key }, h('span', { className: 'mcdev-key' }, key), h('span', { className: 'mcdev-code' }, value))
+function launchState(entry) {
+  if (entry.status === 'starting') return '启动中'
+  if (entry.mode === 'oneshot') return entry.verdict === 'passed' ? '已通过' : '执行中'
+  return '运行中'
 }

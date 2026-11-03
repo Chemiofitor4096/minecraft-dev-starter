@@ -49,7 +49,7 @@ src/client/
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 128 个测试 + fixtures（真实工程形态的假仓库）
+test/                 132 个测试 + fixtures（真实工程形态的假仓库）
 doc/                  策划与调研
 ```
 
@@ -173,7 +173,8 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 
 - 向 `dsh-better-sidebar` 注册两个带图标页面（`ctx.betterSidebar.registerTab`，`icon` 支持
   `(size) => ReactNode`）。用 `ctx.inject(['betterSidebar'], …)` 做可选依赖，未安装则静默跳过。
-- 原生右侧栏标签**没有 icon 字段**，只能文字；图标只出现在 better-sidebar。
+- 原生右侧栏的 tab 类型定义**没有 icon 字段**，但可以用带键 seat `sidebar.right.pane.tab.title`
+  接管标题渲染（内置的 schedule / plan 页签就是这么加图标的）；0.1.10 起两个标签都走这条路。
 - 面板改名「MC 工程」→「Mod Dev」（功能名，不是名词描述），浮层表头/标签/详情页统一。
 - 单工程工作区跳过工程列表：表头直接承担工程身份（名字 + loader/版本 + 路径）。
 
@@ -257,6 +258,21 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 
 128 个测试。
 
+### M15 详情页重做（2026-11-03）
+
+用户实测后的三个问题：标签页没图标、依赖列表重复且溢出、满屏说明文字。改法：
+
+- **标签图标**：注册 `sidebar.right.pane.tab.title`（key = tab 类型 id），返回"图标 + 文字"的
+  span，和内置页签同一版式。之前记的"原生标签没法有图标"是错的——没有的是定义里的 icon 字段。
+- **依赖去重**：同一模块的多个配置（`modCompileOnly` + `modRuntimeOnly`）合并成一行，
+  配置列用空格分隔；位置列缩成 `:116`，完整 `file:line` 进 tooltip。
+- **不再溢出**：`.mcdev-detail` 整页可滚，依赖列表再有 `max-height: 240px` 自己的滚动条。
+- **说明文字全部收进 ⓘ**：启动提示、目标里的 `?`、依赖来源、JDK 生效来源都改成 tooltip；
+  版面上只留键值、表格与列表。证据与依赖改成可折叠区块。
+- 顺带：本机 JDK 大版本去重（以前会出现 `25 / 21 / 21 / 21 / 17 / 11`）。
+
+132 个测试。
+
 ## 发布记录
 
 - `0.1.0` → 首版。
@@ -274,7 +290,7 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 - `0.1.8` → M11 + M12：`runs` 容器 API 修正、JDK 选择与注入（面板可选可加）、
   运行记录按 profile 分目录、范围只保留 Gradle 工程。
 - `0.1.9` → M13：没有可运行工程时不显示胶囊（0.1.8 打包后才发现的空态噪音）。
-- 待发 `0.1.10` → M14：声明依赖视图（构建依赖 + 模组声明）、README 默认英文并保留中文。
+- 待发 `0.1.10` → M14 + M15：声明依赖视图、README 默认英文并保留中文、详情页重做（标签图标 / 依赖去重 / 全文 tooltip 化）。
 
 发版注意：
 

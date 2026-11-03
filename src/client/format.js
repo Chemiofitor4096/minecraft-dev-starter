@@ -8,6 +8,45 @@
  */
 export const PANEL_TITLE = 'Mod Dev'
 
+/**
+ * 同一模块在多个配置里声明很常见（`modCompileOnly` + `modRuntimeOnly`），
+ * 合并成一行，避免依赖列表看起来一堆重复。
+ * @param {Array<Record<string, any>>} build
+ * @returns {Array<{ notation: string, configurations: string[], file: string, line: number }>}
+ */
+export function groupDependencies(build) {
+  /** @type {Map<string, { notation: string, configurations: string[], file: string, line: number }>} */
+  const groups = new Map()
+  for (const dependency of build) {
+    const key = String(dependency.module ?? dependency.notation)
+    const existing = groups.get(key)
+    if (existing === undefined) {
+      groups.set(key, {
+        notation: String(dependency.notation),
+        configurations: [String(dependency.configuration)],
+        file: String(dependency.file),
+        line: Number(dependency.line),
+      })
+      continue
+    }
+    if (!existing.configurations.includes(String(dependency.configuration))) {
+      existing.configurations.push(String(dependency.configuration))
+    }
+  }
+  return [...groups.values()]
+}
+
+/**
+ * 本机 JDK 的大版本列表：同一大版本装了几个只列一次。
+ * @param {Record<string, any>} java
+ * @returns {string}
+ */
+export function availableMajors(java) {
+  const available = Array.isArray(java?.available) ? java.available : []
+  const majors = [...new Set(available.map((jdk) => String(jdk.major)))].sort((left, right) => Number(right) - Number(left))
+  return majors.length === 0 ? '未发现' : majors.join(' / ')
+}
+
 const LOADER_LABELS = {
   fabric: 'Fabric',
   forge: 'Forge',

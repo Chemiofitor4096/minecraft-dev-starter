@@ -76,8 +76,42 @@ export function apply(ctx) {
   registerBody(DETAIL_ID, DetailTab, 'detail')
   registerBody(LOG_ID, LogTab, 'logs')
 
+  // 3.5) 原生标签条的标题 chip：图标 + 文字。
+  //      tab 类型定义本身没有 icon 字段，但 `sidebar.right.pane.tab.title` 这个带键 seat
+  //      可以接管标题渲染（内置的 schedule / plan 页就是这么加图标的）。
+  try {
+    ctx.slots.inject('sidebar.right.pane.tab.title', () =>
+      ctx.slots.register(
+        { name: 'sidebar.right.pane.tab.title', key: DETAIL_ID },
+        tabTitleChip(IconCube, PANEL_TITLE),
+      ),
+    )
+    ctx.slots.inject('sidebar.right.pane.tab.title', () =>
+      ctx.slots.register({ name: 'sidebar.right.pane.tab.title', key: LOG_ID }, tabTitleChip(IconTerminal, '运行日志')),
+    )
+    report('tab.title.registered')
+  } catch (error) {
+    report('tab.title.failed', { message: String(error) })
+  }
+
   // 4) 装了 dsh-better-sidebar 时，把同样的两个页面挂到它的侧栏（它支持标签图标）
   ctx.effect(() => registerBetterSidebarTabs(ctx), 'mcdev: better-sidebar tabs')
+}
+
+/**
+ * 原生标签条的标题：图标 + 文字，和内置页签同一套版式。
+ * @param {any} Icon
+ * @param {string} label
+ * @returns {() => any}
+ */
+function tabTitleChip(Icon, label) {
+  return () =>
+    h(
+      'span',
+      { className: 'mcdev-icon-text' },
+      h('span', { className: 'mcdev-icon' }, h(Icon, { size: 14 })),
+      label,
+    )
 }
 
 /**
