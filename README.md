@@ -8,6 +8,12 @@
 
 English | [简体中文](README.zh_CN.md)
 
+<p>
+  <a href="https://github.com/Chemiofitor4096/minecraft-dev-starter/actions/workflows/ci.yml"><img src="https://github.com/Chemiofitor4096/minecraft-dev-starter/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/minecraft-dev-starter"><img src="https://img.shields.io/npm/v/minecraft-dev-starter" alt="npm"></a>
+  <img src="https://img.shields.io/npm/l/minecraft-dev-starter" alt="license">
+</p>
+
 </div>
 
 The plugin detects Minecraft mod and plugin projects in the current workspace, offers run-target selection plus start/stop controls in the session header, and streams launch logs into a sidebar tab.
@@ -157,6 +163,8 @@ DSH plugins are distributed as npm packages; there is no separate registration.
 To verify the packaged form locally, `npm pack` and `dsh plugin add file:<tarball>` exercise the same path as an npm install.
 
 ## Security
+
+Reporting channel, supported versions and the full threat model: [SECURITY.md](./SECURITY.md).
 
 - **What it executes.** Launching a target runs the project's own Gradle wrapper (`gradlew.bat` / `gradlew`) in the project directory, with the environment of the DSH host. That means the workspace's build script runs with your user permissions — the same trust you extend by invoking `gradle` yourself. Only targets discovered inside the workspace are offered.
 - **What it touches.** Run state and logs are written under `~/.dsh/mc-dev-starter` (per profile); the JDK choice lives in `jdk.json` next to it. Nothing is written into the project beyond what Gradle itself writes.

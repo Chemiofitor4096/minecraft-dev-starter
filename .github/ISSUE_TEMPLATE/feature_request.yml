@@ -1,0 +1,35 @@
+name: Feature request
+description: A loader, a target kind or a workflow the plugin should handle
+title: '[feat] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Scope is deliberately narrow: **run and verify**, not build management. Requests for `build`
+        / `test` tasks, dependency editing or launcher/instance management are out of scope by design.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you doing today, and where does it break down?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: A tool, a panel element, a config key — describe the behaviour, not the implementation.
+    validations:
+      required: true
+  - type: input
+    id: project
+    attributes:
+      label: Project shape this is about
+      description: Loader, Minecraft version, single or multi-module. A link to a public repository helps.
+      placeholder: 'NeoForge 1.21.1, composite build with three subprojects'
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workarounds, other plugins, or why the current behaviour is not enough.

@@ -8,6 +8,12 @@
 
 [English](README.md) | 简体中文
 
+<p>
+  <a href="https://github.com/Chemiofitor4096/minecraft-dev-starter/actions/workflows/ci.yml"><img src="https://github.com/Chemiofitor4096/minecraft-dev-starter/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/minecraft-dev-starter"><img src="https://img.shields.io/npm/v/minecraft-dev-starter" alt="npm"></a>
+  <img src="https://img.shields.io/npm/l/minecraft-dev-starter" alt="license">
+</p>
+
 </div>
 
 插件识别当前工作区中的 Minecraft 模组与插件工程，在会话标题栏提供运行目标的选择与启动、停止操作，并将运行日志输出到侧边栏标签页。
@@ -157,6 +163,8 @@ DSH 插件以 npm 包形式分发，不需要独立注册流程。
 在本地验证发布形态时，可先 `npm pack`，再通过 `dsh plugin add file:<tarball>` 安装；该路径与 npm 安装完全一致。
 
 ## 安全
+
+报告渠道、支持范围与完整威胁模型见 [SECURITY.md](./SECURITY.md)。
 
 - **会执行什么**：启动目标时会在工程目录里运行该工程自带的 Gradle wrapper（`gradlew.bat` / `gradlew`），环境变量继承自 DSH 宿主。也就是说工作区的构建脚本以你的用户权限运行——这与你自行执行 `gradle` 是同一种信任。插件只提供工作区内识别到的目标。
 - **会写什么**：运行记录与日志写在 `~/.dsh/mc-dev-starter`（按 profile 分目录），JDK 选择记在同目录的 `jdk.json`。除 Gradle 自身产物外，不改动工程目录。

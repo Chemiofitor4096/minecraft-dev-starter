@@ -22,6 +22,7 @@ const REQUIRED = [
   'README.md',
   'README.zh_CN.md',
   'CHANGELOG.md',
+  'SECURITY.md',
 ]
 
 /** 这些不该出现在 npm 包里。 */
