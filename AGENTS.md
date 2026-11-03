@@ -303,6 +303,12 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
   这条同时验证了「版本号读对了」与「包结构完整」。
 - 每个发布版本打 annotated tag `vX.Y.Z`，指向 `package.json` 已是该版本的那个提交。
   补历史 tag 时按版本号定位提交，别按日期猜：`git show <sha>:package.json` 逐个核对。
+- **git 推送和 npm 发布是两件事**：`git push` 随时可以推（包括 tag），发布必须走"暂存 → 用户检查 → 批准"。
+  批准即发布，包内容之后不可再改。
+- **暂存之后、批准之前是唯一的检查窗口**。正文、README、截图的修改要在 `stage publish` 之前做完；
+  暂存之后再改就得让用户撤销那条暂存（npm 网页操作，需 2FA），然后重新 `stage publish`。
+  撤销很便宜，别怕重发；但同一版本只能有一条暂存，撤销前重发会报
+  `Cannot stage previously published version`（措辞误导，实际是暂存冲突，不是真的发布过）。
 
 ## 安全告警（npm / Socket）
 
