@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RunManager">
+    <configuration name="Core Client" type="GradleRunConfiguration">
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/modules/core/run" />
+    </configuration>
+    <configuration name="Gadget Client" type="GradleRunConfiguration">
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/modules/gadget/run" />
+    </configuration>
+    <configuration name="Default" type="GradleRunConfiguration" default="true" />
+  </component>
+</project>

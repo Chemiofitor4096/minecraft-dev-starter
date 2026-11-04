@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import { createApi } from '../src/lib/api.js'
@@ -108,7 +108,10 @@ test('扫描结果里不再出现 runs 容器 API 的假目标', async () => {
   try {
     const api = build(dir)
     const scan = await api['projects.scan']({ root: fixtures, refresh: true })
-    const fabric = /** @type {Record<string, any>} */ (scan.projects.find((project) => String(project.root).endsWith('fabric')))
+    const fabric = /** @type {Record<string, any>} */ (scan.projects.find(
+      // architectury/fabric 现在也是一个工程，这里要的是 fixtures/fabric
+      (project) => relative(fixtures, String(project.root)).replace(/\\/g, '/') === 'fabric',
+    ))
     assert.ok(fabric !== undefined)
     const tasks = fabric.runTargets.map((target) => target.taskPath)
     assert.deepEqual(tasks, ['runClient', 'runServer'])

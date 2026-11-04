@@ -11,7 +11,7 @@
  */
 
 import { readdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
 import { detectProject } from './detect.js'
 import { parseSettingsIncludes } from './gradle.js'
 import { readIdeaProject, resolveProjectDir } from './idea.js'
@@ -86,9 +86,18 @@ export async function scanWorkspace(root, options = {}) {
     if (entries === undefined) continue
 
     if (entries.files.some((name) => BUILD_FILES.has(name))) {
-      candidates.push(item.dir)
-      // 聚合工程的子模块各自也算一个工程（每个模块挑自己的运行目标）
-      for (const sub of await subprojectDirs(item.dir)) {
+      if (candidates.length >= maxProjects) {
+        truncated = true
+        continue
+      }
+      // 聚合工程：子模块各自成工程，聚合根不单列（它的目标与子工程重复）
+      const subs = await subprojectDirs(item.dir)
+      if (subs.length === 0) candidates.push(item.dir)
+      for (const sub of subs) {
+        if (candidates.length >= maxProjects) {
+          truncated = true
+          break
+        }
         if (!candidates.includes(sub)) candidates.push(sub)
       }
       continue
@@ -101,12 +110,13 @@ export async function scanWorkspace(root, options = {}) {
     }
   }
 
-  // 工作区根本身就是一个工程的情况：上面那一版已经把它收进 candidates 了，
-  // 这里只兜底（例如根目录只有构建脚本、但 readdir 失败过）。
-  const rootEntries = await safeReaddir(startRoot)
-  if (rootEntries !== undefined && !candidates.includes(startRoot)) {
-    const isProject = rootEntries.files.some((name) => BUILD_FILES.has(name))
-    if (isProject) candidates.unshift(startRoot)
+  // 工作区根是不是工程，上面的循环已经判过了（它就是队列里的第一项）——
+  // 这里只兜底"根目录有构建脚本、但那一轮 readdir 失败过"的情况。
+  if (candidates.length === 0) {
+    const rootEntries = await safeReaddir(startRoot)
+    if (rootEntries !== undefined && rootEntries.files.some((name) => BUILD_FILES.has(name))) {
+      candidates.push(startRoot)
+    }
   }
 
   /** @type {Array<Record<string, unknown>>} */
@@ -136,26 +146,53 @@ export async function scanWorkspace(root, options = {}) {
 
 /**
  * 聚合工程的子工程目录。
- * 只认 `.idea` 的 Gradle 模块清单：没有 IDE 模型时子模块拿不到运行配置，
- * 单独列出来只会是一堆"没有可运行目标"。
+ *
+ * 模块清单的主来源是 `settings.gradle` 的 include——没有 IDE 的工程同样要能拆开；
+ * `.idea` 的 Gradle 模块清单兜底（它比 include 多出"同步过但没写进 settings"的模块）。
  * @param {string} root
  * @returns {Promise<string[]>}
  */
 async function subprojectDirs(root) {
+  /** @type {string[]} */
+  const declared = []
+  for (const name of ['settings.gradle.kts', 'settings.gradle']) {
+    const text = await readText(join(root, name))
+    if (text === undefined) continue
+    declared.push(...parseSettingsIncludes(text))
+    break
+  }
   const idea = await readIdeaProject(root)
-  if (idea === undefined) return []
+  if (idea !== undefined) declared.push(...idea.gradleModules)
 
   /** @type {string[]} */
   const dirs = []
-  for (const modulePath of idea.gradleModules) {
-    if (modulePath === '.') continue
-    const dir = join(root, modulePath)
+  for (const modulePath of declared) {
+    const normalized = normalizeModulePath(modulePath)
+    if (normalized === '') continue
+    const dir = join(root, normalized)
+    // include 里写 `../shared` 时不能跑出工作区
+    const rel = relative(root, dir)
+    if (rel.startsWith('..') || isAbsolute(rel)) continue
     const sub = await safeReaddir(dir)
     if (sub === undefined) continue
     if (!sub.files.some((name) => BUILD_FILES.has(name))) continue
     if (!dirs.includes(dir)) dirs.push(dir)
   }
   return dirs
+}
+
+/**
+ * `modules:core`（settings.gradle 的写法）与 `modules/core`（IDE 的写法）统一成相对路径。
+ * @param {string} path
+ * @returns {string}
+ */
+function normalizeModulePath(path) {
+  const normalized = String(path ?? '')
+    .trim()
+    .replace(/^:+/, '')
+    .replace(/[:\\]+/g, '/')
+    .replace(/\/+$/, '')
+  return normalized === '.' ? '' : normalized
 }
 
 /**

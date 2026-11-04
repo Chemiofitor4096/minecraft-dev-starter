@@ -23,3 +23,7 @@ desktop.ini
 /lib/
 /dist/
 .gradle/
+
+# 测试夹具里的 .idea 要进仓库（上面忽略了编辑器目录，这里放行）
+!test/fixtures-multi/demo/.idea/
+!test/fixtures-multi/demo/.idea/**

@@ -9,10 +9,12 @@ import { scanWorkspace } from '../src/lib/scanner.js'
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 
-test('只返回四个真工程，干扰项被剪掉', async () => {
+test('多模块聚合工程不再单列，子模块各自成工程', async () => {
   const result = await scanWorkspace(fixtures, { jdks: [] })
-  const names = result.projects.map((project) => basename(String(project.root))).sort()
-  assert.deepEqual(names, ['architectury', 'fabric', 'neoforge', 'unknown'])
+  const names = result.projects
+    .map((project) => relative(fixtures, String(project.root)).replace(/\\/g, '/'))
+    .sort()
+  assert.deepEqual(names, ['architectury/common', 'architectury/fabric', 'architectury/forge', 'fabric', 'neoforge', 'unknown'])
   assert.equal(result.truncated, false)
 })
 
@@ -37,4 +39,14 @@ test('聚合工程：子模块各自成工程，聚合根不单列', async () =>
   )
   // 每个子工程都要指回聚合根，否则启动时在模块目录里找不到 gradlew
   assert.ok(result.projects.every((project) => project.gradleRoot === demo))
+})
+
+test('没有 .idea 时用 settings.gradle 的 include 拆子工程', async () => {
+  const plain = join(dirname(fileURLToPath(import.meta.url)), 'fixtures-multi', 'plain')
+  const result = await scanWorkspace(plain, { jdks: [] })
+  assert.deepEqual(
+    result.projects.map((project) => relative(plain, String(project.root)).replace(/\\/g, '/')),
+    ['modules/alpha', 'modules/beta'],
+  )
+  assert.ok(result.projects.every((project) => project.idea === undefined))
 })

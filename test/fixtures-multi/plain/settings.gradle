@@ -1,0 +1,3 @@
+﻿rootProject.name = 'Plain-Multi'
+include 'modules:alpha'
+include 'modules:beta'
