@@ -322,8 +322,68 @@ test('mc_project_detail 输出证据、JDK 与警告', async () => {
   assert.match(blocks[0].text, /runData（会跑完）/)
 })
 
-test('mc_project_detail 输出声明的依赖（构建 + 模组）', async () => {
+test('mc_project_detail 输出 .idea 工程模型与目标来源', async () => {
   const { byName } = build({
+    'projects.detail': async () => ({
+      root: 'C:/p',
+      name: 'demo',
+      modName: 'Demo Mod',
+      kind: 'mod',
+      loader: 'forge',
+      loaders: ['forge'],
+      minecraftVersion: '1.20.1',
+      confidence: 0.95,
+      modules: [{ path: 'modules/core', platform: 'forge', targets: [] }],
+      runTargets: [
+        { taskPath: ':modules/core:runClient', label: 'Client', kind: 'client', mode: 'daemon', module: 'modules/core', guessed: false, source: 'idea-run-config' },
+        { taskPath: ':modules/gadget:runClient', label: 'Client', kind: 'client', mode: 'daemon', module: 'modules/gadget', guessed: true, source: 'guessed' },
+      ],
+      evidence: [],
+      warnings: [],
+      conflicts: [],
+      idea: {
+        dir: 'C:/p/.idea',
+        name: 'Demo-Multi',
+        gradleRoot: 'C:/p',
+        gradleJvm: '#JAVA_HOME',
+        jdkName: 'zulu-17',
+        languageLevel: 17,
+        bytecodeTarget: 17,
+        modules: 3,
+        imls: 5,
+        runConfigurations: 4,
+        platforms: ['FORGE', 'MIXIN'],
+        linkedProjects: [],
+        files: ['modules.xml', 'gradle.xml'],
+      },
+    }),
+  })
+  const value = await byName.mc_project_detail.execute({ root: 'C:/p' }, {})
+  assert.equal(value.idea.name, 'Demo-Multi')
+  assert.equal(value.idea.jdkName, 'zulu-17')
+  assert.equal(value.idea.runConfigurations, 4)
+  assert.deepEqual(value.idea.platforms, ['FORGE', 'MIXIN'])
+  // 空数组不留噪音字段
+  assert.equal('linkedProjects' in value.idea, false)
+  assert.equal(value.targets[0].source, 'idea-run-config')
+  assert.equal(value.targets[1].source, 'guessed')
+  assertLossless(value)
+
+  const text = byName.mc_project_detail.output.render({}, value)[0].text
+  assert.match(text, /IDE：Demo-Multi/)
+  assert.match(text, /来自 IDE 运行配置/)
+  assert.match(text, /未验证/)
+})
+
+test('没有 .idea 时 mc_project_detail 不出现 idea 字段', async () => {
+  const { byName } = build()
+  const value = await byName.mc_project_detail.execute({ root: 'C:/p' }, {})
+  assert.equal('idea' in value, false)
+  assert.doesNotMatch(byName.mc_project_detail.output.render({}, value)[0].text, /IDE：/)
+  assertLossless(value)
+})
+
+test('mc_project_detail 输出声明的依赖（构建 + 模组）', async () => {  const { byName } = build({
     'projects.detail': async () => ({
       root: 'C:/p',
       name: 'demo',

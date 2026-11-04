@@ -5,6 +5,10 @@
  *   - 一切结论附证据，读不出就报 unknown，不猜；
  *   - 任务目标来自构建脚本里的 `runs` 块，读不到时给"推测"标记；
  *   - 不执行 Gradle（代价与失败率见调研文档）。
+ *
+ * 证据源有两个，构建脚本是主、`.idea` 是辅：
+ *   - `.idea` 是 IDEA 的 Gradle 同步结果，能补上"模块清单""facet 平台""人跑过的运行配置"；
+ *   - 但它只用来**补齐和兜底**，绝不推翻构建脚本读到的 loader 与目标。
  * @module minecraft-dev-starter/lib/detect
  */
 
@@ -15,6 +19,7 @@ import {
   parseJavaLevel,
   parseMinecraftVersion,
   parsePluginIds,
+  parseRootProjectName,
   parseRuns,
   parseSettingsIncludes,
   parseWrapperVersion,
@@ -23,16 +28,20 @@ import { dependencyRanges, locateMetadata, primaryMetadata } from './metadata.js
 import { parseBuildDependencies, parseVersionCatalog, resolveCatalogRefs, toModDependencies } from './deps.js'
 import { readText, resolvePlaceholders, parseProperties } from './text.js'
 import { gradleSupportsJava, pickJdk, requiredJava } from './java.js'
+import { describeIdea, findOwningAggregator, loadersFromPlatforms, readIdeaProject, resolveProjectDir } from './idea.js'
 import { modeOf } from './verify.js'
 
 /**
  * @typedef {{ file: string, kind: string, detail: string }} Evidence
- * @typedef {{ task: string, label: string, kind: string, mode: 'daemon' | 'oneshot', guessed: boolean }} Target
+ * @typedef {{ task: string, label: string, kind: string, mode: 'daemon' | 'oneshot', guessed: boolean, source?: 'build-script' | 'idea-run-config' | 'guessed' }} Target
  * @typedef {{ path: string, dir: string, platform: string, pluginIds: string[], targets: Target[] }} ModuleInfo
  */
 
 /** loader 判定：插件 id 正则 → loader。顺序有意义，先命中先得。 */
 const LOADER_RULES = [
+  // NeoForge 团队写的 legacyforge 插件产出的是 **Forge 1.20.1** 模组，
+  // 必须排在 neoforge 前面，否则按组织名会被判成 NeoForge（见 doc/策划.md §识别修正）。
+  { loader: 'forge', ids: [/^net\.neoforged\.moddev\.legacyforge$/] },
   { loader: 'neoforge', ids: [/^net\.neoforged\.moddev$/, /^net\.neoforged\.gradle\.userdev$/, /^net\.neoforged\.gradle$/] },
   { loader: 'fabric', ids: [/^fabric-loom$/, /^net\.fabricmc\.fabric-loom$/] },
   { loader: 'forge', ids: [/^net\.minecraftforge\.gradle(\.userdev)?$/, /^forge$/] },
@@ -66,6 +75,8 @@ const DEFAULT_TARGETS = {
  * @returns {Promise<Record<string, unknown>>}
  */
 export async function detectProject(root, options = {}) {
+  // 传进来的可能是 `.idea` 目录（从 IDE 里复制路径很常见）：退回工程根再识别
+  root = resolveProjectDir(root)
   /** @type {Evidence[]} */
   const evidence = []
   /** @type {string[]} */
@@ -73,30 +84,114 @@ export async function detectProject(root, options = {}) {
   /** @type {string[]} */
   const conflicts = []
 
+  // 自己目录里的 .idea；没有就往上找聚合根（子模块工程）
+  const ownIdea = await readIdeaProject(root)
+  const aggregator = ownIdea === undefined ? await findOwningAggregator(root) : undefined
+  const idea = ownIdea ?? aggregator?.idea
+  /** 本工程在父工程里的模块路径，只有子模块工程才有 */
+  const modulePath = aggregator?.modulePath
+  /** 任务路径前缀：子模块工程要跑 `:modules/X:runClient` */
+  const taskPrefix = modulePath === undefined ? '' : `:${modulePath}`
+  /**
+   * 模块在 Gradle 里的位置：子模块工程是 `modules/X`，聚合根工程是模块自身路径
+   * @param {string} path
+   * @returns {string}
+   */
+  const gradlePathOf = (path) => (modulePath === undefined ? path : path === '.' ? modulePath : `${modulePath}/${path}`)
+
+  /**
+   * @param {string} path 模块路径，`.` 是根模块
+   * @param {string} task
+   * @returns {string}
+   */
+  const taskPathOf = (path, task) => {
+    const scope = `${taskPrefix}${path === '.' ? '' : `:${path}`}`
+    return scope === '' ? task : `${scope}:${task}`
+  }
+
   const gradleFile = await pickExisting(root, ['build.gradle.kts', 'build.gradle'])
   const gradleText = gradleFile === undefined ? undefined : await readText(join(root, gradleFile))
   const settingsFile = await pickExisting(root, ['settings.gradle.kts', 'settings.gradle'])
   const settingsText = settingsFile === undefined ? undefined : await readText(join(root, settingsFile))
-  const properties = parseProperties(await readText(join(root, 'gradle.properties')))
+
+  // 子模块工程：构建脚本、wrapper、属性都在父工程里
+  const parentRoot = aggregator?.parentDir
+  const parentGradleFile = parentRoot === undefined ? undefined : await pickExisting(parentRoot, ['build.gradle.kts', 'build.gradle'])
+  const parentGradleText =
+    parentRoot === undefined || parentGradleFile === undefined ? undefined : await readText(join(parentRoot, parentGradleFile))
+
+  const ownProperties = parseProperties(await readText(join(root, 'gradle.properties')))
+  const parentProperties = parentRoot === undefined ? {} : parseProperties(await readText(join(parentRoot, 'gradle.properties')))
+  const properties = { ...parentProperties, ...ownProperties }
   const wrapperProperties = parseProperties(await readText(join(root, 'gradle/wrapper/gradle-wrapper.properties')))
-  const gradleVersion = parseWrapperVersion(wrapperProperties)
+  const parentWrapper =
+    parentRoot === undefined ? {} : parseProperties(await readText(join(parentRoot, 'gradle/wrapper/gradle-wrapper.properties')))
+  const ownWrapperVersion = parseWrapperVersion(wrapperProperties)
+  const gradleVersion = ownWrapperVersion ?? parseWrapperVersion(parentWrapper)
   const catalogFile = await pickExisting(root, ['gradle/libs.versions.toml', 'libs.versions.toml'])
   const catalogText = catalogFile === undefined ? undefined : await readText(join(root, catalogFile))
 
-  const pluginIds = [...parsePluginIds(gradleText ?? ''), ...parsePluginIds(settingsText ?? '')]
+  const pluginIds = [
+    ...parsePluginIds(gradleText ?? ''),
+    ...parsePluginIds(settingsText ?? ''),
+    ...parsePluginIds(parentGradleText ?? ''),
+  ]
   const includes = parseSettingsIncludes(settingsText ?? '')
 
   if (gradleFile !== undefined) {
     evidence.push({ file: gradleFile, kind: 'build-script', detail: `Gradle 构建脚本（${gradleFile.endsWith('.kts') ? 'Kotlin DSL' : 'Groovy'}）` })
   }
   if (gradleVersion !== undefined) {
-    evidence.push({ file: 'gradle/wrapper/gradle-wrapper.properties', kind: 'wrapper', detail: `Gradle ${gradleVersion}` })
+    const inherited = ownWrapperVersion === undefined
+    evidence.push({
+      file: inherited ? '父工程 gradle/wrapper/gradle-wrapper.properties' : 'gradle/wrapper/gradle-wrapper.properties',
+      kind: 'wrapper',
+      detail: `Gradle ${gradleVersion}${inherited ? '（继承自父工程）' : ''}`,
+    })
   } else if (gradleFile !== undefined) {
     warnings.push('没有 gradle wrapper，需要本机装 Gradle 才能构建')
   }
+  if (aggregator !== undefined && modulePath !== undefined) {
+    evidence.push({
+      file: '.idea/gradle.xml',
+      kind: 'subproject',
+      detail: `子模块工程：父工程 ${aggregator.parentDir}，任务前缀 ${taskPrefix}`,
+    })
+  }
+  if (ownIdea !== undefined) {
+    evidence.push({ file: '.idea', kind: 'idea-model', detail: `IDEA 工程模型：${describeIdea(ownIdea)}` })
+    if (ownIdea.gradleRoot !== undefined && ownIdea.gradleRoot.toLowerCase() !== root.toLowerCase()) {
+      evidence.push({ file: '.idea/gradle.xml', kind: 'idea-gradle', detail: `Gradle 工程根是 ${ownIdea.gradleRoot}` })
+    }
+  }
 
   // ── 模块展开 ────────────────────────────────────────────────────────
-  const modulePaths = includes.length > 0 ? ['.', ...includes.slice(0, options.maxModules ?? 12)] : ['.']
+  // settings.gradle 的 include 是主，自己 `.idea` 的模块清单兜底
+  const maxModules = options.maxModules ?? 12
+  const declaredModules = [...includes, ...(ownIdea?.gradleModules ?? [])]
+  /** @type {string[]} */
+  const modulePaths = ['.']
+  /** @type {string[]} */
+  const ideaOnlyModules = []
+  const includeSet = new Set(includes.map(normalizeModulePath))
+  for (const candidate of declaredModules) {
+    const candidatePath = normalizeModulePath(candidate)
+    if (candidatePath === '' || candidatePath === '.' || modulePaths.includes(candidatePath)) continue
+    if (modulePaths.length - 1 >= maxModules) break
+    const dir = join(root, candidatePath)
+    if (!(await isDirectory(dir))) continue
+    // 只用来分组的目录（如 `modules/`）没有构建脚本，不算模块
+    if (await pickExisting(dir, ['build.gradle.kts', 'build.gradle']) === undefined) continue
+    modulePaths.push(candidatePath)
+    if (!includeSet.has(candidatePath)) ideaOnlyModules.push(candidatePath)
+  }
+  if (ideaOnlyModules.length > 0) {
+    evidence.push({
+      file: '.idea/gradle.xml',
+      kind: 'idea-modules',
+      detail: `${ideaOnlyModules.length} 个模块只在 IDE 的 Gradle 模块清单里：${ideaOnlyModules.slice(0, 6).join('、')}`,
+    })
+  }
   /** @type {ModuleInfo[]} */
   const modules = []
   /** @type {Awaited<ReturnType<typeof locateMetadata>>} */
@@ -107,6 +202,8 @@ export async function detectProject(root, options = {}) {
   const moduleProperties = []
   /** @type {number[]} 模块级 Java toolchain */
   const moduleJavaLevels = []
+  /** 根模块自己有没有元数据：聚合工程没有，元数据全在子模块里 */
+  let rootHasMetadata = false
 
   for (const modulePath of modulePaths) {
     const dir = modulePath === '.' ? root : join(root, modulePath)
@@ -116,6 +213,7 @@ export async function detectProject(root, options = {}) {
     modulePluginIds.push(...moduleIds)
     const runs = parseRuns(moduleText ?? '')
     const metadata = await locateMetadata(dir)
+    if (modulePath === '.' && metadata.length > 0) rootHasMetadata = true
     allMetadata = allMetadata.concat(metadata)
     const platform = detectPlatform(moduleIds, moduleText ?? '')
     moduleProperties.push(parseProperties(await readText(join(dir, 'gradle.properties'))))
@@ -163,6 +261,23 @@ export async function detectProject(root, options = {}) {
     }
   }
 
+  // 构建脚本读不出 loader 时用 IDE 的 facet 兜底：
+  // facet 的 FORGE 也覆盖 NeoForge 工程，所以它只能补缺，不能纠正已判定的 loader
+  /** @type {boolean} */
+  let loaderFromFacet = false
+  if (loader === undefined && idea !== undefined) {
+    const facetLoader = loadersFromPlatforms(idea.platforms)[0]
+    if (facetLoader !== undefined) {
+      loader = facetLoader
+      loaderFromFacet = true
+      evidence.push({
+        file: '.idea',
+        kind: 'idea-facet',
+        detail: `构建脚本没读出 loader，按 minecraft facet 平台 ${idea.platforms.join(' / ')} 判定`,
+      })
+    }
+  }
+
   // 所有命中过的 loader（多平台工程可能同时有 fabric 与 neoforge）
   const loaders = [
     ...new Set(
@@ -171,6 +286,7 @@ export async function detectProject(root, options = {}) {
       ),
     ),
   ]
+  if (loaderFromFacet && loader !== undefined && !loaders.includes(loader)) loaders.push(loader)
 
   const metadataKind = primaryMetadata(allMetadata)?.kind
   if (loader === undefined && metadataKind !== undefined) {
@@ -212,26 +328,88 @@ export async function detectProject(root, options = {}) {
   // ── 身份 ────────────────────────────────────────────────────────────
   const identity = readIdentity(allMetadata, mergedProperties, root, warnings)
 
-  // ── 可运行目标 ──────────────────────────────────────────────────────
+  // 聚合工程：根目录没有自己的元数据，元数据全在子模块里。
+  // 这时**不能**把第一个子模块的身份当成整个工程的——否则 CTNH-Modules 会顶着
+  // 子模块的 "CTNH Bio" 出现在胶囊和面板标题上，看起来"所有东西都归了 bio"。
+  const aggregatorName = parseRootProjectName(settingsText ?? '') ?? idea?.projectName
+  const isAggregator = !rootHasMetadata && modules.length > 1 && allMetadata.length > 0
+  if (isAggregator) {
+    identity.modName = aggregatorName ?? basename(root)
+    identity.modId = undefined
+    identity.modVersion = undefined
+    evidence.push({
+      file: settingsFile ?? '.idea',
+      kind: 'aggregator',
+      detail: `根目录没有元数据（是多模块聚合工程），工程名取 ${aggregatorName === undefined ? '目录名' : `rootProject.name「${aggregatorName}」`}；各子模块的 mods.toml 属于模块本身`,
+    })
+  }
+
+  // ── 模块平台与运行目标 ──────────────────────────────────────────────
+  // 模块平台：构建脚本没写平台时用 IDE 的 facet 补（不纠正已判定的 loader）
+  for (const module of modules) {
+    if (module.platform !== 'unknown') continue
+    const facetPlatform = aggregator === undefined
+      ? platformOfModule(idea, module.path)
+      : platformOfModule(aggregator.idea, modulePath)
+    if (facetPlatform === undefined) continue
+    if (facetPlatform === 'forge' && loader === 'neoforge') continue
+    module.platform = facetPlatform
+    evidence.push({ file: '.idea', kind: 'idea-facet', detail: `${module.path} 的 minecraft facet 平台是 ${facetPlatform}` })
+  }
+
+  // 子模块工程：只继承父工程里属于这个模块的运行配置
+  if (aggregator !== undefined && modulePath !== undefined) {
+    mergeIdeaTargets(
+      modules,
+      {
+        ...aggregator.idea,
+        runConfigurations: aggregator.idea.runConfigurations
+          .filter((config) => config.modulePath === modulePath)
+          .map((config) => ({ ...config, modulePath: '.' })),
+      },
+      evidence,
+    )
+  } else {
+    mergeIdeaTargets(modules, idea, evidence)
+  }
+
   const hasDeclaredTargets = modules.some((module) => module.targets.length > 0)
   if (!hasDeclaredTargets && loader !== undefined) {
     applyGuessedTargets(modules, loader)
     if (modules.some((module) => module.targets.length > 0)) {
-      warnings.push('构建脚本里没读到 runs 块，目标是按 loader 惯例推测的（未验证）')
+      warnings.push('构建脚本与 IDE 里都没读到运行目标，目标是按 loader 惯例推测的（未验证）')
     }
   }
   const runTargets = modules.flatMap((module) =>
     module.targets.map((target) => ({
       ...target,
-      module: module.path,
-      taskPath: module.path === '.' ? target.task : `:${module.path}:${target.task}`,
+      module: gradlePathOf(module.path),
+      taskPath: taskPathOf(module.path, target.task),
       platform: module.platform,
     })),
   )
 
   // ── JDK ────────────────────────────────────────────────────────────
-  const toolchain = parseJavaLevel(gradleText ?? '') ?? (moduleJavaLevels.length > 0 ? Math.max(...moduleJavaLevels) : undefined)
-  const javaRequired = toolchain ?? requiredJava(/** @type {string | undefined} */ (minecraftVersion))
+  const toolchain = parseJavaLevel(gradleText ?? '')
+    ?? parseJavaLevel(parentGradleText ?? '')
+    ?? (moduleJavaLevels.length > 0 ? Math.max(...moduleJavaLevels) : undefined)
+  // 构建脚本没写 toolchain 时退到 IDE 的字节码目标
+  const ideaJava = idea === undefined ? undefined : (idea.bytecodeTarget ?? idea.languageLevel)
+  const javaRequired = toolchain ?? ideaJava ?? requiredJava(/** @type {string | undefined} */ (minecraftVersion))
+  if (toolchain === undefined && ideaJava !== undefined && idea !== undefined) {
+    evidence.push({
+      file: idea.bytecodeTarget === undefined ? '.idea/misc.xml' : '.idea/compiler.xml',
+      kind: 'idea-jdk',
+      detail: `构建脚本没写 toolchain，按 IDE 的 Java ${ideaJava} 定需求`,
+    })
+  }
+  if (idea?.jdkName !== undefined) {
+    evidence.push({
+      file: '.idea/misc.xml',
+      kind: 'idea-jdk',
+      detail: `工程 JDK ${idea.jdkName}${idea.languageLevel === undefined ? '' : ` · languageLevel ${idea.languageLevel}`}`,
+    })
+  }
   const configuredJavaHome = pickProperty(properties, ['org.gradle.java.home'])
   const overrideJavaHome = typeof options.overrideJavaHome === 'string' && options.overrideJavaHome !== ''
     ? options.overrideJavaHome
@@ -272,6 +450,9 @@ export async function detectProject(root, options = {}) {
     root,
     name: basename(root),
     kind,
+    // 子模块工程：真正的 Gradle 根与模块路径（启动要在 gradleRoot 里跑）
+    gradleRoot: parentRoot ?? root,
+    ...(modulePath === undefined ? {} : { modulePath, parentRoot }),
     loader: loader ?? 'unknown',
     loaders,
     loaderEvidence: loaderEvidenceId,
@@ -299,13 +480,27 @@ export async function detectProject(root, options = {}) {
     },
     gradleVersion,
     wrapper: gradleVersion !== undefined,
+    // IDE 工程模型：只给"读到了什么"的摘要，原始内容不往外传（面板与工具都用不上）
+    idea: idea === undefined ? undefined : {
+      dir: idea.dir,
+      name: idea.projectName ?? basename(root),
+      gradleRoot: idea.gradleRoot ?? root,
+      gradleJvm: idea.gradleJvm,
+      jdkName: idea.jdkName,
+      languageLevel: idea.languageLevel,
+      bytecodeTarget: idea.bytecodeTarget,
+      modules: idea.gradleModules.length,
+      imls: idea.modules.length,
+      runConfigurations: idea.runConfigurations.length,
+      platforms: idea.platforms,
+      linkedProjects: idea.linkedProjects,
+      files: idea.files,
+    },
     modules: modules.map((module) => ({
       path: module.path,
+      gradlePath: gradlePathOf(module.path),
       platform: module.platform,
-      targets: module.targets.map((target) => ({
-        ...target,
-        taskPath: module.path === '.' ? target.task : `:${module.path}:${target.task}`,
-      })),
+      targets: module.targets.map((target) => ({ ...target, taskPath: taskPathOf(module.path, target.task) })),
     })),
     runTargets,
     evidence,
@@ -339,6 +534,8 @@ async function pickExisting(root, names) {
  */
 function detectPlatform(pluginIds, moduleText) {
   if (pluginIds.some((id) => /fabric-loom/.test(id))) return 'fabric'
+  // legacyforge 先判：它是 NeoForge 团队的插件，产物却是 Forge 模组
+  if (pluginIds.some((id) => /legacyforge/.test(id))) return 'forge'
   if (pluginIds.some((id) => /neoforged/.test(id))) return 'neoforge'
   if (pluginIds.some((id) => /minecraftforge/.test(id))) return 'forge'
   // Architectury 的平台由 architectury { fabric() } / { forge() } 声明
@@ -353,7 +550,113 @@ function detectPlatform(pluginIds, moduleText) {
  * @returns {Target}
  */
 function toTarget(run) {
-  return { task: run.task, label: run.label, kind: run.kind, mode: modeOf(run.kind), guessed: false }
+  return { task: run.task, label: run.label, kind: run.kind, mode: modeOf(run.kind), guessed: false, source: 'build-script' }
+}
+
+/** run 类型 → Gradle 任务名（Gradle 的 RunConfig 约定）。 */
+const TASK_BY_KIND = {
+  client: 'runClient',
+  server: 'runServer',
+  data: 'runData',
+  datagen: 'runData',
+  gameTestServer: 'runGameTestServer',
+  gameTest: 'runGameTestServer',
+}
+
+/** run 类型 → 界面标签。 */
+const LABEL_BY_KIND = {
+  client: 'Client',
+  server: 'Server',
+  data: 'Data',
+  datagen: 'Data',
+  gameTestServer: 'GameTestServer',
+  gameTest: 'GameTestServer',
+}
+
+/**
+ * IDE 运行配置 → 模块目标。
+ *
+ * 只在"该模块还没有这种 run"时补，不覆盖构建脚本读到的目标；
+ * 补出来的目标标 `source: 'idea-run-config'`（不是 `guessed`）——
+ * 配置存在说明这条 Gradle 任务真的被 IDE 生成过、跑过。
+ * @param {ModuleInfo[]} modules
+ * @param {import('./idea.js').IdeaProject | undefined} idea
+ * @param {Evidence[]} evidence
+ */
+function mergeIdeaTargets(modules, idea, evidence) {
+  if (idea === undefined) return
+  /** @type {Map<string, Array<{ kind: string, name: string }>>} */
+  const byModule = new Map()
+  for (const config of idea.runConfigurations) {
+    if (config.kind === undefined || config.modulePath === undefined) continue
+    const list = byModule.get(config.modulePath) ?? []
+    if (list.some((entry) => entry.kind === config.kind)) continue
+    list.push({ kind: config.kind, name: config.name })
+    byModule.set(config.modulePath, list)
+  }
+
+  for (const module of modules) {
+    for (const config of byModule.get(module.path) ?? []) {
+      if (module.targets.some((target) => target.kind === config.kind)) continue
+      const task = TASK_BY_KIND[config.kind]
+      if (task === undefined) continue
+      module.targets.push({
+        task,
+        label: LABEL_BY_KIND[config.kind] ?? config.kind,
+        kind: config.kind,
+        mode: modeOf(config.kind),
+        guessed: false,
+        source: 'idea-run-config',
+      })
+      evidence.push({
+        file: '.idea/workspace.xml',
+        kind: 'idea-run-config',
+        detail: `${module.path} 有过运行配置「${config.name}」，对应 ${module.path === '.' ? task : `:${module.path}:${task}`}`,
+      })
+    }
+  }
+}
+
+/**
+ * 某个模块在 IDE 里的平台（来自 iml 的 minecraft facet）。
+ * @param {import('./idea.js').IdeaProject | undefined} idea
+ * @param {string} modulePath
+ * @returns {string | undefined}
+ */
+function platformOfModule(idea, modulePath) {
+  if (idea === undefined) return undefined
+  for (const iml of idea.modules) {
+    if (iml.gradlePath !== modulePath) continue
+    const loader = loadersFromPlatforms(iml.platforms).find((entry) => entry !== 'architectury')
+    if (loader !== undefined) return loader
+  }
+  return undefined
+}
+
+/**
+ * settings.gradle 的 include 用冒号分隔（`modules:CTNH-Core`），
+ * IDEA 的模块清单是文件系统路径（`modules/CTNH-Core`）。统一成后者。
+ * @param {string} path
+ * @returns {string}
+ */
+function normalizeModulePath(path) {
+  return String(path ?? '')
+    .trim()
+    .replace(/^:+/, '')
+    .replace(/[:\\]+/g, '/')
+    .replace(/\/+$/, '')
+}
+
+/**
+ * @param {string} dir
+ * @returns {Promise<boolean>}
+ */
+async function isDirectory(dir) {
+  try {
+    return (await stat(dir)).isDirectory()
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -381,6 +684,7 @@ function applyGuessedTargets(modules, loader) {
       kind: entry.kind,
       mode: modeOf(entry.kind),
       guessed: true,
+      source: 'guessed',
     }))
   }
   void loader

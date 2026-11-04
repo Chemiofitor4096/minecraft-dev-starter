@@ -123,6 +123,7 @@ export function diagnose(lines) {
  * @property {'daemon' | 'oneshot'} [mode] 省略时按 kind 推
  * @property {string} [javaHome] 用哪个 JDK 跑构建（透传成 -Dorg.gradle.java.home 与 JAVA_HOME）
  * @property {string} [module]
+ * @property {string} [gradleRoot] 聚合工程根：子模块工程的任务要在这里跑
  * @property {string[]} [extraArgs]
  */
 
@@ -242,7 +243,9 @@ export function createLaunchService(options = {}) {
       }
 
       const javaHome = typeof request.javaHome === 'string' && request.javaHome !== '' ? request.javaHome : undefined
-      const command = commandFor({ platform, projectDir: request.root, taskPath: request.taskPath, javaHome, extraArgs: request.extraArgs })
+      // 子模块工程：任务路径带模块前缀，必须在聚合根里执行
+      const projectDir = request.gradleRoot ?? request.root
+      const command = commandFor({ platform, projectDir, taskPath: request.taskPath, javaHome, extraArgs: request.extraArgs })
       /** @type {Runtime} */
       const runtime = { ring: [], ready: false, readyTimer: undefined, child: undefined }
 

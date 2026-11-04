@@ -11,6 +11,9 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { modeOf } from './lib/verify.js'
 
+/** mc_project_detail 的渲染里最多列多少个目标（其余只报数量）。 */
+const TARGET_LINE_LIMIT = 12
+
 /**
  * 工具的工作区根：调用参数优先，其次取**调用它的那个会话**的 cwd。
  *
@@ -454,7 +457,9 @@ export function applyTools(ctx, deps) {
       name: 'mc_project_detail',
       description:
         '查看单个工程的完整画像：loader 判定依据、模块与目标、JDK 需求与选择、证据、冲突与警告。只读。'
-        + ' targets 里的 mode 说明目标是常驻（daemon）还是会跑完（oneshot）：后者（runData、runGameTestServer）可以用 mc_launch 直接拿到验证结论。'
+        + ' targets 里的 mode 说明目标是常驻（daemon）还是会跑完（oneshot）：后者（runData、runGameTestServer）可以用 mc_launch 直接拿到验证结论；'
+        + ' source 说明目标从哪读到的（build-script 构建脚本的 runs 块 / idea-run-config IDE 里跑过的运行配置 / guessed 按惯例推测）。'
+        + ' 工程里有 .idea 时还会输出 idea：IntelliJ 的工程模型（Gradle 模块清单、facet 平台、工程 JDK、运行配置数）。'
         + ' 用于回答"为什么判成这个 loader""为什么启动不了""缺哪个 JDK""跑哪个任务能验证改动"。',
       parameters: {
         root: { type: 'string', description: '工程根目录；省略则用当前会话的工作区' },
@@ -484,6 +489,8 @@ export function applyTools(ctx, deps) {
                 },
               },
             },
+            gradleRoot: { type: 'string', description: '实际执行 Gradle 的目录；子模块工程是它的聚合根' },
+            modulePath: { type: 'string', description: '子模块工程在聚合根里的模块路径' },
             targets: {
               type: 'array',
               items: {
@@ -494,7 +501,31 @@ export function applyTools(ctx, deps) {
                   label: { type: 'string', required: true },
                   mode: { type: 'string', required: true, enum: ['daemon', 'oneshot'] },
                   guessed: { type: 'boolean', required: true },
+                  source: {
+                    type: 'string',
+                    enum: ['build-script', 'idea-run-config', 'guessed'],
+                    description: '目标从哪读到的：构建脚本的 runs 块、IDE 的运行配置，还是按惯例推测',
+                  },
                 },
+              },
+            },
+            idea: {
+              type: 'object',
+              additionalProperties: false,
+              description: 'IntelliJ IDEA 的工程模型（读 .idea 得到）；没有 .idea 时不出现',
+              properties: {
+                name: { type: 'string', required: true },
+                dir: { type: 'string', required: true },
+                gradleRoot: { type: 'string' },
+                gradleJvm: { type: 'string' },
+                jdkName: { type: 'string' },
+                languageLevel: { type: 'integer' },
+                bytecodeTarget: { type: 'integer' },
+                modules: { type: 'integer', description: 'Gradle 链接进来的模块数（含根）' },
+                imls: { type: 'integer', description: 'iml 模块文件数' },
+                runConfigurations: { type: 'integer', description: 'IDE 里跑过的运行配置数' },
+                platforms: { type: 'array', items: { type: 'string' }, description: 'iml 里 minecraft facet 的 platformType 合集' },
+                linkedProjects: { type: 'array', items: { type: 'string' }, description: '复合构建里链接到的其它 Gradle 工程' },
               },
             },
             java: {
@@ -554,10 +585,9 @@ export function applyTools(ctx, deps) {
             text:
               `${value.name} · ${value.loader}${value.minecraftVersion === undefined ? '' : ` ${value.minecraftVersion}`} · 置信度 ${Math.round(value.confidence * 100)}%`
               + `\n模块：${value.modules.map((module) => `${module.path}(${module.platform})`).join('、')}`
-              + (value.targets === undefined
-                ? ''
-                : `\n目标：${value.targets.map((target) => `${target.taskPath}（${target.mode === 'oneshot' ? '会跑完' : '常驻'}${target.guessed ? '，未验证' : ''}）`).join('、')}`)
+              + (value.targets === undefined ? '' : `\n目标：${renderTargets(value.targets)}`)
               + `\nJDK：需要 ${value.java?.required ?? '?'}，选中 ${value.java?.selected ?? '无'}${javaSourceText(value.java?.source)}`
+              + (value.idea === undefined ? '' : `\nIDE：${ideaText(value.idea)}`)
               + (value.dependencies === undefined
                 ? ''
                 : `\n依赖：构建 ${value.dependencies.build.length} 条、模组声明 ${value.dependencies.mods.length} 条`)
@@ -576,7 +606,7 @@ export function applyTools(ctx, deps) {
           kind: profile.kind,
           confidence: profile.confidence,
           modules: (profile.modules ?? []).map((module) => ({
-            path: module.path,
+            path: module.gradlePath ?? module.path,
             platform: module.platform,
             targets: (module.targets ?? []).map((target) => target.taskPath),
           })),
@@ -590,9 +620,26 @@ export function applyTools(ctx, deps) {
           label: target.label ?? target.taskPath,
           mode: target.mode ?? modeOf(target.kind),
           guessed: target.guessed === true,
+          ...(target.source === undefined ? {} : { source: target.source }),
         }))
         if (runTargets.length > 0) value.targets = runTargets
+        if (profile.idea !== undefined && profile.idea !== null) {
+          const idea = /** @type {Record<string, any>} */ (profile.idea)
+          /** @type {Record<string, any>} */
+          const compact = { name: String(idea.name ?? ''), dir: String(idea.dir ?? '') }
+          for (const key of ['gradleRoot', 'gradleJvm', 'jdkName']) {
+            if (typeof idea[key] === 'string' && idea[key] !== '') compact[key] = idea[key]
+          }
+          for (const key of ['languageLevel', 'bytecodeTarget', 'modules', 'imls', 'runConfigurations']) {
+            if (typeof idea[key] === 'number') compact[key] = idea[key]
+          }
+          if (Array.isArray(idea.platforms) && idea.platforms.length > 0) compact.platforms = idea.platforms
+          if (Array.isArray(idea.linkedProjects) && idea.linkedProjects.length > 0) compact.linkedProjects = idea.linkedProjects
+          value.idea = compact
+        }
         if (profile.minecraftVersion !== undefined && profile.minecraftVersion !== '') value.minecraftVersion = profile.minecraftVersion
+        if (typeof profile.gradleRoot === 'string' && profile.gradleRoot !== profile.root) value.gradleRoot = profile.gradleRoot
+        if (typeof profile.modulePath === 'string' && profile.modulePath !== '') value.modulePath = profile.modulePath
         if (profile.java !== undefined) {
           value.java = { required: profile.java.required, exact: profile.java.exact === true }
           if (profile.java.selected !== undefined) value.java.selected = profile.java.selected
@@ -625,6 +672,49 @@ export function applyTools(ctx, deps) {
       },
     }),
   )
+}
+
+/**
+ * 目标列表的渲染。聚合仓库一个工程能列出二三十个目标，全铺出来是一堵墙，
+ * 截断后告诉模型"还有多少"，要看全部就按模块读 `modules[].targets`。
+ * @param {Array<Record<string, any>>} targets
+ * @returns {string}
+ */
+function renderTargets(targets) {
+  const shown = targets.slice(0, TARGET_LINE_LIMIT)
+  const line = shown
+    .map((target) => `${target.taskPath}（${target.mode === 'oneshot' ? '会跑完' : '常驻'}${targetSourceText(target)}）`)
+    .join('、')
+  return targets.length > TARGET_LINE_LIMIT ? `${line}…另有 ${targets.length - TARGET_LINE_LIMIT} 个` : line
+}
+
+/**
+ * 目标的来源说明：模型据此判断"这个目标敢不敢直接跑"。
+ * @param {{ guessed?: boolean, source?: string }} target
+ * @returns {string}
+ */
+function targetSourceText(target) {
+  if (target.guessed === true) return '，未验证'
+  if (target.source === 'idea-run-config') return '，来自 IDE 运行配置'
+  return ''
+}
+
+/**
+ * IDE 工程模型的一行摘要。
+ * @param {Record<string, any>} idea
+ * @returns {string}
+ */
+function ideaText(idea) {
+  const parts = [String(idea.name ?? ''), String(idea.dir ?? '')]
+  if (typeof idea.jdkName === 'string' && idea.jdkName !== '') parts.push(`JDK ${idea.jdkName}`)
+  if (typeof idea.languageLevel === 'number') parts.push(`languageLevel ${idea.languageLevel}`)
+  if (typeof idea.modules === 'number') parts.push(`${idea.modules} 个模块`)
+  if (typeof idea.runConfigurations === 'number') parts.push(`${idea.runConfigurations} 个运行配置`)
+  if (Array.isArray(idea.platforms) && idea.platforms.length > 0) parts.push(`facet ${idea.platforms.join('/')}`)
+  if (Array.isArray(idea.linkedProjects) && idea.linkedProjects.length > 0) {
+    parts.push(`链接工程 ${idea.linkedProjects.join('、')}`)
+  }
+  return parts.filter((part) => part !== '').join(' · ')
 }
 
 /**
