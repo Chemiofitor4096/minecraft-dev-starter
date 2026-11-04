@@ -1,0 +1,3 @@
+﻿rootProject.name = 'Demo-Multi'
+include 'modules:core'
+include 'modules:gadget'

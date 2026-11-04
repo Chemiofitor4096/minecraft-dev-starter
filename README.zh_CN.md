@@ -123,6 +123,8 @@ dsh plugin --profile desktop remove minecraft-dev-starter
 
 JDK 版本按 Minecraft 版本推断：1.7.10 与 1.12.2 需要 Java 8，1.18 至 1.20.4 需要 Java 17，1.20.5 及以上需要 Java 21，26.x 需要 Java 25。插件将需求与已安装的 JDK 比对，缺失或版本不符时在面板中提示。
 
+支持多模块工程：每个子模块各自算一个工程，运行目标带 Gradle 模块前缀（`:modules/core:runClient`），并在 wrapper 所在的聚合根目录执行。工程里有 IntelliJ 的 `.idea` 时，会额外读取它的 Gradle 模块清单、minecraft facet 平台、工程 JDK 与运行配置，但只作为**兜底**证据——构建脚本优先，已判定的结论不会被推翻。
+
 已在 **dsh 0.2.1-rc.4**（DSH NEXT 2.0.21-next）+ Windows 11 上验证。宿主侧的变化记在 [CHANGELOG](./CHANGELOG.md)；上调支持范围按破坏性变更处理。
 
 ## 开发
@@ -180,6 +182,8 @@ npm 页面上的两条告警来自宿主运行时，不是本包代码：
 ## 已知限制
 
 - 原生右侧栏的标签类型不提供图标字段，图标仅支持 `dsh-better-sidebar` 中的标签。
+- 子模块各自成工程后，聚合工程的根目录不再单列；根目录自己挂的 run 目标不会出现在列表里。
+- `.idea` 只是兜底证据：既不在 `settings.gradle`、也不在 IDE 模块清单里的模块不会被发现；facet 平台也不会推翻已判定的 loader。
 - 一次性目标的结论由退出码与日志特征共同判定：退出码非零必为失败；退出码为零但日志里出现测试失败特征（如 `N required tests failed`）同样判为失败，以免把「测试挂了但进程退了 0」当成通过。两者都缺失时记为未知，不猜。
 - 在 Windows 上首次构建需要下载 Gradle 与项目依赖，耗时可能达到数分钟；后续构建可使用 Gradle daemon。
 

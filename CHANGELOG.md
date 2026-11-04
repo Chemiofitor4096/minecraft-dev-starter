@@ -7,6 +7,36 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
+## [Unreleased]
+
+### Added
+
+- IntelliJ `.idea` as a second evidence source: Gradle module list, minecraft facet platform,
+  project JDK, language level and the run configurations that exist in the IDE. Build scripts stay
+  authoritative — `.idea` only fills gaps and never overrides a judged loader.
+- Submodule projects: each module of an aggregator build is listed as its own project, its run
+  targets carry the Gradle module prefix (`:modules/core:runClient`) and launch from the aggregator
+  root, where the wrapper lives. `mc_project_detail` reports `gradleRoot` and `modulePath`.
+- Per-target `source` in `mc_project_detail` (`build-script` / `idea-run-config` / `guessed`), and an
+  `idea` block describing the IDE model. The panel shows the same in a collapsible section, marks
+  IDE-derived targets with `✓` and lists modules by Gradle path.
+
+### Changed
+
+- An aggregator root is no longer listed as a project when its submodules are: its targets
+  duplicated theirs.
+- `.idea` summaries for a submodule count only that module's run configurations.
+
+### Fixed
+
+- Submodule projects were listed with unqualified task names and launched from the module directory,
+  where there is no Gradle wrapper — the launch could never start.
+- `legacyforge` projects were judged NeoForge by organisation name.
+- Reading a `.idea` without `misc.xml` threw instead of degrading.
+- Module files (`.iml`) referenced from a cloned repository are only read when they live inside the
+  project directory.
+- `package-lock.json` still declared version 0.1.3.
+
 ## [0.1.10] — 2026-11-03
 
 ### Added

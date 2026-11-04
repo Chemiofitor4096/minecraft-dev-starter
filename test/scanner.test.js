@@ -2,7 +2,7 @@
  * 扫描器回归：只找出真工程，不把 build/、reference/ 下的干扰项算进来。
  */
 import assert from 'node:assert/strict'
-import { join, dirname, basename } from 'node:path'
+import { join, dirname, basename, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import { scanWorkspace } from '../src/lib/scanner.js'
@@ -26,4 +26,15 @@ test('maxProjects 触顶时标记 truncated', async () => {
   const result = await scanWorkspace(fixtures, { jdks: [], maxProjects: 2 })
   assert.equal(result.projects.length, 2)
   assert.equal(result.truncated, true)
+})
+
+test('聚合工程：子模块各自成工程，聚合根不单列', async () => {
+  const demo = join(dirname(fileURLToPath(import.meta.url)), 'fixtures-multi', 'demo')
+  const result = await scanWorkspace(demo, { jdks: [] })
+  assert.deepEqual(
+    result.projects.map((project) => relative(demo, String(project.root)).replace(/\\/g, '/')),
+    ['modules/core', 'modules/gadget'],
+  )
+  // 每个子工程都要指回聚合根，否则启动时在模块目录里找不到 gradlew
+  assert.ok(result.projects.every((project) => project.gradleRoot === demo))
 })

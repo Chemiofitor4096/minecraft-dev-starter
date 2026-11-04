@@ -40,6 +40,8 @@ src/lib/
   launches.js         启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
   state.js            ~/.dsh/mc-dev-starter 下的状态与日志（运行记录按 profile 分目录）
   argv.js             gradlew 命令行构造（含 Windows 引号规则）
+  idea.js             IntelliJ `.idea` 工程模型（模块清单 / facet / 工程 JDK / 运行配置）
+  xml.js              极简 XML 解析（零依赖，只服务 .idea）
   text.js / toml.js   小工具
 src/client/
   index.js            客户端入口：胶囊 slot、两个标签类型、better-sidebar 可选注册
@@ -49,7 +51,7 @@ src/client/
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 135 个测试 + fixtures（真实工程形态的假仓库；含 lib/client.js 的加载守卫）
+test/                 155 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划与调研
 ```
 
@@ -99,12 +101,19 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | `runs { configureEach { } }` 变成假目标 | `runs` 是 NamedDomainObjectContainer，容器 API 的块也被当成 run 配置，产出 `runConfigureEach`（启动报 Task not found） | 容器 API 名单 + 只收顶层块 + 认 `create("name")`；见 `parseRuns` |
 | 测试挂了却判通过 | 部分 GameTest 运行器失败时进程仍退 0 | 裁决先看失败特征行、再看退出码；`readVerdict` 里顺序不能调 |
 | `libs.versions.toml` 解析成一整条字符串 | `parseToml` 不支持内联表，`{ module = "a:b", version = "1" }` 原样返回 | 已补 `parseInlineTable`；回归见 `test/toml.test.js` 与 `test/deps.test.js` |
+| 读 `.idea` 时抛 `Cannot read properties of undefined` | 只有 `modules.xml`、没有 `misc.xml` 的工程：`componentOf(undefined)` 直接取 `.name` | `rootOf` / `componentOf` 容忍 undefined；回归见 `test/idea.test.js` |
+| worktree 里的 `node_modules` 一删，主仓库的也没了 | 用 junction 指向主仓库的 `node_modules`，`git worktree remove` 递归删除时会跟着目标走 | 别在 worktree 里 junction 主仓库依赖；要跑测试就复制或用独立 `npm ci`，删之前先确认链接类型 |
 
 其他约定：
 
 - 用户能看到的每个结论都必须带证据（loader 从哪个插件来、目标从哪个 run 块来）；
   `unknown` 是合法答案，不许猜成确定值。
 - 推测出来的目标要标 `guessed: true`，UI 显示「未验证」，不许隐藏。
+- 证据源有主次：**构建脚本是主、`.idea` 是辅**。`.idea` 只补缺（模块清单、facet 平台、工程 JDK、
+  运行配置），绝不推翻构建脚本已经判定的 loader 与目标；补出来的目标标 `source: 'idea-run-config'`，
+  不是 `guessed`——它在 IDE 里真的被跑过。
+- 多模块工程里子模块各自成工程，任务路径必须带 Gradle 模块前缀、在聚合根执行；
+  「在哪个目录跑 gradlew」这件事由识别结果决定，不允许调用方指定。
 - 不做隐含的 `clean`；构建目录不碰。
 - 一个工程同时只允许一个实例；跨工程可以并行。
 - 状态文件读写要 tmp + rename，进程探活失败记 `unknown`，不伪造结束原因。
@@ -279,6 +288,25 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 
 132 个测试。
 
+### M16 IDE 工程模型与多模块（2026-11-04）
+
+mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子模块各自成工程。
+
+- **证据优先级**：构建脚本是主，`.idea` 只补缺。facet 的 `FORGE` 也覆盖 NeoForge，所以它绝不
+  推翻已判定的 loader——真机验证：ProtectionEngineering 的 facet 是 `FORGE`，loader 仍是 `neoforge`。
+- **子模块工程**：`settings.gradle` 的 include 或 `.idea` 模块清单里的模块各自成工程，任务带
+  `:模块:任务` 前缀，在 wrapper 所在的聚合根执行（`gradleRoot` / `modulePath` 进画像与工具输出）。
+  合成工程验证：改前把子模块列成独立工程、目标是裸 `runClient`（在模块目录里找不到 gradlew，
+  根本起不来）；改后目标 `:modules/core:runClient`、gradleRoot 指回聚合根。
+- **聚合根不单列**：它的目标与子模块重复；根目录自己的 runs 目前不提供（README 已知限制里写了）。
+- **运行配置**：IDE 里跑过的 run 配置补成目标并标 `source: 'idea-run-config'`，优先级低于构建脚本。
+- **合并后补的护栏**（不在原 PR 里）：iml 只读工程目录内的（克隆来的仓库不能借此读外部文件）；
+  `rootOf` / `componentOf` 容忍 undefined（只有 modules.xml、没有 misc.xml 的工程以前会抛）；
+  子模块的 `.idea` 摘要只算自己的运行配置；新增 `test/xml.test.js`、`test/idea.test.js` 与
+  `test/fixtures-multi`。
+
+155 个测试。
+
 ## 发布记录
 
 - `0.1.0` → 首版。
@@ -297,6 +325,8 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
   运行记录按 profile 分目录、范围只保留 Gradle 工程。
 - `0.1.9` → M13：没有可运行工程时不显示胶囊（0.1.8 打包后才发现的空态噪音）。
 - 待发 `0.1.10` → M14 + M15：声明依赖视图、README 默认英文并保留中文、详情页重做（标签图标 / 依赖去重 / 全文 tooltip 化）。
+- 待发 `0.1.11` → M16：`.idea` 工程模型（模块清单 / facet / 工程 JDK / 运行配置）、多模块工程子模块各自成工程、
+  任务带模块前缀并在聚合根执行、目标带 `source`、详情页展示 IDE 模型。
 
 发版注意：
 

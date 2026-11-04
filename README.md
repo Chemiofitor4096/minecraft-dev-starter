@@ -123,6 +123,8 @@ Add a `config` block to the plugin entry in the profile's `cordis.patch.yml`:
 
 The JDK level is inferred from the Minecraft version: 1.7.10 and 1.12.2 need Java 8, 1.18 to 1.20.4 need Java 17, 1.20.5 and above need Java 21, 26.x needs Java 25. The requirement is compared against installed JDKs and mismatches are surfaced in the panel.
 
+Multi-module builds are supported: each submodule is listed as its own project, its run targets carry the Gradle module prefix (`:modules/core:runClient`) and they launch from the aggregator root, where the wrapper lives. When IntelliJ's `.idea` directory is present, its Gradle module list, minecraft facet platform, project JDK and run configurations are read as a **fallback** source — build scripts stay authoritative and are never overridden.
+
 Verified against **dsh 0.2.1-rc.4** (DSH NEXT 2.0.21-next) on Windows 11. Host-side changes are recorded in [CHANGELOG](./CHANGELOG.md); raising the supported range is treated as a breaking change.
 
 ## Development
@@ -180,6 +182,8 @@ Two advisories shown on the npm page are inherited from the host runtime, not fr
 ## Known limitations
 
 - Native sidebar tab types have no icon field; icons only appear on `dsh-better-sidebar` tabs.
+- An aggregator root is not listed once its submodules are: if the root carries its own run targets, they are not offered.
+- `.idea` is a fallback source only. A module that is neither in `settings.gradle` nor in the IDE module list is not discovered, and the facet platform never overrides a judged loader.
 - One-shot verdicts combine the exit code with log markers: a non-zero exit is always a failure, and a zero exit is still a failure when test-failure markers appear (for example `N required tests failed`), so a runner that swallows a failure does not look like a pass. When neither is available the verdict is unknown.
 - The first build on Windows downloads Gradle and the project's dependencies, which can take several minutes; later builds reuse the Gradle daemon.
 

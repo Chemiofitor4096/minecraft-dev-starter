@@ -383,7 +383,8 @@ test('没有 .idea 时 mc_project_detail 不出现 idea 字段', async () => {
   assertLossless(value)
 })
 
-test('mc_project_detail 输出声明的依赖（构建 + 模组）', async () => {  const { byName } = build({
+test('mc_project_detail 输出声明的依赖（构建 + 模组）', async () => {
+  const { byName } = build({
     'projects.detail': async () => ({
       root: 'C:/p',
       name: 'demo',

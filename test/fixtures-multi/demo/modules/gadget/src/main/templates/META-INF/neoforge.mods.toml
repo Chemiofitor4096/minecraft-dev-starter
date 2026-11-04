@@ -1,0 +1,8 @@
+﻿modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "demogadget"
+version = "1.0.0"
+displayName = "Demo Gadget"

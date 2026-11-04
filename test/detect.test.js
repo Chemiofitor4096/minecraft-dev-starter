@@ -8,6 +8,7 @@ import { test } from 'node:test'
 import { detectProject } from '../src/lib/detect.js'
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
+const multi = join(dirname(fileURLToPath(import.meta.url)), 'fixtures-multi')
 const jdks = [
   { home: 'C:/fake/jdk8', version: '1.8.0_402', major: 8, source: 'release' },
   { home: 'C:/fake/jdk21', version: '21.0.7', major: 21, source: 'release' },
@@ -99,4 +100,34 @@ test('画像里带声明依赖：元数据的 depends 拉成列表', async () =>
     ['fabricloader:>=0.16.10', 'minecraft:~1.21.1'],
   )
   assert.equal(dependencies.catalogFile, null)
+})
+
+test('子模块工程：任务带模块前缀，Gradle 根指回聚合根', async () => {
+  const profile = await detectProject(join(multi, 'demo', 'modules', 'core'), { jdks })
+  assert.equal(profile.modulePath, 'modules/core')
+  assert.equal(profile.gradleRoot, join(multi, 'demo'))
+  assert.equal(profile.loader, 'neoforge')
+  assert.deepEqual(
+    profile.runTargets.map((target) => target.taskPath),
+    [':modules/core:runClient', ':modules/core:runData'],
+  )
+  assert.deepEqual(profile.runTargets.map((target) => target.module), ['modules/core', 'modules/core'])
+  // wrapper 继承自父工程
+  assert.equal(profile.gradleVersion, '9.5.0')
+  assert.ok(profile.evidence.some((entry) => entry.detail.includes('继承自父工程')))
+})
+
+test('子模块工程沿用父工程 .idea 的工程模型', async () => {
+  const profile = await detectProject(join(multi, 'demo', 'modules', 'gadget'), { jdks })
+  const idea = /** @type {Record<string, any>} */ (profile.idea)
+  assert.equal(idea.name, 'Demo-Multi')
+  // 只保留属于这个模块的运行配置
+  assert.equal(idea.runConfigurations, 1)
+})
+
+test('聚合根：没有自己的元数据时用 rootProject.name 当工程名', async () => {
+  const profile = await detectProject(join(multi, 'demo'), { jdks })
+  assert.equal(profile.modName, 'Demo-Multi')
+  assert.equal(profile.modId, undefined)
+  assert.ok(profile.evidence.some((entry) => entry.kind === 'aggregator'))
 })

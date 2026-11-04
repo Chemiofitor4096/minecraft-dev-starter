@@ -500,7 +500,8 @@ function ideaSummary(idea) {
 /**
  * @param {Array<Record<string, any>>} jdks
  */
-function dedupeByHome(jdks) {  /** @type {Map<string, Record<string, any>>} */
+function dedupeByHome(jdks) {
+  /** @type {Map<string, Record<string, any>>} */
   const seen = new Map()
   for (const jdk of jdks) {
     const home = String(jdk.home)
