@@ -7,7 +7,7 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
-## [Unreleased]
+## [0.1.11] — 2026-11-04
 
 ### Added
 
@@ -26,6 +26,8 @@ break installations that look unrelated.
 - An aggregator root is no longer listed as a project when its submodules are: its targets
   duplicated theirs.
 - `.idea` summaries for a submodule count only that module's run configurations.
+- Multi-module discovery does not require IntelliJ: `settings.gradle` includes are the primary module
+  source and `.idea` only adds modules the build file does not declare.
 
 ### Fixed
 
