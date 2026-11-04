@@ -64,6 +64,7 @@ node scripts/build-client.mjs     # 构建客户端（改 src/client 后必须�
 node scripts/build-client.mjs --watch
 node scripts/check-pack.mjs       # 发布前校验 npm 包内容（缺 lib/client.js、多带 test/ 都会失败）
 node scripts/scan-catalog.mjs     # 扫真实工程，输出识别结果表
+node scripts/inspect-project.mjs <工程目录>   # 摊开一个工程的证据 / .idea 模型 / 目标来源
 ```
 
 CI 在 `.github/workflows/ci.yml`：ubuntu / windows / macOS × Node 20/22/24 跑构建与测试，
