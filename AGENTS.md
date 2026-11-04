@@ -51,7 +51,7 @@ src/client/
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 156 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 158 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划与调研
 ```
 
@@ -308,6 +308,24 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
   `test/fixtures-multi`。
 
 156 个测试。
+
+### M17 IDE 工程模型的两处补读（2026-11-05）
+
+- **MC 版本**：iml 的 `McpModuleSettings.minecraftVersion` 是构建脚本之外唯一的独立佐证。
+  只在整个版本链都读不出来时兜底，证据标 `idea-mc`；能读出来时它只进 `.idea` 折叠区，不参与判定。
+- **外部存储库表**：`ExternalStorageConfigurationManager enabled="true"` 时 `.idea` 里没有
+  `libraries/`，库表在 `%LOCALAPPDATA%\JetBrains\<产品>\projects\<名字>.<hash>\external_build_system\project\libraries.xml`。
+  用同目录 `cache-state.xml` 里 `projectData.GRADLE` 的键（工程绝对路径）定位——**匹配不到就不读**，
+  宁可少读，也不能拿别的工程的库表顶上。摘要只报条数与"工程内 remap 产物"条数：loom 把 remap 后的
+  jar 放在 `.gradle/loom-cache/`，那些不在 `~/.gradle` 里，是"声明 → 真正编译用"之间唯一可查的对应。
+- 两条都是辅证：格式是 IDE 私有实现、按产品版本分目录、只反映最后一次 Gradle 同步。开关关掉时退回
+  `.idea/libraries/`，两个位置都读，读不到就放弃。
+- **`gradleJvm` 不进 JDK 选择**：它是构建 JVM，而且值是名字（`jbr-21`、`#JAVA_HOME`）不是路径；
+  解析成 home 还得读 IDEA 全局的 `jdk.table.xml`，收益不抵成本。面板只展示，不参与 `resolveJdk`。
+- 外部存储的测试用临时目录造 `cache-state.xml` + `libraries.xml`，不提交夹具——省掉"夹具被
+  `.gitignore` 吃掉"那类事故。
+
+158 个测试。
 
 ## 发布记录
 

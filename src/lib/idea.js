@@ -8,13 +8,19 @@
 import { readdir, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
 import { readText } from './text.js'
-import { attrOf, componentOf, findFirst, findAll, optionValue, parseXml, rootOf, textOf } from './xml.js'
+import { attrOf, childOf, componentOf, findFirst, findAll, optionValue, parseXml, rootOf, textOf } from './xml.js'
 
 /** IDE 工程目录名。 */
 export const IDEA_DIR = '.idea'
 
 const MAX_IML = 60
 const MAX_RUN_CONFIGURATIONS = 80
+/** 外部存储里的库表可能上千条，只留够做摘要的量。 */
+const MAX_LIBRARIES = 800
+/** `.idea/libraries` 目录里最多读多少个文件。 */
+const MAX_LIBRARY_FILES = 200
+/** 扫外部存储时最多记多少个工程的缓存目录。 */
+const MAX_EXTERNAL_PROJECTS = 400
 
 /** facet 的 `platformType` → loader。 */
 const PLATFORM_LOADERS = {
@@ -51,8 +57,18 @@ const RUN_NAME_HINTS = [
  * @property {string} name
  * @property {string[]} platforms
  * @property {string | undefined} srgType
+ * @property {string | undefined} minecraftVersion MC Development 插件写进 iml 的版本
  * @property {string[]} contentRoots
  * @property {string | undefined} gradlePath 相对工程根，`.` 是根模块
+ */
+
+/**
+ * @typedef {object} IdeasLibrarySummary
+ * @property {'project' | 'external'} storage project = `.idea/libraries`，external = IDE 的外部存储
+ * @property {string} file 库表位置（external 是文件，project 是目录）
+ * @property {number} count
+ * @property {number} local 指向 `$PROJECT_DIR$` 的条目数（loom 的 remap 产物）
+ * @property {string[]} samples group:artifact:version，最多 5 条
  */
 
 /**
@@ -75,11 +91,13 @@ const RUN_NAME_HINTS = [
  * @property {string | undefined} jdkName
  * @property {number | undefined} languageLevel
  * @property {number | undefined} bytecodeTarget
+ * @property {string | undefined} minecraftVersion
  * @property {string[]} gradleModules
  * @property {IdeaModule[]} modules
  * @property {IdeaRunConfiguration[]} runConfigurations
  * @property {string[]} platforms
  * @property {string[]} linkedProjects
+ * @property {IdeasLibrarySummary | undefined} libraries
  * @property {string[]} files
  */
 
@@ -97,9 +115,10 @@ export function resolveProjectDir(input) {
 /**
  * 读一个工程的 `.idea`；没有或读不到返回 undefined。
  * @param {string} input 工程根或 `.idea` 目录
+ * @param {{ externalRoots?: string[] }} [options] `externalRoots` 只给测试用，默认按平台推断
  * @returns {Promise<IdeaProject | undefined>}
  */
-export async function readIdeaProject(input) {
+export async function readIdeaProject(input, options = {}) {
   const projectDir = resolveProjectDir(input)
   if (projectDir === '') return undefined
   const dir = join(projectDir, IDEA_DIR)
@@ -128,6 +147,7 @@ export async function readIdeaProject(input) {
   const gradle = readGradleSettings(gradleXml === undefined ? undefined : parseXml(gradleXml), projectDir)
   const imlPaths = readImlPaths(modulesXml === undefined ? undefined : parseXml(modulesXml), projectDir).slice(0, MAX_IML)
   const modules = await readModules(imlPaths, projectDir, gradle.gradleModules)
+  const libraries = await readLibraries(dir, projectDir, options)
 
   return {
     dir,
@@ -138,11 +158,13 @@ export async function readIdeaProject(input) {
     jdkName: readJdkName(miscXml === undefined ? undefined : parseXml(miscXml)),
     languageLevel: readLanguageLevel(miscXml === undefined ? undefined : parseXml(miscXml)),
     bytecodeTarget: readBytecodeTarget(compilerXml === undefined ? undefined : parseXml(compilerXml)),
+    minecraftVersion: modules.map((module) => module.minecraftVersion).find((value) => value !== undefined),
     gradleModules: gradle.gradleModules,
     modules,
     runConfigurations: readRunConfigurations(workspaceXml === undefined ? undefined : parseXml(workspaceXml), projectDir),
     platforms: [...new Set(modules.flatMap((module) => module.platforms))].sort(),
     linkedProjects: gradle.linkedProjects,
+    libraries,
     files,
   }
 }
@@ -370,6 +392,7 @@ async function readModules(paths, projectDir, gradleModules) {
       name: imlName,
       platforms: [],
       srgType: undefined,
+      minecraftVersion: undefined,
       contentRoots: [],
       gradlePath: matchGradleModule(imlName, projectName, gradleModules),
     }
@@ -380,8 +403,12 @@ async function readModules(paths, projectDir, gradleModules) {
         if (value !== '' && !module.platforms.includes(value)) module.platforms.push(value)
       }
     }
-    const srgType = optionValue(componentOf(doc, 'McpModuleSettings'), 'srgType')
+    const mcp = componentOf(doc, 'McpModuleSettings')
+    const srgType = optionValue(mcp, 'srgType')
     if (srgType !== undefined) module.srgType = srgType
+    // MC Development 插件把当前同步的 MC 版本写在这里，是构建脚本之外唯一的独立佐证
+    const minecraftVersion = optionValue(mcp, 'minecraftVersion')
+    if (minecraftVersion !== undefined) module.minecraftVersion = minecraftVersion
     for (const content of findAll(doc, 'content')) {
       const url = expandIdeaPath(attrOf(content, 'url'), { projectDir, moduleDir: dirname(path) })
       if (url !== undefined && !module.contentRoots.includes(url)) module.contentRoots.push(url)
@@ -481,6 +508,175 @@ function stripRunDir(path) {
   const match = /^(.*)[\\/]runs?(?:[\\/].*)?$/i.exec(trimmed)
   if (match !== null && match[1] !== '') return match[1]
   return trimmed
+}
+
+/**
+ * 库表：`.idea/libraries` 优先，没有就查 IDE 的外部存储。
+ *
+ * 外部存储（`ExternalStorageConfigurationManager enabled="true"`）把库表放到用户目录下，
+ * 按 IDE 产品版本分目录、按 `<工程名>.<hash>` 命名。它比 `.idea` 更可信——内容是 IDE
+ * 按工程绝对路径生成的，克隆来的仓库伪造不了；但格式是私有实现，只作辅证，读不到就算了。
+ * @param {string} ideaDir
+ * @param {string} projectDir
+ * @param {{ externalRoots?: string[] }} options
+ * @returns {Promise<IdeasLibrarySummary | undefined>}
+ */
+async function readLibraries(ideaDir, projectDir, options) {
+  const localDir = join(ideaDir, 'libraries')
+  if (await isDirectory(localDir)) {
+    /** @type {LibraryEntry[]} */
+    const entries = []
+    for (const name of (await safeReaddir(localDir)).slice(0, MAX_LIBRARY_FILES)) {
+      if (!name.toLowerCase().endsWith('.xml')) continue
+      const text = await readText(join(localDir, name))
+      if (text === undefined) continue
+      entries.push(...parseLibraries(text))
+    }
+    return summarizeLibraries('project', localDir, entries)
+  }
+
+  const roots = options.externalRoots ?? defaultExternalRoots()
+  if (roots.length === 0) return undefined
+  const index = await externalLibraryIndex(roots)
+  const hit = index.get(normalizeFsPath(projectDir))
+  if (hit === undefined) return undefined
+  const file = join(hit.dir, 'external_build_system', 'project', 'libraries.xml')
+  const text = await readText(file)
+  if (text === undefined) return undefined
+  return summarizeLibraries('external', file, parseLibraries(text))
+}
+
+/**
+ * @typedef {{ group?: string, artifact?: string, version?: string, local: boolean }} LibraryEntry
+ */
+
+/**
+ * 各平台 JetBrains 外部存储的根。
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {NodeJS.Platform} [platform]
+ * @returns {string[]}
+ */
+export function defaultExternalRoots(env = process.env, platform = process.platform) {
+  if (platform === 'win32') return env.LOCALAPPDATA === undefined ? [] : [join(env.LOCALAPPDATA, 'JetBrains')]
+  if (platform === 'darwin') {
+    return env.HOME === undefined ? [] : [join(env.HOME, 'Library', 'Application Support', 'JetBrains')]
+  }
+  return env.HOME === undefined ? [] : [join(env.HOME, '.local', 'share', 'JetBrains')]
+}
+
+/** @type {Map<string, Promise<Map<string, { dir: string, product: string }>>>} */
+const externalIndexes = new Map()
+
+/**
+ * 工程绝对路径 → IDE 的缓存目录。一次扫描后缓存：扫工作区时每个工程都会问一次。
+ * @param {string[]} roots
+ * @returns {Promise<Map<string, { dir: string, product: string }>>}
+ */
+function externalLibraryIndex(roots) {
+  const key = roots.join('|')
+  const cached = externalIndexes.get(key)
+  if (cached !== undefined) return cached
+  const pending = buildExternalIndex(roots)
+  externalIndexes.set(key, pending)
+  return pending
+}
+
+/**
+ * @param {string[]} roots
+ * @returns {Promise<Map<string, { dir: string, product: string }>>}
+ */
+async function buildExternalIndex(roots) {
+  /** @type {Map<string, { dir: string, product: string }>} */
+  const index = new Map()
+  for (const root of roots) {
+    for (const product of await safeReaddir(root)) {
+      const projectsDir = join(root, product, 'projects')
+      if (!(await isDirectory(projectsDir))) continue
+      for (const entry of await safeReaddir(projectsDir)) {
+        if (index.size >= MAX_EXTERNAL_PROJECTS) return index
+        const dir = join(projectsDir, entry)
+        const state = await readText(join(dir, 'cache-state.xml'))
+        if (state === undefined) continue
+        for (const projectPath of gradleProjectPaths(state)) {
+          const key = normalizeFsPath(projectPath)
+          if (key !== '' && !index.has(key)) index.set(key, { dir, product })
+        }
+      }
+    }
+  }
+  return index
+}
+
+/**
+ * `cache-state.xml` 里 `projectData.GRADLE` 的键就是这个缓存属于哪个工程。
+ * 匹配不到就返回空——宁可少读，也不能拿别的工程的库表顶上。
+ * @param {string} text
+ * @returns {string[]}
+ */
+function gradleProjectPaths(text) {
+  const payload = textOf(componentOf(parseXml(text), 'ExternalSystemProjectTracker'))
+  if (payload === '') return []
+  try {
+    const parsed = JSON.parse(payload)
+    const gradle = parsed?.projectData?.GRADLE
+    return gradle !== null && typeof gradle === 'object' ? Object.keys(gradle) : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeFsPath(value) {
+  const normalized = String(value ?? '').replace(/\\/g, '/').replace(/\/+$/, '')
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+/**
+ * @param {string} text
+ * @returns {LibraryEntry[]}
+ */
+function parseLibraries(text) {
+  /** @type {LibraryEntry[]} */
+  const entries = []
+  for (const library of findAll(parseXml(text), 'library')) {
+    if (entries.length >= MAX_LIBRARIES) break
+    const properties = childOf(library, 'properties')
+    const classes = findAll(childOf(library, 'CLASSES'), 'root').map((node) => attrOf(node, 'url') ?? '')
+    entries.push({
+      group: attrOf(properties, 'groupId'),
+      artifact: attrOf(properties, 'artifactId'),
+      version: attrOf(properties, 'version'),
+      // loom 把 remap 产物放在工程内，这类 jar 不在 ~/.gradle 缓存里
+      local: classes.some((url) => url.includes('$PROJECT_DIR$')),
+    })
+  }
+  return entries
+}
+
+/**
+ * @param {'project' | 'external'} storage
+ * @param {string} file
+ * @param {LibraryEntry[]} entries
+ * @returns {IdeasLibrarySummary}
+ */
+function summarizeLibraries(storage, file, entries) {
+  /** @type {string[]} */
+  const samples = []
+  for (const entry of entries) {
+    if (entry.group === undefined || entry.artifact === undefined || entry.version === undefined) continue
+    samples.push(`${entry.group}:${entry.artifact}:${entry.version}`)
+    if (samples.length >= 5) break
+  }
+  return {
+    storage,
+    file,
+    count: entries.length,
+    local: entries.filter((entry) => entry.local).length,
+    samples,
+  }
 }
 
 /**

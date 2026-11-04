@@ -7,6 +7,20 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
+## [Unreleased]
+
+### Added
+
+- The IDE project model reports the Minecraft version written into the module files
+  (`McpModuleSettings`). It is used only when the build script yields no version, and is marked as
+  independent evidence rather than a correction.
+- The library table from IntelliJ's external storage: with
+  `ExternalStorageConfigurationManager enabled="true"` there is no `.idea/libraries`, so the
+  Gradle-synced `libraries.xml` under `%LOCALAPPDATA%\JetBrains\…\projects\<name>.<hash>\` is located
+  through the `cache-state.xml` project-path match. The summary reports how many entries exist and how
+  many are project-local remap products (loom caches, absent from `~/.gradle`). A project whose path
+  does not match is never given another project's table.
+
 ## [0.1.11] — 2026-11-04
 
 ### Added

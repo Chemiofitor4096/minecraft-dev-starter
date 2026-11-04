@@ -163,6 +163,14 @@ export async function detectProject(root, options = {}) {
     if (ownIdea.gradleRoot !== undefined && ownIdea.gradleRoot.toLowerCase() !== root.toLowerCase()) {
       evidence.push({ file: '.idea/gradle.xml', kind: 'idea-gradle', detail: `Gradle 工程根是 ${ownIdea.gradleRoot}` })
     }
+    if (ownIdea.libraries !== undefined) {
+      const { count, local } = ownIdea.libraries
+      evidence.push({
+        file: ownIdea.libraries.file,
+        kind: 'idea-libraries',
+        detail: `Gradle 同步的库表：${count} 条${local === 0 ? '' : `，其中 ${local} 条是工程内 remap 产物`}`,
+      })
+    }
   }
 
   // ── 模块展开 ────────────────────────────────────────────────────────
@@ -305,12 +313,23 @@ export async function detectProject(root, options = {}) {
   }
 
   // ── 版本 ────────────────────────────────────────────────────────────
-  const minecraftVersion =
+  let minecraftVersion =
     pickProperty(mergedProperties, ['minecraft_version', 'minecraftVersion', 'mc_version', 'mcVersion', 'version_minecraft']) ??
     minecraftFromNeoVersion(pickProperty(mergedProperties, ['neo_version', 'neoVersion'])) ??
     (await versionFromMetadata(allMetadata)) ??
     parseMinecraftVersion(gradleText ?? '', mergedProperties) ??
     pickProperty(mergedProperties, ['parchment_minecraft_version'])
+
+  // 构建脚本一个版本都读不出来时，用 IDE 工程模型的 McpModuleSettings.minecraftVersion 兜底。
+  // 它是 MC Development 插件同步进来的结果，只是佐证，不参与纠正。
+  if (minecraftVersion === undefined && idea?.minecraftVersion !== undefined) {
+    minecraftVersion = idea.minecraftVersion
+    evidence.push({
+      file: '.idea',
+      kind: 'idea-mc',
+      detail: `构建脚本没读出 MC 版本，按 IDE 工程模型里的 ${idea.minecraftVersion} 判定`,
+    })
+  }
 
   const loaderVersion = pickProperty(mergedProperties, [
     'neo_version',
@@ -498,6 +517,8 @@ export async function detectProject(root, options = {}) {
       runConfigurations: ideaForProfile.runConfigurations.length,
       platforms: ideaForProfile.platforms,
       linkedProjects: ideaForProfile.linkedProjects,
+      ...(ideaForProfile.minecraftVersion === undefined ? {} : { minecraftVersion: ideaForProfile.minecraftVersion }),
+      ...(ideaForProfile.libraries === undefined ? {} : { libraries: ideaForProfile.libraries }),
       files: ideaForProfile.files,
     },
     modules: modules.map((module) => ({

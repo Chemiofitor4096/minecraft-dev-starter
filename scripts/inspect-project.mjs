@@ -55,6 +55,13 @@ if (profile.idea === undefined) {
   if (idea.gradleRoot !== undefined && idea.gradleRoot !== root) line('  Gradle 根', idea.gradleRoot)
   line('  构建 JVM', idea.gradleJvm ?? '—')
   line('  工程 JDK', `${idea.jdkName ?? '—'}${idea.languageLevel === undefined ? '' : `（languageLevel ${idea.languageLevel}）`}`)
+  if (idea.minecraftVersion !== undefined) line('  MC 版本', idea.minecraftVersion)
+  if (idea.libraries !== undefined) {
+    const where = idea.libraries.storage === 'external' ? '外部存储' : '.idea/libraries'
+    const local = idea.libraries.local > 0 ? `（${idea.libraries.local} 条本地 remap）` : ''
+    line('  库表', `${where} · ${idea.libraries.count} 条${local}`)
+    line('  库表位置', idea.libraries.file)
+  }
   line('  字节码', idea.bytecodeTarget ?? '—')
   line('  模块', `${idea.modules} 个（${idea.imls} 个 iml）`)
   line('  运行配置', `${idea.runConfigurations} 个`)

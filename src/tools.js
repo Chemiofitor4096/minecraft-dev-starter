@@ -519,6 +519,7 @@ export function applyTools(ctx, deps) {
                 gradleRoot: { type: 'string' },
                 gradleJvm: { type: 'string' },
                 jdkName: { type: 'string' },
+                minecraftVersion: { type: 'string', description: 'MC Development 插件同步进 iml 的版本，只作佐证' },
                 languageLevel: { type: 'integer' },
                 bytecodeTarget: { type: 'integer' },
                 modules: { type: 'integer', description: 'Gradle 链接进来的模块数（含根）' },
@@ -526,6 +527,16 @@ export function applyTools(ctx, deps) {
                 runConfigurations: { type: 'integer', description: 'IDE 里跑过的运行配置数' },
                 platforms: { type: 'array', items: { type: 'string' }, description: 'iml 里 minecraft facet 的 platformType 合集' },
                 linkedProjects: { type: 'array', items: { type: 'string' }, description: '复合构建里链接到的其它 Gradle 工程' },
+                libraries: {
+                  type: 'object',
+                  additionalProperties: false,
+                  description: 'Gradle 同步出的库表（.idea/libraries 或 IDE 外部存储）',
+                  properties: {
+                    storage: { type: 'string', enum: ['project', 'external'], required: true },
+                    count: { type: 'integer', required: true },
+                    local: { type: 'integer', required: true, description: '指向工程内 remap 产物的条数' },
+                  },
+                },
               },
             },
             java: {
@@ -627,7 +638,7 @@ export function applyTools(ctx, deps) {
           const idea = /** @type {Record<string, any>} */ (profile.idea)
           /** @type {Record<string, any>} */
           const compact = { name: String(idea.name ?? ''), dir: String(idea.dir ?? '') }
-          for (const key of ['gradleRoot', 'gradleJvm', 'jdkName']) {
+          for (const key of ['gradleRoot', 'gradleJvm', 'jdkName', 'minecraftVersion']) {
             if (typeof idea[key] === 'string' && idea[key] !== '') compact[key] = idea[key]
           }
           for (const key of ['languageLevel', 'bytecodeTarget', 'modules', 'imls', 'runConfigurations']) {
@@ -635,6 +646,13 @@ export function applyTools(ctx, deps) {
           }
           if (Array.isArray(idea.platforms) && idea.platforms.length > 0) compact.platforms = idea.platforms
           if (Array.isArray(idea.linkedProjects) && idea.linkedProjects.length > 0) compact.linkedProjects = idea.linkedProjects
+          if (idea.libraries !== null && typeof idea.libraries === 'object') {
+            compact.libraries = {
+              storage: idea.libraries.storage,
+              count: idea.libraries.count,
+              local: idea.libraries.local,
+            }
+          }
           value.idea = compact
         }
         if (profile.minecraftVersion !== undefined && profile.minecraftVersion !== '') value.minecraftVersion = profile.minecraftVersion
@@ -707,6 +725,7 @@ function targetSourceText(target) {
 function ideaText(idea) {
   const parts = [String(idea.name ?? ''), String(idea.dir ?? '')]
   if (typeof idea.jdkName === 'string' && idea.jdkName !== '') parts.push(`JDK ${idea.jdkName}`)
+  if (typeof idea.minecraftVersion === 'string' && idea.minecraftVersion !== '') parts.push(`MC ${idea.minecraftVersion}`)
   if (typeof idea.languageLevel === 'number') parts.push(`languageLevel ${idea.languageLevel}`)
   if (typeof idea.modules === 'number') parts.push(`${idea.modules} 个模块`)
   if (typeof idea.runConfigurations === 'number') parts.push(`${idea.runConfigurations} 个运行配置`)

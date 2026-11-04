@@ -190,12 +190,16 @@ export function DetailTab() {
               : []),
             ['构建 JVM', text(idea.gradleJvm)],
             ['工程 JDK', text(idea.jdkName)],
+            ...(typeof idea.minecraftVersion === 'string' && idea.minecraftVersion !== ''
+              ? [['MC 版本', idea.minecraftVersion]]
+              : []),
             [
               'Java',
               `languageLevel ${text(idea.languageLevel)} · 字节码 ${text(idea.bytecodeTarget)}`,
             ],
             ['模块', `${text(idea.modules)} 个（${text(idea.imls)} 个 iml）`],
             ['运行配置', `${text(idea.runConfigurations)} 个`],
+            ...(idea.libraries === undefined || idea.libraries === null ? [] : [['库表', librariesText(idea.libraries)]]),
             ...(Array.isArray(idea.platforms) && idea.platforms.length > 0 ? [['facet 平台', idea.platforms.join(' / ')]] : []),
             ...(Array.isArray(idea.linkedProjects) && idea.linkedProjects.length > 0
               ? [['链接工程', idea.linkedProjects.join('、')]]
@@ -495,6 +499,18 @@ function ideaSummary(idea) {
   if (typeof idea.jdkName === 'string' && idea.jdkName !== '') parts.push(idea.jdkName)
   if (typeof idea.runConfigurations === 'number') parts.push(`${idea.runConfigurations} 个运行配置`)
   return parts.join(' · ')
+}
+
+/**
+ * 库表一行摘要：位置 + 条数 + 有多少是工程内的 remap 产物。
+ * @param {Record<string, any>} libraries
+ * @returns {string}
+ */
+function librariesText(libraries) {
+  const where = libraries.storage === 'external' ? '外部存储' : '.idea/libraries'
+  const count = typeof libraries.count === 'number' ? libraries.count : 0
+  const local = typeof libraries.local === 'number' && libraries.local > 0 ? `，${libraries.local} 条本地 remap` : ''
+  return `${where} · ${count} 条${local}`
 }
 
 /**

@@ -35,6 +35,60 @@ test('iml 的 minecraft facet 给出平台，并与 Gradle 模块路径对上', 
   )
 })
 
+test('iml 的 McpModuleSettings 给出 MC 版本（构建脚本之外的独立佐证）', async () => {
+  const idea = await readIdeaProject(demo)
+  assert.ok(idea !== undefined)
+  assert.equal(idea.minecraftVersion, '1.21.1')
+  assert.ok(idea.modules.every((module) => module.minecraftVersion === '1.21.1'))
+})
+
+test('库表在 IDE 外部存储里时按 cache-state 的工程路径对上', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mcdev-libs-'))
+  try {
+    const projectDir = join(scratch, 'project')
+    const cacheDir = join(scratch, 'jetbrains', 'IntelliJIdea2026.1', 'projects', 'project.abc123')
+    await mkdir(join(projectDir, '.idea'), { recursive: true })
+    await mkdir(join(cacheDir, 'external_build_system', 'project'), { recursive: true })
+    await writeFile(join(projectDir, '.idea', 'misc.xml'), '<project><component name="ProjectRootManager" project-jdk-name="jbr-21" /></project>')
+    const projectKey = projectDir.replace(/\\/g, '/')
+    await writeFile(
+      join(cacheDir, 'cache-state.xml'),
+      '<project version="4"><component name="ExternalSystemProjectTracker"><![CDATA['
+        + `{"projectData":{"GRADLE":{"${projectKey}":{"settingsTracker":{"isDirty":false}}}}}`
+        + ']]></component></project>',
+    )
+    await writeFile(
+      join(cacheDir, 'external_build_system', 'project', 'libraries.xml'),
+      '<component name="libraryTable">'
+        + '<library name="Gradle: com.google.guava:guava:32.1.2-jre" type="java-imported">'
+        + '<properties groupId="com.google.guava" artifactId="guava" version="32.1.2-jre" />'
+        + '<CLASSES><root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.guava/guava/32.1.2-jre/x/guava.jar!/" /></CLASSES>'
+        + '</library>'
+        + '<library name="Gradle: net.fabricmc.fabric-api:fabric-api:0.116.7+1.21.1" type="java-imported">'
+        + '<properties groupId="net.fabricmc.fabric-api" artifactId="fabric-api" version="0.116.7+1.21.1" />'
+        + '<CLASSES><root url="jar://$PROJECT_DIR$/.gradle/loom-cache/remapped_mods/x/fabric-api.jar!/" /></CLASSES>'
+        + '</library>'
+        + '</component>',
+    )
+
+    const idea = await readIdeaProject(projectDir, { externalRoots: [join(scratch, 'jetbrains')] })
+    assert.ok(idea !== undefined)
+    assert.equal(idea.libraries?.storage, 'external')
+    assert.equal(idea.libraries?.count, 2)
+    assert.equal(idea.libraries?.local, 1, 'loom 的 remap 产物要单独计数')
+    assert.ok(String(idea.libraries?.file).endsWith('libraries.xml'))
+
+    // 别的工程不能被这棵缓存冒领
+    const other = join(scratch, 'other')
+    await mkdir(join(other, '.idea'), { recursive: true })
+    await writeFile(join(other, '.idea', 'misc.xml'), '<project />')
+    const otherIdea = await readIdeaProject(other, { externalRoots: [join(scratch, 'jetbrains')] })
+    assert.equal(otherIdea?.libraries, undefined)
+  } finally {
+    await rm(scratch, { recursive: true, force: true })
+  }
+})
+
 test('运行配置按工作目录归到模块，default 的配置不算', async () => {
   const idea = await readIdeaProject(demo)
   assert.ok(idea !== undefined)
