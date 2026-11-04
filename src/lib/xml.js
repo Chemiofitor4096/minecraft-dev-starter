@@ -170,10 +170,11 @@ function parseAttributes(raw) {
 
 /**
  * 文档元素（根节点的第一个子元素）。
- * @param {XmlNode} node
+ * @param {XmlNode | undefined} node
  * @returns {XmlNode | undefined}
  */
 export function rootOf(node) {
+  if (node === undefined) return undefined
   return node.name === '#document' ? node.children[0] : node
 }
 
@@ -253,12 +254,12 @@ export function findAll(node, name) {
 
 /**
  * `<component name="X">`。
- * @param {XmlNode} node 文档根或任意节点
+ * @param {XmlNode | undefined} node 文档根或任意节点
  * @param {string} name
  * @returns {XmlNode | undefined}
  */
 export function componentOf(node, name) {
-  return findAll(rootOf(node) ?? node, 'component').find((entry) => entry.attrs.name === name)
+  return findAll(rootOf(node), 'component').find((entry) => entry.attrs.name === name)
 }
 
 /**

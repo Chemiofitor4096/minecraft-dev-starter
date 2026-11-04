@@ -337,7 +337,11 @@ function readImlPaths(doc, projectDir) {
   const paths = []
   for (const entry of findAll(componentOf(doc, 'ProjectModuleManager'), 'module')) {
     const path = expandIdeaPath(attrOf(entry, 'filepath') ?? attrOf(entry, 'fileurl'), { projectDir })
-    if (path !== undefined && !paths.includes(path)) paths.push(path)
+    if (path === undefined || paths.includes(path)) continue
+    // iml 必须在工程目录内。`.idea/modules.xml` 是仓库里的文件，克隆来的工程
+    // 可以写任意绝对路径（含 $USER_HOME$），越界的直接丢，连读都不读。
+    if (toProjectRelative(path, projectDir) === undefined) continue
+    paths.push(path)
   }
   return paths
 }

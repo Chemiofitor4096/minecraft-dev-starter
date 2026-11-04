@@ -441,6 +441,10 @@ export async function detectProject(root, options = {}) {
 
   const kind = classify({ modules, loader, loaders, metadataKind })
   const confidence = scoreConfidence({ loader, metadataKind, configuredJavaHome })
+  // 子模块工程的 .idea 摘要只算属于这个模块的运行配置；聚合根照旧看全部
+  const ideaForProfile = idea === undefined || modulePath === undefined
+    ? idea
+    : { ...idea, runConfigurations: idea.runConfigurations.filter((config) => config.modulePath === modulePath) }
   // 声明的依赖：只读窗口，用来核对"agent 说加好了"到底写进去没有
   const catalog = catalogText === undefined ? [] : parseVersionCatalog(catalogText)
   const buildDependencies = resolveCatalogRefs(parseBuildDependencies(gradleText ?? '', gradleFile ?? 'build.gradle'), catalog)
@@ -481,20 +485,20 @@ export async function detectProject(root, options = {}) {
     gradleVersion,
     wrapper: gradleVersion !== undefined,
     // IDE 工程模型：只给"读到了什么"的摘要，原始内容不往外传（面板与工具都用不上）
-    idea: idea === undefined ? undefined : {
-      dir: idea.dir,
-      name: idea.projectName ?? basename(root),
-      gradleRoot: idea.gradleRoot ?? root,
-      gradleJvm: idea.gradleJvm,
-      jdkName: idea.jdkName,
-      languageLevel: idea.languageLevel,
-      bytecodeTarget: idea.bytecodeTarget,
-      modules: idea.gradleModules.length,
-      imls: idea.modules.length,
-      runConfigurations: idea.runConfigurations.length,
-      platforms: idea.platforms,
-      linkedProjects: idea.linkedProjects,
-      files: idea.files,
+    idea: ideaForProfile === undefined ? undefined : {
+      dir: ideaForProfile.dir,
+      name: ideaForProfile.projectName ?? basename(root),
+      gradleRoot: ideaForProfile.gradleRoot ?? root,
+      gradleJvm: ideaForProfile.gradleJvm,
+      jdkName: ideaForProfile.jdkName,
+      languageLevel: ideaForProfile.languageLevel,
+      bytecodeTarget: ideaForProfile.bytecodeTarget,
+      modules: ideaForProfile.gradleModules.length,
+      imls: ideaForProfile.modules.length,
+      runConfigurations: ideaForProfile.runConfigurations.length,
+      platforms: ideaForProfile.platforms,
+      linkedProjects: ideaForProfile.linkedProjects,
+      files: ideaForProfile.files,
     },
     modules: modules.map((module) => ({
       path: module.path,
