@@ -90,8 +90,8 @@ export async function detectProject(root, options = {}) {
   const idea = ownIdea ?? aggregator?.idea
   /** 本工程在父工程里的模块路径，只有子模块工程才有 */
   const modulePath = aggregator?.modulePath
-  /** 任务路径前缀：子模块工程要跑 `:modules/X:runClient` */
-  const taskPrefix = modulePath === undefined ? '' : `:${modulePath}`
+  /** 任务路径前缀：子模块工程要跑 `:modules:X:runClient`（Gradle 用冒号分层） */
+  const taskPrefix = modulePath === undefined ? '' : `:${modulePath.replace(/[\\/]+/g, ':')}`
   /**
    * 模块在 Gradle 里的位置：子模块工程是 `modules/X`，聚合根工程是模块自身路径
    * @param {string} path
@@ -105,7 +105,7 @@ export async function detectProject(root, options = {}) {
    * @returns {string}
    */
   const taskPathOf = (path, task) => {
-    const scope = `${taskPrefix}${path === '.' ? '' : `:${path}`}`
+    const scope = `${taskPrefix}${path === '.' ? '' : `:${path.replace(/[\\/]+/g, ':')}`}`
     return scope === '' ? task : `${scope}:${task}`
   }
 
