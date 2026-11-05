@@ -361,6 +361,9 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
 - `0.1.11` → M16：`.idea` 工程模型（模块清单 / facet / 工程 JDK / 运行配置）、多模块工程子模块各自成工程、
   任务带模块前缀并在聚合根执行、目标带 `source`、详情页展示 IDE 模型；同时带上 CI/打包守卫、
   CHANGELOG 与 SECURITY.md（46 个文件，451 KiB）。
+- `0.1.12` → M17 + M18：iml 的 `McpModuleSettings.minecraftVersion` 与 IDE 外部存储的库表；
+  面板按「能不能跑」重排（状态条 / 目标下拉 / 上次结论），浮层分组、搜索与同名补目录名
+  （46 个文件，487 KiB）。
 
 发版注意：
 
