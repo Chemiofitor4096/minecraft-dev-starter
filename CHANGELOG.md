@@ -7,7 +7,7 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
-## [Unreleased]
+## [0.1.12] — 2026-11-05
 
 ### Added
 
