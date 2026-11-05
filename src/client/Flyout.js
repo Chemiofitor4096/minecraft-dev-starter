@@ -2,24 +2,32 @@
  * 工程浮层。两种形态：
  *
  * - **多工程**：三层结构——表头固定、工程列表滚动、选中工程的目标固定在底部。
- *   列表每行高度恒定，选工程只改底部，不会"点一下整块跳一下"。
+ *   列表按"能不能跑"分组：可运行的在上，识别不出 loader / 没有目标的收进"其他"，
+ *   默认折叠。工程多了给搜索框，重名工程补目录名区分。
  * - **单工程**（更常见）：跳过列表，表头直接显示工程名与 loader/版本，底下就是目标；
  *   少一层选择，也少一次点击。
  *
  * @module minecraft-dev-starter/client/Flyout
  */
 
+import { useState } from 'react'
 import { h } from './h.js'
-import { kindLabel, PANEL_TITLE, projectSubtitle, projectTitle } from './format.js'
-import { IconChevronRight, IconRefresh } from './icons.js'
+import { kindLabel, listRows, loaderLabel, PANEL_TITLE, projectSubtitle, projectTitle } from './format.js'
+import { IconChevronDown, IconChevronRight, IconRefresh } from './icons.js'
 import { groupByModule, selectedTarget, targetKey } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { loadScan, selectTarget, store, useLaunches, useStoreState } from './state.js'
 import { openDetailTab } from './runtime.js'
 
+/** 工程多到这个数才给搜索框：再少的话列表一眼扫完，输入框只是噪音。 */
+const SEARCH_THRESHOLD = 8
+
 export function Flyout() {
   const state = useStoreState()
   const launches = useLaunches(1500)
+  const [query, setQuery] = useState('')
+  const [showOthers, setShowOthers] = useState(false)
+
   const projects = state.scan?.projects ?? []
   const current = projects.find((project) => project.root === state.selectedRoot) ?? projects[0]
   const single = projects.length === 1
@@ -28,6 +36,18 @@ export function Flyout() {
       (entry.status === 'starting' || entry.status === 'running') &&
       String(entry.root).toLowerCase() === String(current?.root ?? '').toLowerCase(),
   )
+
+  const needle = query.trim().toLowerCase()
+  const matches = (project) =>
+    needle === '' ||
+    [project.root, project.name, project.modName, loaderLabel(project.loader), project.minecraftVersion]
+      .filter((value) => value !== undefined)
+      .some((value) => String(value).toLowerCase().includes(needle))
+
+  const visible = projects.filter(matches)
+  const runnable = visible.filter((project) => (project.runTargets ?? []).length > 0)
+  const others = visible.filter((project) => (project.runTargets ?? []).length === 0)
+  const othersOpen = showOthers || needle !== ''
 
   return h(
     'div',
@@ -58,41 +78,74 @@ export function Flyout() {
         ? h(
             'div',
             { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
-            h('div', { className: 'mcdev-title', title: projectTitle(current) }, projectTitle(current)),
+            h('div', { className: 'mcdev-title', title: String(current.root) }, projectTitle(current)),
             h('div', { className: 'mcdev-sub' }, projectSubtitle(current)),
             h('div', { className: 'mcdev-muted mcdev-code mcdev-ellipsis', title: current.root }, current.root),
           )
-        : h('div', { className: 'mcdev-muted mcdev-code mcdev-ellipsis', title: state.scan?.root ?? '' }, state.scan?.root ?? '—'),
+        : h(
+            'div',
+            { className: 'mcdev-row', style: { justifyContent: 'space-between', gap: 8 } },
+            h('div', { className: 'mcdev-muted mcdev-code mcdev-ellipsis', title: state.scan?.root ?? '' }, state.scan?.root ?? '—'),
+            projects.length === 0 ? undefined : h('span', { className: 'mcdev-count' }, `${projects.length} 个工程`),
+          ),
       state.error === undefined ? undefined : h('div', { className: 'mcdev-error' }, state.error),
       launches.error === undefined ? undefined : h('div', { className: 'mcdev-error' }, launches.error),
     ),
 
-    // ② 列表：只在多工程时出现；每行只有名字与 loader/版本，高度恒定
+    // ② 列表：只在多工程时出现
     single
       ? undefined
       : h(
-      'div',
-      { className: 'mcdev-flyout-list' },
-      projects.length === 0
-        ? state.loading
-          ? h(Skeleton, { rows: 3, hint: '正在扫描工作区…' })
-          : h('div', { className: 'mcdev-hint', style: { padding: '10px 4px' } }, '没有找到 Gradle 工程')
-        : projects.map((project) =>
-            h(
-              'button',
-              {
-                key: project.root,
-                type: 'button',
-                className: 'mcdev-list-row',
-                'data-current': project.root === current?.root ? 'true' : 'false',
-                title: `${project.root}\n${kindLabel(project.kind)}`,
-                onClick: () => store.set({ selectedRoot: project.root }),
-              },
-              h('span', { className: 'mcdev-list-name' }, project.modName ?? project.name ?? project.root),
-              h('span', { className: 'mcdev-list-meta' }, projectSubtitle(project)),
-            ),
-          ),
-    ),
+          'div',
+          { className: 'mcdev-flyout-list' },
+          projects.length === 0
+            ? state.loading
+              ? h(Skeleton, { rows: 3, hint: '正在扫描工作区…' })
+              : h('div', { className: 'mcdev-hint', style: { padding: '10px 4px' } }, '没有找到 Gradle 工程')
+            : [
+                projects.length > SEARCH_THRESHOLD
+                  ? h('input', {
+                      key: 'search',
+                      className: 'mcdev-search',
+                      type: 'search',
+                      placeholder: '按名字、loader 或路径过滤',
+                      value: query,
+                      onChange: (event) => setQuery(event.target.value),
+                    })
+                  : undefined,
+                runnable.length === 0
+                  ? undefined
+                  : h(
+                      'div',
+                      { key: 'runnable', className: 'mcdev-group' },
+                      h('div', { className: 'mcdev-group-head' }, h('span', undefined, '可运行'), h('span', { className: 'mcdev-count' }, runnable.length)),
+                      rows(runnable, current),
+                    ),
+                others.length === 0
+                  ? undefined
+                  : h(
+                      'div',
+                      { key: 'others', className: 'mcdev-group' },
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'mcdev-group-head',
+                          'data-toggle': 'true',
+                          title: '识别不出 loader 或没有可运行目标',
+                          onClick: () => setShowOthers(!showOthers),
+                        },
+                        h('span', { className: 'mcdev-icon' }, h(othersOpen ? IconChevronDown : IconChevronRight, { size: 12 })),
+                        h('span', undefined, '其他'),
+                        h('span', { className: 'mcdev-count' }, others.length),
+                      ),
+                      othersOpen ? rows(others, current) : undefined,
+                    ),
+                visible.length === 0
+                  ? h('div', { key: 'empty', className: 'mcdev-hint', style: { padding: '10px 4px' } }, '没有匹配的工程')
+                  : undefined,
+              ],
+        ),
 
     // ③ 选择区：选中工程的目标，位置固定
     h(
@@ -130,6 +183,34 @@ export function Flyout() {
             ),
             renderTargets(current, state.selection, running !== undefined),
           ],
+    ),
+  )
+}
+
+/**
+ * 一组工程行；同名工程补目录名。
+ * @param {Array<Record<string, any>>} projects
+ * @param {Record<string, any> | undefined} current
+ */
+function rows(projects, current) {
+  return listRows(projects).map(({ project, title, suffix }) =>
+    h(
+      'button',
+      {
+        key: project.root,
+        type: 'button',
+        className: 'mcdev-list-row',
+        'data-current': project.root === current?.root ? 'true' : 'false',
+        title: `${project.root}\n${kindLabel(project.kind)}`,
+        onClick: () => store.set({ selectedRoot: project.root }),
+      },
+      h(
+        'span',
+        { className: 'mcdev-list-name' },
+        h('span', { className: 'mcdev-ellipsis' }, title),
+        suffix === '' ? undefined : h('span', { className: 'mcdev-list-suffix' }, suffix),
+      ),
+      h('span', { className: 'mcdev-list-meta' }, projectSubtitle(project) || loaderLabel(project.loader)),
     ),
   )
 }

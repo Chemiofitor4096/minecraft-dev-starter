@@ -421,6 +421,72 @@ export const CSS = `
 .mcdev-skeleton-row:nth-child(2) { width: 72%; }
 .mcdev-skeleton-row:nth-child(3) { width: 46%; }
 
+/* ── 详情页：头部标签 + 状态条 + 运行行 ──────────────────────────── */
+.mcdev-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.mcdev-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxxs-11);
+}
+.mcdev-chip[data-tone="ok"] { color: var(--dsw-alias-label-primary); }
+.mcdev-chip[data-tone="warn"] {
+  color: var(--dsw-alias-state-warn-primary);
+  border-color: var(--dsw-alias-state-warn-primary);
+}
+.mcdev-status { display: flex; flex-wrap: wrap; gap: 6px; padding: 9px 0 1px; }
+
+.mcdev-runline { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.mcdev-runline .mcdev-select { max-width: none; }
+.mcdev-grow { flex: 1; min-width: 0; }
+.mcdev-lastrun {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  margin-top: 7px;
+  font: var(--dsw-font-xxxs-11);
+}
+.mcdev-verdict[data-tone="ok"] { color: var(--dsw-alias-state-success-primary); }
+.mcdev-verdict[data-tone="error"] { color: var(--dsw-alias-state-error-primary); }
+.mcdev-verdict[data-tone="muted"] { color: var(--dsw-alias-label-secondary); }
+
+/* ── 浮层列表：分组 + 搜索 ──────────────────────────────────────── */
+.mcdev-search {
+  width: 100%;
+  height: 24px;
+  margin: 2px 0 6px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xxxs-11);
+}
+.mcdev-group { display: flex; flex-direction: column; }
+.mcdev-group + .mcdev-group { margin-top: 4px; }
+.mcdev-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xxxs-strong-11);
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+.mcdev-group-head[data-toggle="true"] { cursor: pointer; }
+.mcdev-group-head[data-toggle="true"]:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.mcdev-list-suffix { margin-left: 6px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+
 @media (prefers-reduced-motion: reduce) {
   .mcdev-flyout,
   .mcdev-dot[data-pulse="true"],

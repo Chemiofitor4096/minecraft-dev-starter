@@ -21,6 +21,20 @@ break installations that look unrelated.
   many are project-local remap products (loom caches, absent from `~/.gradle`). A project whose path
   does not match is never given another project's table.
 
+### Changed
+
+- The Mod Dev panel is organised around "can it run": header chips for loader / version / kind, a
+  status strip (state, Gradle wrapper, JDK), one target picker next to the start button, and the last
+  run's verdict directly under it. The IDE model, the module table and the confidence score moved
+  into a collapsible "诊断" section — they explain a conclusion, they should not fill the screen.
+- The project flyout groups entries by runnable / other (collapsed), offers a filter once there are
+  more than eight projects, and appends the directory name when two projects share a title.
+
+### Fixed
+
+- A mod name that is still an unresolved Gradle placeholder (`${mod_name}`) is displayed as the
+  directory name instead of the raw placeholder.
+
 ## [0.1.11] — 2026-11-04
 
 ### Added

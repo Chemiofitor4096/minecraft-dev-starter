@@ -98,12 +98,56 @@ export function capsuleLabel(projects, selectedRoot) {
 }
 
 /**
+ * 未解析的 Gradle 占位符（`${mod_name}`、`${version}`）：mods.toml 里常见，
+ * 直接显示出来比显示目录名更没有信息量。
+ */
+const PLACEHOLDER = /\$\{[^}]+\}/
+
+/**
+ * 工程目录名。
+ * @param {string} root
+ * @returns {string}
+ */
+export function basenameOf(root) {
+  const parts = String(root ?? '').split(/[\\/]+/).filter((part) => part !== '')
+  return parts.length === 0 ? String(root ?? '') : parts[parts.length - 1]
+}
+
+/**
  * @param {Record<string, any> | undefined} project
  * @returns {string}
  */
 export function projectTitle(project) {
   if (project === undefined) return '—'
-  return project.modName ?? project.name ?? project.root
+  const name = project.name ?? project.root
+  const modName = project.modName
+  // 占位符没解析出来时退回目录名——它至少是唯一的，而且能对上工作区
+  if (typeof modName === 'string' && modName !== '' && !PLACEHOLDER.test(modName)) return modName
+  return String(name ?? project.root ?? '—')
+}
+
+/**
+ * 工程列表的显示名：同名时补上目录名，否则两行 "Burst Door Open" 无法区分。
+ * @param {Array<Record<string, any>>} projects
+ * @returns {Array<{ project: Record<string, any>, title: string, suffix: string }>}
+ */
+export function listRows(projects) {
+  /** @type {Map<string, number>} */
+  const counts = new Map()
+  for (const project of projects) {
+    const title = projectTitle(project)
+    counts.set(title, (counts.get(title) ?? 0) + 1)
+  }
+  return projects.map((project) => {
+    const title = projectTitle(project)
+    const duplicated = (counts.get(title) ?? 0) > 1
+    return {
+      project,
+      title,
+      // 重名的才补目录名，其余保持干净
+      suffix: duplicated ? basenameOf(String(project.root)) : '',
+    }
+  })
 }
 
 /**

@@ -51,7 +51,7 @@ src/client/
   LogTab.js           日志标签（历史、跟随、归因）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 158 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 160 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划与调研
 ```
 
@@ -326,6 +326,19 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
   `.gitignore` 吃掉"那类事故。
 
 158 个测试。
+
+### M18 面板重排（2026-11-05）
+
+- **Mod Dev 页按"能不能跑"排序**：头部标签（loader / 版本 / 类型）→ 状态条（状态 / wrapper / JDK）
+  → 运行（目标下拉 + 上次结论）→ 构建环境 → 折叠（依赖 / 证据 / 诊断）。
+  IDE 模型、模块表、可信度进「诊断」——它们是排查用的，不该占首屏。
+  目标只在一处出现：旧的"运行里一行目标 + 下面再一张目标表"是同一件事说了两遍，删掉。
+- **浮层按可运行性分组**：可运行在上，「其他」默认折叠；工程超过 8 个给搜索框；
+  同名工程补目录名（`Burst Door Open` 出现两次时靠它区分）。
+- **占位符不显示**：`${mod_name}` 这类未解析的 Gradle 占位符退回目录名——它至少唯一、能对上工作区。
+- 字号仍然只有 11/12 两档 token，层级靠间距、留白和状态色做，不新造尺寸。
+
+160 个测试。
 
 ## 发布记录
 
