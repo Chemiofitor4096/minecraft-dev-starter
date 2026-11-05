@@ -36,6 +36,15 @@ test('Windows 下 gradlew 命令带正确的引号与 verbatim 标记', () => {
   assert.equal(command.cwd, 'C:\\Projects\\demo')
 })
 
+test('任务路径白名单接受 Gradle 的冒号分层，拒绝文件路径式斜杠', () => {
+  // 聚合工程的子模块任务长这样：:modules:CTNH-Core:runClient
+  assert.equal(TASK_PATH_PATTERN.test(':modules:CTNH-Core:runClient'), true)
+  assert.equal(TASK_PATH_PATTERN.test(':CTNH-Core:runClient'), true)
+  assert.equal(TASK_PATH_PATTERN.test('runClient'), true)
+  // 斜杠是文件路径写法，Gradle 不认
+  assert.equal(TASK_PATH_PATTERN.test(':modules/CTNH-Core:runClient'), false)
+})
+
 test('POSIX 下直接调用 wrapper', () => {
   const command = gradlewCommand({ platform: 'linux', projectDir: '/home/u/demo', taskPath: 'runClient' })
   assert.deepEqual(command.argv, ['/home/u/demo/gradlew', 'runClient'])
