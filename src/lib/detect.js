@@ -25,9 +25,10 @@ import {
   parseWrapperVersion,
 } from './gradle.js'
 import { dependencyRanges, locateMetadata, primaryMetadata } from './metadata.js'
-import { parseBuildDependencies, parseVersionCatalog, resolveCatalogRefs, toModDependencies } from './deps.js'
+import { compareDependencies, parseBuildDependencies, parseVersionCatalog, resolveCatalogRefs, resolveDependencyPlaceholders, toModDependencies } from './deps.js'
 import { readText, resolvePlaceholders, parseProperties } from './text.js'
 import { gradleSupportsJava, pickJdk, requiredJava } from './java.js'
+import { t } from './messages.js'
 import { describeIdea, findOwningAggregator, loadersFromPlatforms, readIdeaProject, resolveProjectDir } from './idea.js'
 import { modeOf } from './verify.js'
 
@@ -71,7 +72,8 @@ const DEFAULT_TARGETS = {
 /**
  * 识别一个工程。
  * @param {string} root 工程根目录（绝对路径）
- * @param {{ jdks?: import('./java.js').JdkInfo[], maxModules?: number, overrideJavaHome?: string }} [options]
+ * @param {{ jdks?: import('./java.js').JdkInfo[], maxModules?: number, overrideJavaHome?: string, externalRoots?: string[] }} [options]
+ *   `externalRoots` 只给测试用：默认按平台推断 IDE 的外部存储根
  * @returns {Promise<Record<string, unknown>>}
  */
 export async function detectProject(root, options = {}) {
@@ -84,9 +86,11 @@ export async function detectProject(root, options = {}) {
   /** @type {string[]} */
   const conflicts = []
 
+  /** @type {{ externalRoots?: string[] }} */
+  const ideaOptions = Array.isArray(options.externalRoots) ? { externalRoots: options.externalRoots } : {}
   // 自己目录里的 .idea；没有就往上找聚合根（子模块工程）
-  const ownIdea = await readIdeaProject(root)
-  const aggregator = ownIdea === undefined ? await findOwningAggregator(root) : undefined
+  const ownIdea = await readIdeaProject(root, ideaOptions)
+  const aggregator = ownIdea === undefined ? await findOwningAggregator(root, 4, ideaOptions) : undefined
   const idea = ownIdea ?? aggregator?.idea
   /** 本工程在父工程里的模块路径，只有子模块工程才有 */
   const modulePath = aggregator?.modulePath
@@ -139,36 +143,36 @@ export async function detectProject(root, options = {}) {
   const includes = parseSettingsIncludes(settingsText ?? '')
 
   if (gradleFile !== undefined) {
-    evidence.push({ file: gradleFile, kind: 'build-script', detail: `Gradle 构建脚本（${gradleFile.endsWith('.kts') ? 'Kotlin DSL' : 'Groovy'}）` })
+    evidence.push({ file: gradleFile, kind: 'build-script', detail: t('evidence.buildScript', { dsl: gradleFile.endsWith('.kts') ? 'Kotlin DSL' : 'Groovy' }) })
   }
   if (gradleVersion !== undefined) {
     const inherited = ownWrapperVersion === undefined
     evidence.push({
-      file: inherited ? '父工程 gradle/wrapper/gradle-wrapper.properties' : 'gradle/wrapper/gradle-wrapper.properties',
+      file: inherited ? t('evidence.parentWrapperFile') : 'gradle/wrapper/gradle-wrapper.properties',
       kind: 'wrapper',
-      detail: `Gradle ${gradleVersion}${inherited ? '（继承自父工程）' : ''}`,
+      detail: inherited ? t('evidence.wrapperInherited', { version: gradleVersion }) : `Gradle ${gradleVersion}`,
     })
   } else if (gradleFile !== undefined) {
-    warnings.push('没有 gradle wrapper，需要本机装 Gradle 才能构建')
+    warnings.push(t('warning.noWrapper'))
   }
   if (aggregator !== undefined && modulePath !== undefined) {
     evidence.push({
       file: '.idea/gradle.xml',
       kind: 'subproject',
-      detail: `子模块工程：父工程 ${aggregator.parentDir}，任务前缀 ${taskPrefix}`,
+      detail: t('evidence.subproject', { parent: aggregator.parentDir, prefix: taskPrefix }),
     })
   }
   if (ownIdea !== undefined) {
-    evidence.push({ file: '.idea', kind: 'idea-model', detail: `IDEA 工程模型：${describeIdea(ownIdea)}` })
+    evidence.push({ file: '.idea', kind: 'idea-model', detail: t('evidence.ideaModel', { summary: describeIdea(ownIdea) }) })
     if (ownIdea.gradleRoot !== undefined && ownIdea.gradleRoot.toLowerCase() !== root.toLowerCase()) {
-      evidence.push({ file: '.idea/gradle.xml', kind: 'idea-gradle', detail: `Gradle 工程根是 ${ownIdea.gradleRoot}` })
+      evidence.push({ file: '.idea/gradle.xml', kind: 'idea-gradle', detail: t('evidence.ideaGradleRoot', { root: ownIdea.gradleRoot }) })
     }
     if (ownIdea.libraries !== undefined) {
       const { count, local } = ownIdea.libraries
       evidence.push({
         file: ownIdea.libraries.file,
         kind: 'idea-libraries',
-        detail: `Gradle 同步的库表：${count} 条${local === 0 ? '' : `，其中 ${local} 条是工程内 remap 产物`}`,
+        detail: t('evidence.ideaLibraries', { count }) + (local === 0 ? '' : t('evidence.ideaLibrariesLocal', { count: local })),
       })
     }
   }
@@ -197,7 +201,10 @@ export async function detectProject(root, options = {}) {
     evidence.push({
       file: '.idea/gradle.xml',
       kind: 'idea-modules',
-      detail: `${ideaOnlyModules.length} 个模块只在 IDE 的 Gradle 模块清单里：${ideaOnlyModules.slice(0, 6).join('、')}`,
+      detail: t('evidence.ideaOnlyModules', {
+        count: ideaOnlyModules.length,
+        list: ideaOnlyModules.slice(0, 6).join(t('list.separator')),
+      }),
     })
   }
   /** @type {ModuleInfo[]} */
@@ -231,7 +238,7 @@ export async function detectProject(root, options = {}) {
       evidence.push({
         file: modulePath === '.' ? metadata[0].file : `${modulePath}/${metadata[0].file}`,
         kind: `metadata:${metadata[0].kind}`,
-        detail: `${metadata[0].kind} 元数据`,
+        detail: t('evidence.metadata', { kind: metadata[0].kind }),
       })
     }
     modules.push({ path: modulePath, dir, platform: platform ?? 'unknown', pluginIds: moduleIds, targets: runs.map(toTarget) })
@@ -253,7 +260,7 @@ export async function detectProject(root, options = {}) {
     if (hit !== undefined) {
       loader = rule.loader
       loaderEvidenceId = hit
-      evidence.push({ file: gradleFile ?? 'build.gradle', kind: 'plugin', detail: `插件 ${hit}` })
+      evidence.push({ file: gradleFile ?? 'build.gradle', kind: 'plugin', detail: t('evidence.plugin', { id: hit }) })
       break
     }
   }
@@ -263,7 +270,7 @@ export async function detectProject(root, options = {}) {
       if (hit !== undefined) {
         loader = rule.loader
         loaderEvidenceId = hit
-        evidence.push({ file: '子模块构建脚本', kind: 'plugin', detail: `插件 ${hit}（只在子模块声明）` })
+        evidence.push({ file: t('evidence.subprojectFile'), kind: 'plugin', detail: t('evidence.pluginSubmodule', { id: hit }) })
         break
       }
     }
@@ -281,7 +288,7 @@ export async function detectProject(root, options = {}) {
       evidence.push({
         file: '.idea',
         kind: 'idea-facet',
-        detail: `构建脚本没读出 loader，按 minecraft facet 平台 ${idea.platforms.join(' / ')} 判定`,
+        detail: t('evidence.loaderFromFacet', { platforms: idea.platforms.join(' / ') }),
       })
     }
   }
@@ -300,7 +307,7 @@ export async function detectProject(root, options = {}) {
   if (loader === undefined && metadataKind !== undefined) {
     loader = metadataKind === 'bukkit' ? 'spigot' : metadataKind
     loaders.push(loader)
-    evidence.push({ file: 'metadata', kind: 'metadata-only', detail: `只有 ${metadataKind} 元数据，没有构建脚本特征` })
+    evidence.push({ file: 'metadata', kind: 'metadata-only', detail: t('evidence.metadataOnly', { kind: metadataKind }) })
   }
 
   // 元数据与构建脚本矛盾时记冲突，不静默选一个
@@ -308,7 +315,7 @@ export async function detectProject(root, options = {}) {
     const mapped = metadataKind === 'bukkit' ? 'spigot' : metadataKind
     const compatible = loader === mapped || (loader === 'architectury' && mapped !== 'architectury')
     if (!compatible) {
-      conflicts.push(`构建脚本表明 ${loader}，元数据却是 ${mapped}`)
+      conflicts.push(t('conflict.loaderMetadata', { loader, metadata: mapped }))
     }
   }
 
@@ -327,7 +334,7 @@ export async function detectProject(root, options = {}) {
     evidence.push({
       file: '.idea',
       kind: 'idea-mc',
-      detail: `构建脚本没读出 MC 版本，按 IDE 工程模型里的 ${idea.minecraftVersion} 判定`,
+      detail: t('evidence.mcVersionFromIdea', { version: idea.minecraftVersion }),
     })
   }
 
@@ -359,7 +366,11 @@ export async function detectProject(root, options = {}) {
     evidence.push({
       file: settingsFile ?? '.idea',
       kind: 'aggregator',
-      detail: `根目录没有元数据（是多模块聚合工程），工程名取 ${aggregatorName === undefined ? '目录名' : `rootProject.name「${aggregatorName}」`}；各子模块的 mods.toml 属于模块本身`,
+      detail: t('evidence.aggregatorName', {
+        source: aggregatorName === undefined
+          ? t('evidence.aggregatorNameDir')
+          : t('evidence.aggregatorNameRoot', { name: aggregatorName }),
+      }),
     })
   }
 
@@ -373,7 +384,7 @@ export async function detectProject(root, options = {}) {
     if (facetPlatform === undefined) continue
     if (facetPlatform === 'forge' && loader === 'neoforge') continue
     module.platform = facetPlatform
-    evidence.push({ file: '.idea', kind: 'idea-facet', detail: `${module.path} 的 minecraft facet 平台是 ${facetPlatform}` })
+    evidence.push({ file: '.idea', kind: 'idea-facet', detail: t('evidence.moduleFacet', { module: module.path, platform: facetPlatform }) })
   }
 
   // 子模块工程：只继承父工程里属于这个模块的运行配置
@@ -396,7 +407,7 @@ export async function detectProject(root, options = {}) {
   if (!hasDeclaredTargets && loader !== undefined) {
     applyGuessedTargets(modules, loader)
     if (modules.some((module) => module.targets.length > 0)) {
-      warnings.push('构建脚本与 IDE 里都没读到运行目标，目标是按 loader 惯例推测的（未验证）')
+      warnings.push(t('warning.guessedTargets'))
     }
   }
   const runTargets = modules.flatMap((module) =>
@@ -419,14 +430,16 @@ export async function detectProject(root, options = {}) {
     evidence.push({
       file: idea.bytecodeTarget === undefined ? '.idea/misc.xml' : '.idea/compiler.xml',
       kind: 'idea-jdk',
-      detail: `构建脚本没写 toolchain，按 IDE 的 Java ${ideaJava} 定需求`,
+      detail: t('evidence.toolchainFromIdea', { version: ideaJava }),
     })
   }
   if (idea?.jdkName !== undefined) {
     evidence.push({
       file: '.idea/misc.xml',
       kind: 'idea-jdk',
-      detail: `工程 JDK ${idea.jdkName}${idea.languageLevel === undefined ? '' : ` · languageLevel ${idea.languageLevel}`}`,
+      detail: idea.languageLevel === undefined
+        ? t('evidence.projectJdk', { name: idea.jdkName })
+        : t('evidence.projectJdkLevel', { name: idea.jdkName, level: idea.languageLevel }),
     })
   }
   const configuredJavaHome = pickProperty(properties, ['org.gradle.java.home'])
@@ -445,18 +458,18 @@ export async function detectProject(root, options = {}) {
         : 'auto'
   if (overrideJavaHome !== undefined) {
     const installed = jdks.some((jdk) => jdk.home.toLowerCase() === overrideJavaHome.toLowerCase())
-    if (!installed) warnings.push(`手动指定的 JDK 不在已探测列表里：${overrideJavaHome}（启动时仍会使用它）`)
+    if (!installed) warnings.push(t('warning.jdkOverrideNotDetected', { home: overrideJavaHome }))
   } else if (picked === undefined) {
-    warnings.push(`没找到可用的 JDK${javaRequired === undefined ? '' : ` ${javaRequired}`}`)
+    warnings.push(javaRequired === undefined ? t('warning.jdkNotFound') : t('warning.jdkNotFoundVersion', { version: javaRequired }))
   } else if (!picked.exact && javaRequired !== undefined) {
-    warnings.push(`JDK ${javaRequired} 未找到，退而使用 ${picked.home}`)
+    warnings.push(t('warning.jdkFallback', { version: javaRequired, home: picked.home }))
   }
   const gradleCheck = gradleSupportsJava(gradleVersion, javaRequired)
   if (!gradleCheck.ok && gradleCheck.reason !== undefined) warnings.push(gradleCheck.reason)
   if (properties['org.gradle.configuration-cache'] === 'true') {
-    warnings.push('已开启 org.gradle.configuration-cache，与部分 mod 插件组合可能不兼容')
+    warnings.push(t('warning.configurationCache'))
   }
-  if (conflicts.length > 0) warnings.push(`识别到矛盾：${conflicts.join('；')}`)
+  if (conflicts.length > 0) warnings.push(t('warning.conflicts', { list: conflicts.join(t('list.clauseSeparator')) }))
 
   const kind = classify({ modules, loader, loaders, metadataKind })
   const confidence = scoreConfidence({ loader, metadataKind, configuredJavaHome })
@@ -466,8 +479,16 @@ export async function detectProject(root, options = {}) {
     : { ...idea, runConfigurations: idea.runConfigurations.filter((config) => config.modulePath === modulePath) }
   // 声明的依赖：只读窗口，用来核对"agent 说加好了"到底写进去没有
   const catalog = catalogText === undefined ? [] : parseVersionCatalog(catalogText)
-  const buildDependencies = resolveCatalogRefs(parseBuildDependencies(gradleText ?? '', gradleFile ?? 'build.gradle'), catalog)
+  // Gradle 脚本里的 ${property} 先按 gradle.properties 解析，否则拿字面量对照必然"版本不同"
+  const buildDependencies = resolveDependencyPlaceholders(
+    resolveCatalogRefs(parseBuildDependencies(gradleText ?? '', gradleFile ?? 'build.gradle'), catalog),
+    mergedProperties,
+  )
   const modDependencies = toModDependencies(dependencyRanges(primaryMetadata(allMetadata)))
+  // 只有读到了 IDE 的库表索引才做对照；没有 .idea / 开关关掉 / 从没同步过时整块不出现
+  const compared = idea?.libraries?.resolved === undefined
+    ? undefined
+    : compareDependencies(buildDependencies, idea.libraries.resolved)
 
   return {
     root,
@@ -490,6 +511,7 @@ export async function detectProject(root, options = {}) {
       mods: modDependencies,
       catalogFile: catalogFile ?? null,
       catalogSize: catalog.length,
+      ...(compared === undefined ? {} : { compared }),
     },
     java: {
       required: javaRequired,
@@ -518,7 +540,7 @@ export async function detectProject(root, options = {}) {
       platforms: ideaForProfile.platforms,
       linkedProjects: ideaForProfile.linkedProjects,
       ...(ideaForProfile.minecraftVersion === undefined ? {} : { minecraftVersion: ideaForProfile.minecraftVersion }),
-      ...(ideaForProfile.libraries === undefined ? {} : { libraries: ideaForProfile.libraries }),
+      ...(ideaForProfile.libraries === undefined ? {} : { libraries: librarySummaryForProfile(ideaForProfile.libraries) }),
       files: ideaForProfile.files,
     },
     modules: modules.map((module) => ({
@@ -550,6 +572,25 @@ async function pickExisting(root, names) {
     }
   }
   return undefined
+}
+
+/**
+ * 画像里只放库表摘要：完整的 group:artifact → version 索引只在识别阶段用。
+ * 一个工程几百条、扫描结果里每个工程都带一份，而面板只需要对照后的那几条。
+ * @param {import('./idea.js').IdeasLibrarySummary} libraries
+ * @returns {Record<string, unknown>}
+ */
+function librarySummaryForProfile(libraries) {
+  /** @type {Record<string, unknown>} */
+  const summary = {
+    storage: libraries.storage,
+    file: libraries.file,
+    count: libraries.count,
+    local: libraries.local,
+    samples: libraries.samples,
+  }
+  if (libraries.syncedAt !== undefined) summary.syncedAt = libraries.syncedAt
+  return summary
 }
 
 /**
@@ -636,7 +677,11 @@ function mergeIdeaTargets(modules, idea, evidence) {
       evidence.push({
         file: '.idea/workspace.xml',
         kind: 'idea-run-config',
-        detail: `${module.path} 有过运行配置「${config.name}」，对应 ${module.path === '.' ? task : `:${module.path}:${task}`}`,
+        detail: t('evidence.runConfigTarget', {
+          module: module.path,
+          name: config.name,
+          task: module.path === '.' ? task : `:${module.path}:${task}`,
+        }),
       })
     }
   }
@@ -777,7 +822,7 @@ function readIdentity(hits, properties, root, warnings) {
   const modVersion = resolve(raw.modVersion) ?? properties.mod_version ?? properties.version
 
   if (unresolved.length > 0) {
-    warnings.push(`元数据里有未解析的占位符：${[...new Set(unresolved)].join(', ')}`)
+    warnings.push(t('warning.unresolvedPlaceholders', { list: [...new Set(unresolved)].join(', ') }))
   }
   return { modId, modName, modVersion }
 }

@@ -14,6 +14,7 @@ import { Capsule } from './Capsule.js'
 import { DetailTab } from './DetailTab.js'
 import { PANEL_TITLE } from './format.js'
 import { LogTab } from './LogTab.js'
+import { attachLocale, t } from './messages.js'
 import { report } from './debug.js'
 import { h } from './h.js'
 import { IconCube, IconTerminal } from './icons.js'
@@ -35,6 +36,18 @@ export function apply(ctx) {
   runtime.ctx = ctx
   ensureStyles()
   report('apply')
+
+  // 0) 文案：优先跟随宿主 locale；没有这个服务就退回浏览器语言，再退回中文。
+  //    注册失败只影响翻译，不影响插件挂载。
+  try {
+    if (!attachLocale(ctx) && typeof ctx.inject === 'function') {
+      ctx.inject(['locale'], (scoped) => {
+        attachLocale(scoped)
+      })
+    }
+  } catch (error) {
+    report('locale.failed', { message: String(error) })
+  }
 
   // 1) 标题栏胶囊：放右侧工具簇（utilities）。
   //    语义上"启动"确实算 actions，但 actions 紧贴会话标题，而胶囊宽度随工程名/目标名变化，
@@ -64,7 +77,7 @@ export function apply(ctx) {
       'mcdev: detail tab type',
     )
     ctx.effect(
-      () => ctx.sidebarRightTabs.register({ id: LOG_ID, kind: LOG_KIND, title: () => '运行日志' }),
+      () => ctx.sidebarRightTabs.register({ id: LOG_ID, kind: LOG_KIND, title: () => t('tab.logs') }),
       'mcdev: log tab type',
     )
     report('tab.type.registered')
@@ -87,7 +100,7 @@ export function apply(ctx) {
       ),
     )
     ctx.slots.inject('sidebar.right.pane.tab.title', () =>
-      ctx.slots.register({ name: 'sidebar.right.pane.tab.title', key: LOG_ID }, tabTitleChip(IconTerminal, '运行日志')),
+      ctx.slots.register({ name: 'sidebar.right.pane.tab.title', key: LOG_ID }, tabTitleChip(IconTerminal, () => t('tab.logs'))),
     )
     report('tab.title.registered')
   } catch (error) {
@@ -101,7 +114,7 @@ export function apply(ctx) {
 /**
  * 原生标签条的标题：图标 + 文字，和内置页签同一套版式。
  * @param {any} Icon
- * @param {string} label
+ * @param {string | (() => string)} label 传函数时每次渲染取当前语言
  * @returns {() => any}
  */
 function tabTitleChip(Icon, label) {
@@ -110,7 +123,7 @@ function tabTitleChip(Icon, label) {
       'span',
       { className: 'mcdev-icon-text' },
       h('span', { className: 'mcdev-icon' }, h(Icon, { size: 14 })),
-      label,
+      typeof label === 'function' ? label() : label,
     )
 }
 
@@ -145,7 +158,7 @@ function registerBetterSidebarTabs(ctx) {
       disposers.push(
         sidebar.registerTab({
           id: BETTER_LOG_ID,
-          title: '运行日志',
+          title: () => t('tab.logs'),
           icon: (size) => h(IconTerminal, { size }),
           component: () => h(LogTab),
         }),

@@ -8,6 +8,7 @@
 
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { t } from './messages.js'
 import { readText } from './text.js'
 
 /**
@@ -60,7 +61,7 @@ export function gradleSupportsJava(gradleVersion, javaMajor) {
   if (compareVersions(gradleVersion, floor) >= 0) return { ok: true }
   return {
     ok: false,
-    reason: `wrapper 是 Gradle ${gradleVersion}，JDK ${javaMajor} 需要 Gradle ${floor} 以上`,
+    reason: t('java.gradleTooOld', { wrapper: gradleVersion, major: javaMajor, floor }),
   }
 }
 

@@ -18,6 +18,7 @@ import { createWriteStream } from 'node:fs'
 import { mkdir, readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { gradlewCommand, isAlive, TASK_PATH_PATTERN } from './argv.js'
+import { t } from './messages.js'
 import { adoptLegacyState, baseStateDir, loadState, logPath, saveState, stateDir } from './state.js'
 import { modeOf, readVerdict } from './verify.js'
 
@@ -44,56 +45,18 @@ const CRASH_MARKERS = [
 /**
  * 崩溃归因规则。只做"看得懂的一句话"，不做自动修复。
  * 命中顺序有讲究：越具体的越靠前。
+ *
+ * 文案不写在这里：`hint` / `suggestion` 按 `code` 从词典取，读日志时决定语言。
  */
 const DIAGNOSES = [
-  {
-    code: 'DEPENDENCY_UNRESOLVED',
-    pattern: /Could not resolve|Could not find [\w.:-]+:/,
-    hint: '依赖解析失败：检查网络或 Gradle 离线缓存',
-    suggestion: '确认仓库可访问（代理/镜像），或先跑一次能联网的构建再重试',
-  },
-  {
-    code: 'JDK_VERSION_MISMATCH',
-    pattern: /Unsupported class file major version/,
-    hint: 'JDK 版本不匹配：换成工程要求的 JDK',
-    suggestion: '检查面板里的「JDK 需求」与已选 JDK，或在 gradle.properties 设 org.gradle.java.home',
-  },
-  {
-    code: 'JDK_TOOLCHAIN_MISSING',
-    pattern: /No matching toolchains found/,
-    hint: '缺少所需版本的 JDK：装一个或用已有版本覆盖',
-    suggestion: '安装对应大版本的 JDK，或用 toolchain 覆盖指向已装版本',
-  },
-  {
-    code: 'PORT_IN_USE',
-    pattern: /Address already in use|FAILED TO BIND TO PORT/i,
-    hint: '端口被占用：先关掉占用的进程',
-    suggestion: '结束占用 25565 端口的进程，或在 server.properties 改端口',
-  },
-  {
-    code: 'MIXIN_APPLY_FAILED',
-    pattern: /Mixin apply failed/i,
-    hint: 'Mixin 注入失败：看日志里点名的 mixin 配置',
-    suggestion: '核对日志中点名的 mixin 类与 JSON 配置是否匹配当前游戏版本',
-  },
-  {
-    code: 'OUT_OF_MEMORY',
-    pattern: /OutOfMemoryError|Metaspace/i,
-    hint: '内存不足：调 gradle.properties 的 org.gradle.jvmargs',
-    suggestion: '提高 org.gradle.jvmargs（例如 -Xmx4G），并确认机器可用内存',
-  },
-  {
-    code: 'GAME_CRASH_REPORT',
-    pattern: /crash-reports[\\/]/,
-    hint: '游戏生成了 crash report：工程目录下的 crash-reports/',
-    suggestion: '打开最新 crash-report，第一条 Caused by 通常是根因',
-  },
-  {
-    code: 'GRADLE_BUILD_FAILED',
-    pattern: /BUILD FAILED/,
-    hint: 'Gradle 构建失败：往上翻第一条 error',
-    suggestion: '从 BUILD FAILED 往上找第一条 "What went wrong"',
-  },
+  { code: 'DEPENDENCY_UNRESOLVED', pattern: /Could not resolve|Could not find [\w.:-]+:/ },
+  { code: 'JDK_VERSION_MISMATCH', pattern: /Unsupported class file major version/ },
+  { code: 'JDK_TOOLCHAIN_MISSING', pattern: /No matching toolchains found/ },
+  { code: 'PORT_IN_USE', pattern: /Address already in use|FAILED TO BIND TO PORT/i },
+  { code: 'MIXIN_APPLY_FAILED', pattern: /Mixin apply failed/i },
+  { code: 'OUT_OF_MEMORY', pattern: /OutOfMemoryError|Metaspace/i },
+  { code: 'GAME_CRASH_REPORT', pattern: /crash-reports[\\/]/ },
+  { code: 'GRADLE_BUILD_FAILED', pattern: /BUILD FAILED/ },
 ]
 
 /**
@@ -108,7 +71,12 @@ export function diagnose(lines) {
   for (const rule of DIAGNOSES) {
     const hit = lines.find((line) => rule.pattern.test(line))
     if (hit !== undefined) {
-      return { code: rule.code, hint: rule.hint, suggestion: rule.suggestion, line: hit.trim().slice(0, 300) }
+      return {
+        code: rule.code,
+        hint: t(`diagnosis.${rule.code}.hint`),
+        suggestion: t(`diagnosis.${rule.code}.suggestion`),
+        line: hit.trim().slice(0, 300),
+      }
     }
   }
   return undefined
@@ -205,13 +173,13 @@ export function createLaunchService(options = {}) {
    */
   async function start(request) {
     if (!TASK_PATH_PATTERN.test(request.taskPath)) {
-      throw Object.assign(new Error(`不认识的 Gradle 任务：${request.taskPath}`), { code: 'BAD_TASK' })
+      throw Object.assign(new Error(t('error.unknownTask', { task: request.taskPath })), { code: 'BAD_TASK' })
     }
     const current = await ensureState()
     return serialize(async () => {
       const running = activeFor(request.root)
       if (running !== undefined) {
-        throw Object.assign(new Error(`${request.root} 已有运行中的实例：${running.taskPath}`), {
+        throw Object.assign(new Error(t('error.alreadyRunning', { root: request.root, task: running.taskPath })), {
           code: 'ALREADY_RUNNING',
           launch: running,
         })
@@ -313,7 +281,7 @@ export function createLaunchService(options = {}) {
         record.endedAt = new Date().toISOString()
         current.launches.unshift(record)
         await saveState(dir, current)
-        throw Object.assign(new Error(`启动失败：${error instanceof Error ? error.message : String(error)}`), { code: 'SPAWN_FAILED' })
+        throw Object.assign(new Error(t('error.spawnFailed', { message: error instanceof Error ? error.message : String(error) })), { code: 'SPAWN_FAILED' })
       }
     })
   }
@@ -375,7 +343,7 @@ export function createLaunchService(options = {}) {
   async function stop(launchId, request = {}) {
     const current = await ensureState()
     const record = current.launches.find((entry) => entry.id === launchId)
-    if (record === undefined) throw Object.assign(new Error(`没有这个实例：${launchId}`), { code: 'UNKNOWN_LAUNCH' })
+    if (record === undefined) throw Object.assign(new Error(t('error.unknownLaunch', { id: launchId })), { code: 'UNKNOWN_LAUNCH' })
 
     record.stoppedByUser = true
     if (record.pid === null || !isAlive(record.pid)) {
@@ -419,7 +387,7 @@ export function createLaunchService(options = {}) {
   async function logs(launchId, offset = 0, limit = 400) {
     const currentState = await ensureState()
     const record = currentState.launches.find((entry) => entry.id === launchId)
-    if (record === undefined) throw Object.assign(new Error(`没有这个实例：${launchId}`), { code: 'UNKNOWN_LAUNCH' })
+    if (record === undefined) throw Object.assign(new Error(t('error.unknownLaunch', { id: launchId })), { code: 'UNKNOWN_LAUNCH' })
     let all = []
     try {
       all = splitBufferLines(await readFile(record.logPath))
@@ -498,7 +466,7 @@ export function createLaunchService(options = {}) {
   function crashSummary(record) {
     if (record.outcome === 'normal') return undefined
     if (record.exitCode === null) return undefined
-    return `退出码 ${record.exitCode}`
+    return t('summary.exitCode', { code: record.exitCode })
   }
 
   return { start, stop, list, current, logs, ensureState, stateDir: dir }

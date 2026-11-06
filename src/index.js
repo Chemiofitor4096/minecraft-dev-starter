@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { createApi } from './lib/api.js'
 import { createLaunchService } from './lib/launches.js'
+import { setLanguage } from './lib/messages.js'
 import { profileName, stateDir } from './lib/state.js'
 import { applyTools } from './tools.js'
 
@@ -183,6 +184,8 @@ export function apply(ctx, config = {}) {
 
           try {
             const payload = await readJsonBody(req)
+            // 界面语言由客户端随请求带上：宿主 ctx 里没有 locale 服务（那是网页客户端那层）
+            setLanguage(payload?.lang)
             const result = await handler(payload)
             writeJson(res, 200, { ok: true, result })
           } catch (error) {

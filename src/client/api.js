@@ -7,6 +7,8 @@
  * @module minecraft-dev-starter/client/api
  */
 
+import { activeLanguage, t } from './messages.js'
+
 /**
  * @template T
  * @param {string} method
@@ -18,13 +20,14 @@ export async function call(method, payload) {
     method: 'POST',
     cache: 'no-store',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload ?? {}),
+    // lang：宿主侧没有 locale 服务，证据 / 警告 / 归因的文案靠它选语言
+    body: JSON.stringify({ ...(payload ?? {}), lang: activeLanguage() }),
   })
   let body
   try {
     body = await response.json()
   } catch {
-    throw new Error(`HTTP ${response.status}：返回不是 JSON`)
+    throw new Error(t('error.httpNotJson', { status: response.status }))
   }
   if (body?.ok !== true) {
     throw new Error(body?.error?.message ?? `HTTP ${response.status}`)

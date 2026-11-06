@@ -7,6 +7,7 @@
 
 import { readdir, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
+import { t } from './messages.js'
 import { readText } from './text.js'
 import { attrOf, childOf, componentOf, findFirst, findAll, optionValue, parseXml, rootOf, textOf } from './xml.js'
 
@@ -69,6 +70,10 @@ const RUN_NAME_HINTS = [
  * @property {number} count
  * @property {number} local 指向 `$PROJECT_DIR$` 的条目数（loom 的 remap 产物）
  * @property {string[]} samples group:artifact:version，最多 5 条
+ * @property {Record<string, string> | undefined} resolved group:artifact → version，最多 800 条；
+ *   只有带完整坐标的条目才进索引，一条都没有时不出现
+ * @property {string | undefined} syncedAt IDE 上次 Gradle 同步的时间（libraries.xml 或
+ *   workspace.xml 的 mtime，ISO）；读不到时不出现
  */
 
 /**
@@ -147,7 +152,12 @@ export async function readIdeaProject(input, options = {}) {
   const gradle = readGradleSettings(gradleXml === undefined ? undefined : parseXml(gradleXml), projectDir)
   const imlPaths = readImlPaths(modulesXml === undefined ? undefined : parseXml(modulesXml), projectDir).slice(0, MAX_IML)
   const modules = await readModules(imlPaths, projectDir, gradle.gradleModules)
-  const libraries = await readLibraries(dir, projectDir, options)
+  const misc = miscXml === undefined ? undefined : parseXml(miscXml)
+  const libraries = await readLibraries(dir, projectDir, {
+    ...options,
+    // 开关关掉时外部存储里那份 libraries.xml 可能是旧产物，不能拿来对照
+    externalStorage: readExternalStorageEnabled(misc) ?? options.externalStorage,
+  })
 
   return {
     dir,
@@ -155,8 +165,8 @@ export async function readIdeaProject(input, options = {}) {
     projectName: nameText === undefined ? undefined : nameText.trim() || undefined,
     gradleRoot: gradle.gradleRoot,
     gradleJvm: gradle.gradleJvm,
-    jdkName: readJdkName(miscXml === undefined ? undefined : parseXml(miscXml)),
-    languageLevel: readLanguageLevel(miscXml === undefined ? undefined : parseXml(miscXml)),
+    jdkName: readJdkName(misc),
+    languageLevel: readLanguageLevel(misc),
     bytecodeTarget: readBytecodeTarget(compilerXml === undefined ? undefined : parseXml(compilerXml)),
     minecraftVersion: modules.map((module) => module.minecraftVersion).find((value) => value !== undefined),
     gradleModules: gradle.gradleModules,
@@ -173,16 +183,17 @@ export async function readIdeaProject(input, options = {}) {
  * 往上找拥有这个目录的聚合工程（父工程的 `.idea` 模块清单里有它）。
  * @param {string} input 子模块目录
  * @param {number} [maxLevels] 最多往上找几层
+ * @param {{ externalRoots?: string[] }} [options] 透传给 readIdeaProject（测试用）
  * @returns {Promise<{ idea: IdeaProject, modulePath: string, parentDir: string } | undefined>}
  */
-export async function findOwningAggregator(input, maxLevels = 4) {
+export async function findOwningAggregator(input, maxLevels = 4, options = {}) {
   const origin = resolveProjectDir(input)
   if (origin === '') return undefined
   let ancestor = origin
   for (let level = 0; level < maxLevels; level += 1) {
     const parentDir = dirname(ancestor)
     if (parentDir === ancestor) return undefined
-    const idea = await readIdeaProject(parentDir)
+    const idea = await readIdeaProject(parentDir, options)
     if (idea !== undefined) {
       // 相对基准始终是起点目录，不是上一轮爬到的那个
       const modulePath = toProjectRelative(origin, parentDir)
@@ -518,23 +529,28 @@ function stripRunDir(path) {
  * 按工程绝对路径生成的，克隆来的仓库伪造不了；但格式是私有实现，只作辅证，读不到就算了。
  * @param {string} ideaDir
  * @param {string} projectDir
- * @param {{ externalRoots?: string[] }} options
+ * @param {{ externalRoots?: string[], externalStorage?: boolean }} options
  * @returns {Promise<IdeasLibrarySummary | undefined>}
  */
 async function readLibraries(ideaDir, projectDir, options) {
   const localDir = join(ideaDir, 'libraries')
+  /** @type {LibraryEntry[]} */
+  const entries = []
   if (await isDirectory(localDir)) {
-    /** @type {LibraryEntry[]} */
-    const entries = []
     for (const name of (await safeReaddir(localDir)).slice(0, MAX_LIBRARY_FILES)) {
       if (!name.toLowerCase().endsWith('.xml')) continue
       const text = await readText(join(localDir, name))
       if (text === undefined) continue
       entries.push(...parseLibraries(text))
     }
-    return summarizeLibraries('project', localDir, entries)
+  }
+  if (entries.length > 0) {
+    // 本地库表没有单个 libraries.xml，用 workspace.xml 的 mtime 近似同步时间
+    return summarizeLibraries('project', localDir, entries, await mtimeOf(join(ideaDir, 'workspace.xml')))
   }
 
+  // 开关明确关掉时不再看外部存储：那份 libraries.xml 可能是开关打开时的旧产物
+  if (options.externalStorage === false) return undefined
   const roots = options.externalRoots ?? defaultExternalRoots()
   if (roots.length === 0) return undefined
   const index = await externalLibraryIndex(roots)
@@ -543,7 +559,33 @@ async function readLibraries(ideaDir, projectDir, options) {
   const file = join(hit.dir, 'external_build_system', 'project', 'libraries.xml')
   const text = await readText(file)
   if (text === undefined) return undefined
-  return summarizeLibraries('external', file, parseLibraries(text))
+  const syncedAt = (await mtimeOf(file)) ?? (await mtimeOf(join(ideaDir, 'workspace.xml')))
+  return summarizeLibraries('external', file, parseLibraries(text), syncedAt)
+}
+
+/**
+ * `misc.xml` 的 ExternalStorageConfigurationManager enabled 开关。
+ * 没有这个组件时返回 undefined（按"未知，照常尝试"处理）：老工程与部分 IDE 版本不写它。
+ * @param {import('./xml.js').XmlNode | undefined} doc
+ * @returns {boolean | undefined}
+ */
+function readExternalStorageEnabled(doc) {
+  const value = attrOf(componentOf(doc, 'ExternalStorageConfigurationManager'), 'enabled')
+  if (value === undefined) return undefined
+  return value === 'true'
+}
+
+/**
+ * 文件的修改时间（ISO）；读不到返回 undefined。
+ * @param {string} path
+ * @returns {Promise<string | undefined>}
+ */
+async function mtimeOf(path) {
+  try {
+    return (await stat(path)).mtime.toISOString()
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -660,23 +702,37 @@ function parseLibraries(text) {
  * @param {'project' | 'external'} storage
  * @param {string} file
  * @param {LibraryEntry[]} entries
+ * @param {string | undefined} syncedAt
  * @returns {IdeasLibrarySummary}
  */
-function summarizeLibraries(storage, file, entries) {
+function summarizeLibraries(storage, file, entries, syncedAt) {
   /** @type {string[]} */
   const samples = []
+  /** @type {Record<string, string>} */
+  const resolved = {}
+  let mapped = 0
   for (const entry of entries) {
     if (entry.group === undefined || entry.artifact === undefined || entry.version === undefined) continue
-    samples.push(`${entry.group}:${entry.artifact}:${entry.version}`)
-    if (samples.length >= 5) break
+    const key = `${entry.group}:${entry.artifact}`
+    if (samples.length < 5) samples.push(`${key}:${entry.version}`)
+    // 同一坐标出现多次时保留第一条（例如同一库的不同 classifier）；上限 800 条
+    if (mapped < MAX_LIBRARIES && !Object.hasOwn(resolved, key)) {
+      resolved[key] = entry.version
+      mapped += 1
+    }
   }
-  return {
+  /** @type {IdeasLibrarySummary} */
+  const summary = {
     storage,
     file,
     count: entries.length,
     local: entries.filter((entry) => entry.local).length,
     samples,
   }
+  // 一条完整坐标都没有时不给索引：否则所有声明都会被误报成"未解析"
+  if (mapped > 0) summary.resolved = resolved
+  if (syncedAt !== undefined) summary.syncedAt = syncedAt
+  return summary
 }
 
 /**
@@ -687,7 +743,7 @@ function summarizeLibraries(storage, file, entries) {
 export function describeIdea(idea) {
   const parts = []
   if (idea.projectName !== undefined) parts.push(idea.projectName)
-  if (idea.gradleModules.length > 0) parts.push(`${idea.gradleModules.length} 个模块`)
-  if (idea.runConfigurations.length > 0) parts.push(`${idea.runConfigurations.length} 个运行配置`)
+  if (idea.gradleModules.length > 0) parts.push(t('idea.modules', { count: idea.gradleModules.length }))
+  if (idea.runConfigurations.length > 0) parts.push(t('idea.runConfigs', { count: idea.runConfigurations.length }))
   return parts.join(' · ')
 }

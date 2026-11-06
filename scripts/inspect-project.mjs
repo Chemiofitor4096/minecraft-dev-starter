@@ -61,6 +61,7 @@ if (profile.idea === undefined) {
     const local = idea.libraries.local > 0 ? `（${idea.libraries.local} 条本地 remap）` : ''
     line('  库表', `${where} · ${idea.libraries.count} 条${local}`)
     line('  库表位置', idea.libraries.file)
+    if (idea.libraries.syncedAt !== undefined) line('  同步时间', stamp(idea.libraries.syncedAt))
   }
   line('  字节码', idea.bytecodeTarget ?? '—')
   line('  模块', `${idea.modules} 个（${idea.imls} 个 iml）`)
@@ -70,6 +71,21 @@ if (profile.idea === undefined) {
   line('  读到', (idea.files ?? []).join('、'))
 }
 
+console.log('\n依赖对照')
+const compared = profile.dependencies?.compared
+if (compared === undefined) {
+  console.log('  （没有可用的 IDE 同步库表，不做对照）')
+} else if (compared.length === 0) {
+  console.log('  （没有可对照的声明依赖）')
+} else {
+  for (const entry of compared) {
+    const actual = entry.resolved === null ? '—' : entry.resolved
+    console.log(
+      `  ${String(entry.module).padEnd(52)} 声明 ${String(entry.declared).padEnd(20)} 实际 ${String(actual).padEnd(20)} ${entry.status}`,
+    )
+  }
+}
+
 console.log('\n证据')
 for (const entry of profile.evidence ?? []) {
   console.log(`  ${String(entry.kind).padEnd(18)} ${entry.file}`)
@@ -77,4 +93,16 @@ for (const entry of profile.evidence ?? []) {
 if ((profile.warnings ?? []).length > 0) {
   console.log('\n警告')
   for (const warning of profile.warnings) console.log(`  ${warning}`)
+}
+
+/**
+ * 本地时区的「年-月-日 时:分」，和面板上的同步时间一致。
+ * @param {string} iso
+ * @returns {string}
+ */
+function stamp(iso) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return String(iso)
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }

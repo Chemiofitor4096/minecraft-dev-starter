@@ -5,6 +5,8 @@
  * @module minecraft-dev-starter/client/selection
  */
 
+import { t } from './messages.js'
+
 /** @type {Record<string, string>} */
 const STORAGE_KEY = 'mcdev.selection'
 
@@ -54,8 +56,8 @@ export function selectedTarget(project, selection) {
  * @returns {string}
  */
 export function capsuleText(project, target) {
-  if (project === undefined) return '未检测到 MC 工程'
-  if (target === undefined) return '无可运行目标'
+  if (project === undefined) return t('capsule.noProject')
+  if (target === undefined) return t('capsule.noTarget')
   const module = String(target.module ?? '.')
   return module === '.' ? String(target.label) : `${module} · ${target.label}`
 }
@@ -117,14 +119,14 @@ export function pickLogTarget(history, currentId, pinned) {
  * @returns {string}
  */
 export function launchStatusText(entry) {
-  if (entry.status === 'starting') return '启动中'
-  if (entry.status === 'running') return entry.mode === 'oneshot' ? '执行中' : '运行中'
-  if (entry.status === 'unknown') return '状态未知'
-  if (entry.verdict === 'passed') return '通过'
-  if (entry.verdict === 'failed') return '失败'
-  if (entry.verdict === 'aborted' || entry.outcome === 'killed') return '已停止'
-  if (entry.outcome === 'normal') return '已退出'
-  return entry.exitCode === null || entry.exitCode === undefined ? '已退出' : `已退出(${entry.exitCode})`
+  if (entry.status === 'starting') return t('status.starting')
+  if (entry.status === 'running') return entry.mode === 'oneshot' ? t('status.oneshotRunning') : t('status.running')
+  if (entry.status === 'unknown') return t('status.unknown')
+  if (entry.verdict === 'passed') return t('status.passed')
+  if (entry.verdict === 'failed') return t('status.failed')
+  if (entry.verdict === 'aborted' || entry.outcome === 'killed') return t('status.stopped')
+  if (entry.outcome === 'normal') return t('status.exited')
+  return entry.exitCode === null || entry.exitCode === undefined ? t('status.exited') : t('status.exitedCode', { code: entry.exitCode })
 }
 
 /**

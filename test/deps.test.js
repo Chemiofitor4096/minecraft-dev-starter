@@ -6,9 +6,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  compareDependencies,
   parseBuildDependencies,
   parseVersionCatalog,
   resolveCatalogRefs,
+  resolveDependencyPlaceholders,
   splitCoordinates,
   toModDependencies,
 } from '../src/lib/deps.js'
@@ -108,5 +110,70 @@ test('坐标拆分与元数据依赖', () => {
   assert.deepEqual(toModDependencies({ minecraft: '~1.21.1', create: '[6.0.8,)' }), [
     { modId: 'minecraft', range: '~1.21.1' },
     { modId: 'create', range: '[6.0.8,)' },
+  ])
+})
+
+test('声明里的 ${property} 按 gradle.properties 解析，再拆坐标', () => {
+  const raw = parseBuildDependencies(
+    'dependencies { modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}" }',
+    'build.gradle',
+  )
+  const [dependency] = resolveDependencyPlaceholders(raw, { fabric_loader_version: '0.16.10' })
+  assert.equal(dependency.notation, 'net.fabricmc:fabric-loader:0.16.10')
+  assert.equal(dependency.module, 'net.fabricmc:fabric-loader')
+  assert.equal(dependency.version, '0.16.10')
+  // 解不掉的占位符保持原样，不猜
+  const [unresolved] = resolveDependencyPlaceholders(raw, {})
+  assert.equal(unresolved.notation, 'net.fabricmc:fabric-loader:${fabric_loader_version}')
+})
+
+test('对照声明与 IDE 解析版本：same / differs / unresolved，只列声明项', () => {
+  const compared = compareDependencies(
+    [
+      { configuration: 'modImplementation', notation: 'net.fabricmc:fabric-loader:0.16.10', module: 'net.fabricmc:fabric-loader', version: '0.16.10', file: 'build.gradle', line: 1 },
+      { configuration: 'implementation', notation: 'com.example:dynamic:1.2.+', module: 'com.example:dynamic', version: '1.2.+', file: 'build.gradle', line: 2 },
+      { configuration: 'implementation', notation: 'com.example:missing:3.0.0', module: 'com.example:missing', version: '3.0.0', file: 'build.gradle', line: 3 },
+      // 同一模块的第二个配置不重复出对照行
+      { configuration: 'modRuntimeOnly', notation: 'com.example:dynamic:1.2.+', module: 'com.example:dynamic', version: '1.2.+', file: 'build.gradle', line: 4 },
+      // project 依赖没有坐标，不参与对照
+      { configuration: 'implementation', notation: 'project :common', file: 'build.gradle', line: 5 },
+    ],
+    {
+      'net.fabricmc:fabric-loader': '0.16.10',
+      'com.example:dynamic': '1.2.7',
+      // 解析结果里的传递依赖不能被灌进对照表
+      'com.google.guava:guava': '32.1.2-jre',
+    },
+  )
+  assert.deepEqual(compared, [
+    { module: 'net.fabricmc:fabric-loader', declared: '0.16.10', resolved: '0.16.10', status: 'same' },
+    { module: 'com.example:dynamic', declared: '1.2.+', resolved: '1.2.7', status: 'differs' },
+    { module: 'com.example:missing', declared: '3.0.0', resolved: null, status: 'unresolved' },
+  ])
+})
+
+test('loom 的 remap 坐标前缀不影响对照', () => {
+  const compared = compareDependencies(
+    [
+      {
+        configuration: 'modImplementation',
+        notation: 'net.fabricmc.fabric-api:fabric-api:0.116.7+1.21.1',
+        module: 'net.fabricmc.fabric-api:fabric-api',
+        version: '0.116.7+1.21.1',
+        file: 'build.gradle',
+        line: 1,
+      },
+    ],
+    {
+      'loom_mappings_1_21_1_layered_hash_730628366_v2.net.fabricmc.fabric-api:fabric-api': '0.116.7+1.21.1',
+    },
+  )
+  assert.deepEqual(compared, [
+    {
+      module: 'net.fabricmc.fabric-api:fabric-api',
+      declared: '0.116.7+1.21.1',
+      resolved: '0.116.7+1.21.1',
+      status: 'same',
+    },
   ])
 })

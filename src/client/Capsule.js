@@ -11,6 +11,8 @@ import { useEffect, useRef } from 'react'
 import { h } from './h.js'
 import { IconPlay, IconStop } from './icons.js'
 import { report } from './debug.js'
+import { t } from './messages.js'
+import { useLocale } from './useLocale.js'
 import { capsuleParts, hasActiveLaunch, hasRunnableProject, selectedTarget } from './selection.js'
 import {
   activeLaunchFor,
@@ -49,6 +51,7 @@ function SessionCapsule(props) {
 function CapsuleBody({ cwd }) {
   const state = useStoreState()
   const launches = useLaunches(5000)
+  useLocale()
   const anchor = useRef(/** @type {HTMLDivElement | null} */ (null))
   const lastRoot = useRef(/** @type {string | undefined} */ (undefined))
 
@@ -106,8 +109,12 @@ function CapsuleBody({ cwd }) {
     launches.error ??
     state.error ??
     (project === undefined
-      ? `没有识别到 MC 工程\n${state.workspaceRoot ?? ''}`
-      : `${project.modName ?? project.name}\n${project.root}\n${target === undefined ? '没有可运行目标' : target.taskPath}`)
+      ? t('capsule.noProjectTitle', { root: state.workspaceRoot ?? '' })
+      : t('capsule.title', {
+          project: project.modName ?? project.name,
+          root: project.root,
+          target: target === undefined ? t('common.noTarget') : target.taskPath,
+        }))
 
   return h(
     'div',
@@ -138,7 +145,7 @@ function CapsuleBody({ cwd }) {
               type: 'button',
               className: 'mcdev-run mcdev-run-icon',
               disabled: target === undefined || busy,
-              title: target === undefined ? '没有可运行目标' : `启动 ${target.taskPath}`,
+              title: target === undefined ? t('common.noTarget') : t('capsule.start', { target: target.taskPath }),
               onClick: () => {
                 if (project !== undefined && target !== undefined) void startTarget(project, target)
               },
@@ -152,7 +159,7 @@ function CapsuleBody({ cwd }) {
               className: 'mcdev-run mcdev-run-icon',
               'data-tone': 'stop',
               disabled: busy,
-              title: `停止 ${running.taskPath}`,
+              title: t('capsule.stop', { target: running.taskPath }),
               onClick: () => void stopLaunch(running.id),
             },
             h('span', { className: 'mcdev-icon' }, h(IconStop, undefined)),

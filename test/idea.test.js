@@ -68,15 +68,22 @@ test('库表在 IDE 外部存储里时按 cache-state 的工程路径对上', as
         + '<properties groupId="net.fabricmc.fabric-api" artifactId="fabric-api" version="0.116.7+1.21.1" />'
         + '<CLASSES><root url="jar://$PROJECT_DIR$/.gradle/loom-cache/remapped_mods/x/fabric-api.jar!/" /></CLASSES>'
         + '</library>'
+        // 没有完整坐标的条目计入 count，但不能进对照索引
+        + '<library name="Gradle: no-properties" type="java-imported"><CLASSES><root url="jar://$USER_HOME$/x.jar!/" /></CLASSES></library>'
         + '</component>',
     )
 
     const idea = await readIdeaProject(projectDir, { externalRoots: [join(scratch, 'jetbrains')] })
     assert.ok(idea !== undefined)
     assert.equal(idea.libraries?.storage, 'external')
-    assert.equal(idea.libraries?.count, 2)
+    assert.equal(idea.libraries?.count, 3)
     assert.equal(idea.libraries?.local, 1, 'loom 的 remap 产物要单独计数')
     assert.ok(String(idea.libraries?.file).endsWith('libraries.xml'))
+    assert.deepEqual(idea.libraries?.resolved, {
+      'com.google.guava:guava': '32.1.2-jre',
+      'net.fabricmc.fabric-api:fabric-api': '0.116.7+1.21.1',
+    })
+    assert.equal(typeof idea.libraries?.syncedAt, 'string', 'libraries.xml 的 mtime 是同步时间')
 
     // 别的工程不能被这棵缓存冒领
     const other = join(scratch, 'other')
@@ -131,6 +138,59 @@ test('工程外的 iml 不读：克隆来的仓库写什么路径都不越界', 
     assert.ok(idea !== undefined)
     assert.deepEqual(idea.modules, [])
     assert.deepEqual(idea.platforms, [])
+  } finally {
+    await rm(scratch, { recursive: true, force: true })
+  }
+})
+
+test('.idea/libraries 的库表也能出索引，同步时间取 workspace.xml 的 mtime', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mcdev-local-libraries-'))
+  try {
+    const projectDir = join(scratch, 'project')
+    await mkdir(join(projectDir, '.idea', 'libraries'), { recursive: true })
+    await writeFile(join(projectDir, '.idea', 'misc.xml'), '<project />')
+    await writeFile(
+      join(projectDir, '.idea', 'libraries', 'Gradle__com.example__thing_1_0.xml'),
+      '<component name="libraryTable"><library name="Gradle: com.example:thing:1.0" type="java-imported">'
+        + '<properties groupId="com.example" artifactId="thing" version="1.0" />'
+        + '</library></component>',
+    )
+    await writeFile(join(projectDir, '.idea', 'workspace.xml'), '<project version="4" />')
+
+    const idea = await readIdeaProject(projectDir)
+    assert.equal(idea?.libraries?.storage, 'project')
+    assert.deepEqual(idea?.libraries?.resolved, { 'com.example:thing': '1.0' })
+    assert.equal(typeof idea?.libraries?.syncedAt, 'string')
+  } finally {
+    await rm(scratch, { recursive: true, force: true })
+  }
+})
+
+test('库表索引上限 800 条：大工程不会把整张表灌进画像', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mcdev-library-cap-'))
+  try {
+    const projectDir = join(scratch, 'project')
+    const cacheDir = join(scratch, 'jetbrains', 'IntelliJIdea2026.1', 'projects', 'project.cap')
+    await mkdir(join(projectDir, '.idea'), { recursive: true })
+    await mkdir(join(cacheDir, 'external_build_system', 'project'), { recursive: true })
+    await writeFile(join(projectDir, '.idea', 'misc.xml'), '<project />')
+    const projectKey = projectDir.replace(/\\/g, '/')
+    await writeFile(
+      join(cacheDir, 'cache-state.xml'),
+      `<project version="4"><component name="ExternalSystemProjectTracker"><![CDATA[`
+        + `{"projectData":{"GRADLE":{"${projectKey}":{}}}}`
+        + `]]></component></project>`,
+    )
+    const entries = Array.from({ length: 805 }, (_unused, index) =>
+      `<library name="Gradle: com.example:lib${index}:1.0.${index}" type="java-imported">`
+        + `<properties groupId="com.example" artifactId="lib${index}" version="1.0.${index}" />`
+        + '</library>',
+    ).join('')
+    await writeFile(join(cacheDir, 'external_build_system', 'project', 'libraries.xml'), `<component name="libraryTable">${entries}</component>`)
+
+    const idea = await readIdeaProject(projectDir, { externalRoots: [join(scratch, 'jetbrains')] })
+    assert.equal(idea?.libraries?.count, 800)
+    assert.equal(Object.keys(idea?.libraries?.resolved ?? {}).length, 800)
   } finally {
     await rm(scratch, { recursive: true, force: true })
   }

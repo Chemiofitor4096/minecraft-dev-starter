@@ -15,8 +15,10 @@
 import { useEffect, useState } from 'react'
 import { call } from './api.js'
 import { h } from './h.js'
-import { groupDependencies, kindLabel, loaderLabel, PANEL_TITLE, projectTitle, text } from './format.js'
+import { formatDateTime, formatSyncTime, groupDependencies, kindLabel, loaderLabel, PANEL_TITLE, projectTitle, relativeTime, runDuration, text } from './format.js'
 import { IconChevronDown, IconChevronRight, IconInfo, IconPlay, IconRefresh, IconStop, IconWarning } from './icons.js'
+import { t } from './messages.js'
+import { useLocale } from './useLocale.js'
 import { groupByModule, selectedTarget, targetKey } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { openLogTab } from './runtime.js'
@@ -37,6 +39,7 @@ const DEP_ROW_LIMIT = 200
 export function DetailTab() {
   const state = useStoreState()
   const launches = useLaunches(1500)
+  useLocale()
 
   useEffect(() => {
     if (state.scan === undefined) loadScan()
@@ -50,8 +53,8 @@ export function DetailTab() {
       { className: 'mcdev-detail' },
       h('div', { className: 'mcdev-title' }, PANEL_TITLE),
       state.loading
-        ? h(Skeleton, { rows: 4, hint: '正在扫描工作区…' })
-        : h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, '当前工作区没有识别到模组工程'),
+        ? h(Skeleton, { rows: 4, hint: t('flyout.scanningHint') })
+        : h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, t('detail.noProject')),
       state.error === undefined ? undefined : h('div', { className: 'mcdev-error', style: { marginTop: 8 } }, state.error),
     )
   }
@@ -74,6 +77,9 @@ export function DetailTab() {
   const dependencies = /** @type {Record<string, any>} */ (project.dependencies ?? {})
   const buildDeps = groupDependencies(/** @type {Array<Record<string, any>>} */ (dependencies.build ?? []))
   const modDeps = /** @type {Array<Record<string, any>>} */ (dependencies.mods ?? [])
+  const compared = /** @type {Array<Record<string, any>>} */ (dependencies.compared ?? [])
+  const comparedByModule = new Map(compared.map((entry) => [String(entry.module), entry]))
+  const syncedAt = typeof idea?.libraries?.syncedAt === 'string' ? idea.libraries.syncedAt : undefined
   const wrapper = project.wrapper === true
 
   return h(
@@ -100,8 +106,8 @@ export function DetailTab() {
     h(
       'div',
       { className: 'mcdev-status' },
-      statusChip(running === undefined ? '未运行' : launchState(running), running === undefined ? 'muted' : 'ok'),
-      statusChip(wrapper ? `Gradle ${text(project.gradleVersion)}` : '无 gradle wrapper', wrapper ? 'muted' : 'warn'),
+      statusChip(running === undefined ? t('detail.status.idle') : launchState(running), running === undefined ? 'muted' : 'ok'),
+      statusChip(wrapper ? `Gradle ${text(project.gradleVersion)}` : t('detail.status.noWrapper'), wrapper ? 'muted' : 'warn'),
       statusChip(jdkChipText(java), jdkTone(java)),
     ),
 
@@ -125,7 +131,7 @@ export function DetailTab() {
     h(
       'div',
       { className: 'mcdev-sec' },
-      h('h4', undefined, '运行'),
+      h('h4', undefined, t('detail.section.run')),
       h(
         'div',
         { className: 'mcdev-runline' },
@@ -138,13 +144,13 @@ export function DetailTab() {
                 type: 'button',
                 className: 'mcdev-run',
                 disabled: chosen === undefined || busy,
-                title: chosen === undefined ? '没有可运行目标' : `启动 ${chosen.taskPath}`,
+                title: chosen === undefined ? t('common.noTarget') : t('capsule.start', { target: chosen.taskPath }),
                 onClick: () => {
                   if (chosen !== undefined) void startTarget(project, chosen)
                 },
               },
               h('span', { className: 'mcdev-icon' }, h(IconPlay, undefined)),
-              '启动',
+              t('action.start'),
             )
           : [
               h(
@@ -158,17 +164,17 @@ export function DetailTab() {
                   onClick: () => stopLaunch(running.id),
                 },
                 h('span', { className: 'mcdev-icon' }, h(IconStop, undefined)),
-                '停止',
+                t('action.stop'),
               ),
               h(
                 'button',
                 { key: 'log', type: 'button', className: 'mcdev-mini', onClick: () => openLogTab(store.get().config) },
-                '日志',
+                t('action.log'),
               ),
             ],
       ),
       lastRun === undefined
-        ? h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '这个工程还没有运行记录')
+        ? h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, t('detail.noRunRecord'))
         : lastRunRow(lastRun),
     ),
 
@@ -176,13 +182,13 @@ export function DetailTab() {
     h(
       'div',
       { className: 'mcdev-sec' },
-      h('h4', undefined, '构建环境'),
+      h('h4', undefined, t('detail.section.buildEnv')),
       h(JdkPicker, { key: 'jdk', project, java }),
       typeof project.gradleRoot === 'string' && project.gradleRoot !== String(project.root)
         ? h(
             'div',
             { className: 'mcdev-muted mcdev-code mcdev-ellipsis', style: { marginTop: 4 }, title: project.gradleRoot },
-            `Gradle 根 ${project.gradleRoot}`,
+            t('detail.gradleRoot', { root: project.gradleRoot }),
           )
         : undefined,
     ),
@@ -192,48 +198,73 @@ export function DetailTab() {
       Fold,
       {
         key: 'deps',
-        title: '依赖',
+        title: t('detail.deps.title'),
         count: buildDeps.length,
-        info: '构建脚本与元数据里声明的依赖，用来核对是否加进去了；Gradle 解析后的传递依赖不在这里。',
-        open: true,
+        info: t('detail.deps.info'),
+        open: buildDeps.length > 0,
       },
       buildDeps.length === 0
-        ? h('div', { className: 'mcdev-muted' }, '没有读到依赖声明')
+        ? h('div', { className: 'mcdev-muted' }, t('detail.deps.empty'))
         : h(
             'div',
-            { className: 'mcdev-dep-list' },
-            buildDeps.slice(0, DEP_ROW_LIMIT).map((dependency) =>
-              h(
-                'div',
-                { className: 'mcdev-dep-row', key: `${dependency.file}:${dependency.line}:${dependency.notation}` },
-                h(
-                  'span',
-                  { className: 'mcdev-dep-conf', title: dependency.configurations.join(', ') },
-                  dependency.configurations.join(' '),
+            undefined,
+            compared.length === 0
+              ? undefined
+              : h(
+                  'div',
+                  {
+                    className: 'mcdev-dep-sync',
+                    title: t('detail.deps.compare.syncedTitle'),
+                  },
+                  syncedAt === undefined
+                    ? t('detail.deps.compare.syncedUnknown')
+                    : t('detail.deps.compare.synced', { time: formatSyncTime(syncedAt) }),
                 ),
-                h('span', { className: 'mcdev-dep-coord', title: dependency.notation }, dependency.notation),
-                h('span', { className: 'mcdev-dep-pos', title: `${dependency.file}:${dependency.line}` }, `:${dependency.line}`),
+            h(
+              'div',
+              { className: 'mcdev-dep-list' },
+              buildDeps.slice(0, DEP_ROW_LIMIT).map((dependency) =>
+                h(
+                  'div',
+                  { className: 'mcdev-dep-item', key: `${dependency.file}:${dependency.line}:${dependency.notation}` },
+                  h(
+                    'div',
+                    { className: 'mcdev-dep-row' },
+                    h(
+                      'span',
+                      { className: 'mcdev-dep-conf', title: dependency.configurations.join(', ') },
+                      dependency.configurations.join(' '),
+                    ),
+                    h('span', { className: 'mcdev-dep-coord', title: dependency.notation }, dependency.notation),
+                    h('span', { className: 'mcdev-dep-pos', title: `${dependency.file}:${dependency.line}` }, `:${dependency.line}`),
+                  ),
+                  depStatusLine(
+                    dependency.module === undefined ? undefined : comparedByModule.get(String(dependency.module)),
+                  ),
+                ),
               ),
             ),
           ),
       buildDeps.length > DEP_ROW_LIMIT
-        ? h('div', { className: 'mcdev-hint', style: { marginTop: 4 } }, `另有 ${buildDeps.length - DEP_ROW_LIMIT} 条未显示`)
+        ? h('div', { className: 'mcdev-hint', style: { marginTop: 4 } }, t('detail.deps.hidden', { count: buildDeps.length - DEP_ROW_LIMIT }))
         : undefined,
       modDeps.length === 0
         ? undefined
         : h(
             'div',
             { className: 'mcdev-hint', style: { marginTop: 6 } },
-            `模组声明：${modDeps.map((entry) => `${entry.modId} ${entry.range}`).join('，')}`,
+            t('detail.deps.mods', {
+              list: modDeps.map((entry) => `${entry.modId} ${entry.range}`).join(t('common.listSeparator')),
+            }),
           ),
     ),
 
     // ── 证据 ──────────────────────────────────────────────────────────
     h(
       Fold,
-      { key: 'evidence', title: '证据', count: evidence.length, info: '识别结论的依据；面板上每个判断都能在这里找到出处。' },
+      { key: 'evidence', title: t('detail.evidence.title'), count: evidence.length, info: t('detail.evidence.info') },
       evidence.length === 0
-        ? h('div', { className: 'mcdev-muted' }, '没有证据')
+        ? h('div', { className: 'mcdev-muted' }, t('detail.evidence.empty'))
         : h(
             'div',
             { className: 'mcdev-stack' },
@@ -253,14 +284,24 @@ export function DetailTab() {
       Fold,
       {
         key: 'diagnostics',
-        title: '诊断',
-        info: '识别引擎读到的原始结构：模块与目标表、IDE 工程模型、可信度。排查"为什么判成这样"时看这里。',
+        title: t('detail.diagnostics.title'),
+        info: t('detail.diagnostics.info'),
       },
       modules.length > 1
         ? h(
             'table',
             { className: 'mcdev-table' },
-            h('thead', undefined, h('tr', undefined, h('th', undefined, '模块'), h('th', undefined, '平台'), h('th', undefined, '任务'))),
+            h(
+              'thead',
+              undefined,
+              h(
+                'tr',
+                undefined,
+                h('th', undefined, t('detail.table.module')),
+                h('th', undefined, t('detail.table.platform')),
+                h('th', undefined, t('detail.table.task')),
+              ),
+            ),
             h(
               'tbody',
               undefined,
@@ -286,21 +327,21 @@ export function DetailTab() {
         ? undefined
         : kv([
             ['IDE', text(idea.name)],
-            ['工程 JDK', text(idea.jdkName)],
+            [t('detail.idea.jdk'), text(idea.jdkName)],
             ...(typeof idea.minecraftVersion === 'string' && idea.minecraftVersion !== ''
-              ? [['MC 版本', idea.minecraftVersion]]
+              ? [[t('detail.idea.mcVersion'), idea.minecraftVersion]]
               : []),
-            ['Java', `languageLevel ${text(idea.languageLevel)} · 字节码 ${text(idea.bytecodeTarget)}`],
-            ['模块', `${text(idea.modules)} 个（${text(idea.imls)} 个 iml）`],
-            ['运行配置', `${text(idea.runConfigurations)} 个`],
-            ...(idea.libraries === undefined || idea.libraries === null ? [] : [['库表', librariesText(idea.libraries)]]),
+            ['Java', t('detail.idea.java', { level: text(idea.languageLevel), bytecode: text(idea.bytecodeTarget) })],
+            [t('detail.idea.modules'), t('detail.idea.modulesValue', { count: text(idea.modules), imls: text(idea.imls) })],
+            [t('detail.idea.runConfigs'), t('detail.idea.count', { count: text(idea.runConfigurations) })],
+            ...(idea.libraries === undefined || idea.libraries === null ? [] : [[t('detail.idea.libraries'), librariesText(idea.libraries)]]),
             ...(Array.isArray(idea.platforms) && idea.platforms.length > 0 ? [['facet', idea.platforms.join(' / ')]] : []),
-            ['目录', text(idea.dir)],
+            [t('detail.idea.dir'), text(idea.dir)],
           ]),
       h(
         'div',
         { className: 'mcdev-hint', style: { marginTop: 6 } },
-        `识别可信度 ${Math.round(Number(project.confidence ?? 0) * 100)}%`,
+        t('detail.confidence', { percent: Math.round(Number(project.confidence ?? 0) * 100) }),
       ),
     ),
 
@@ -312,14 +353,14 @@ export function DetailTab() {
         'button',
         { type: 'button', className: 'mcdev-mini', onClick: () => loadScan({ refresh: true }) },
         h('span', { className: 'mcdev-icon' }, h(IconRefresh, { size: 12 })),
-        state.loading ? '扫描中…' : '重新扫描',
+        state.loading ? t('flyout.scanning') : t('detail.rescan'),
       ),
       state.scan?.scannedAt === undefined
         ? undefined
         : h(
             'span',
             { className: 'mcdev-hint', style: { marginLeft: 8 } },
-            String(state.scan.scannedAt).replace('T', ' ').slice(0, 19),
+            formatDateTime(state.scan.scannedAt),
           ),
     ),
   )
@@ -332,14 +373,16 @@ export function DetailTab() {
  */
 function TargetSelect({ project, chosen, locked }) {
   const targets = /** @type {Array<Record<string, any>>} */ (project.runTargets ?? [])
-  if (targets.length === 0) return h('span', { className: 'mcdev-muted mcdev-grow' }, '没有可运行目标')
+  if (targets.length === 0) return h('span', { className: 'mcdev-muted mcdev-grow' }, t('common.noTarget'))
   const groups = groupByModule(targets)
   /** @param {Record<string, any>} target */
   const optionOf = (target) =>
     h(
       'option',
       { key: targetKey(target), value: targetKey(target) },
-      `${target.label} · ${target.taskPath}${target.guessed === true ? '（未验证）' : ''}`,
+      target.guessed === true
+        ? t('detail.target.optionGuessed', { label: target.label, taskPath: target.taskPath })
+        : t('detail.target.option', { label: target.label, taskPath: target.taskPath }),
     )
 
   return h(
@@ -348,10 +391,10 @@ function TargetSelect({ project, chosen, locked }) {
       className: 'mcdev-select mcdev-grow',
       value: chosen === undefined ? '' : targetKey(chosen),
       disabled: locked,
-      title: locked ? '有实例在跑时不能换目标' : '运行目标',
+      title: locked ? t('detail.target.locked') : t('flyout.targets'),
       onChange: (event) => selectTarget(project.root, event.target.value),
     },
-    chosen === undefined ? h('option', { value: '' }, '选择目标') : undefined,
+    chosen === undefined ? h('option', { value: '' }, t('detail.target.choose')) : undefined,
     groups.length > 1
       ? groups.map((group) => h('optgroup', { key: group.module, label: group.module }, group.targets.map(optionOf)))
       : groups.flatMap((group) => group.targets.map(optionOf)),
@@ -408,7 +451,7 @@ function JdkPicker({ project, java }) {
             void apply(() => call('projects.jdk.set', { root: project.root, home: next }))
           },
         },
-        h('option', { value: '' }, java.required === undefined ? '自动' : `自动（按 MC 版本选 ${java.required}）`),
+        h('option', { value: '' }, java.required === undefined ? t('detail.jdk.auto') : t('detail.jdk.autoVersion', { version: java.required })),
         ...dedupeByHome(jdks).map((jdk) =>
           h(
             'option',
@@ -416,18 +459,18 @@ function JdkPicker({ project, java }) {
             `${jdk.major}${String(jdk.version) === String(jdk.major) ? '' : ` · ${jdk.version}`} — ${jdk.home}`,
           ),
         ),
-        override !== '' && !known ? h('option', { key: 'missing', value: override }, `已失效 — ${override}`) : undefined,
+        override !== '' && !known ? h('option', { key: 'missing', value: override }, t('detail.jdk.stale', { home: override })) : undefined,
       ),
       h(
         'button',
         {
           type: 'button',
           className: 'mcdev-mini',
-          title: '添加 JDK 根目录（含 release 文件）',
+          title: t('detail.jdk.addTitle'),
           disabled: busy,
           onClick: () => setAdding(!adding),
         },
-        adding ? '取消' : '添加',
+        adding ? t('action.cancel') : t('action.add'),
       ),
       hint(jdkSummary(java)),
     ),
@@ -439,14 +482,14 @@ function JdkPicker({ project, java }) {
             className: 'mcdev-input',
             type: 'text',
             value: path,
-            placeholder: 'JDK 根目录，例如 C:\\Program Files\\Java\\jdk-21',
+            placeholder: t('detail.jdk.placeholder'),
             disabled: busy,
             onChange: (event) => setPath(event.target.value),
             onKeyDown: (event) => {
               if (event.key === 'Enter') addFromInput()
             },
           }),
-          h('button', { type: 'button', className: 'mcdev-mini', disabled: busy || path.trim() === '', onClick: addFromInput }, '加入'),
+          h('button', { type: 'button', className: 'mcdev-mini', disabled: busy || path.trim() === '', onClick: addFromInput }, t('detail.jdk.join')),
         )
       : undefined,
     error === undefined ? undefined : h('div', { className: 'mcdev-error', style: { marginTop: 4 } }, error),
@@ -533,19 +576,25 @@ function statusChip(label, tone) {
 
 /**
  * "上次"一行：跑的是哪个目标、结论如何、多久以前。
+ * daemon 的"结论"没有意义，改成实际运行了多久；oneshot 仍然只报通过 / 失败。
  * @param {Record<string, any>} entry
  */
 function lastRunRow(entry) {
+  const duration = runDuration(entry.startedAt, entry.endedAt)
+  const outcome =
+    entry.mode === 'oneshot' || duration === undefined
+      ? verdictText(entry)
+      : t('detail.lastRun.duration', { duration })
   return h(
     'div',
     { className: 'mcdev-lastrun' },
-    h('span', { className: 'mcdev-muted' }, '上次'),
+    h('span', { className: 'mcdev-muted' }, t('detail.lastRun')),
     h(
       'span',
       { className: 'mcdev-verdict', 'data-tone': verdictTone(entry), title: entry.taskPath },
-      `${entry.label ?? entry.taskPath} · ${verdictText(entry)}`,
+      `${entry.label ?? entry.taskPath} · ${outcome}`,
     ),
-    h('span', { className: 'mcdev-muted' }, ` · ${timeAgo(entry.endedAt ?? entry.startedAt)}`),
+    h('span', { className: 'mcdev-muted' }, ` · ${relativeTime(entry.endedAt ?? entry.startedAt)}`),
   )
 }
 
@@ -567,12 +616,12 @@ function latestRun(launches, root) {
  * @returns {string}
  */
 function verdictText(entry) {
-  if (entry.verdict === 'passed') return '通过'
-  if (entry.verdict === 'failed') return '失败'
-  if (entry.verdict === 'aborted') return '已停止'
-  if (entry.verdict === 'error') return '未启动'
-  if (entry.mode === 'oneshot') return '无结论'
-  return '已退出'
+  if (entry.verdict === 'passed') return t('status.passed')
+  if (entry.verdict === 'failed') return t('status.failed')
+  if (entry.verdict === 'aborted') return t('status.stopped')
+  if (entry.verdict === 'error') return t('status.notStarted')
+  if (entry.mode === 'oneshot') return t('status.noVerdict')
+  return t('status.exited')
 }
 
 /**
@@ -586,22 +635,6 @@ function verdictTone(entry) {
 }
 
 /**
- * @param {string | undefined} iso
- * @returns {string}
- */
-function timeAgo(iso) {
-  const at = Date.parse(String(iso ?? ''))
-  if (Number.isNaN(at)) return '—'
-  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000))
-  if (seconds < 60) return `${seconds} 秒前`
-  const minutes = Math.round(seconds / 60)
-  if (minutes < 60) return `${minutes} 分钟前`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours} 小时前`
-  return new Date(at).toISOString().slice(0, 10)
-}
-
-/**
  * @param {Record<string, any>} java
  * @returns {string}
  */
@@ -609,10 +642,12 @@ function jdkChipText(java) {
   const required = java.required
   const selected = java.selected
   if (selected === undefined || selected === null || selected === '') {
-    return required === undefined ? 'JDK 未知' : `JDK 需 ${required} · 未找到`
+    return required === undefined ? t('detail.jdk.unknown') : t('detail.jdk.requiredNotFound', { version: required })
   }
-  if (required === undefined) return 'JDK 已选'
-  return `JDK ${required}${java.exact === true ? ' · 已选' : ' · 不完全匹配'}`
+  if (required === undefined) return t('detail.jdk.selected')
+  return java.exact === true
+    ? t('detail.jdk.selectedExact', { version: required })
+    : t('detail.jdk.selectedMismatch', { version: required })
 }
 
 /**
@@ -644,10 +679,39 @@ function targetMark(target) {
  * @returns {string}
  */
 function librariesText(libraries) {
-  const where = libraries.storage === 'external' ? '外部存储' : '.idea/libraries'
+  const where = libraries.storage === 'external' ? t('detail.libraries.external') : '.idea/libraries'
   const count = typeof libraries.count === 'number' ? libraries.count : 0
-  const local = typeof libraries.local === 'number' && libraries.local > 0 ? `，${libraries.local} 条本地 remap` : ''
-  return `${where} · ${count} 条${local}`
+  const local = typeof libraries.local === 'number' && libraries.local > 0 ? t('detail.libraries.local', { count: libraries.local }) : ''
+  return t('detail.libraries.summary', { where, count, local })
+}
+
+/**
+ * 声明行下面的对照结果：一致时不占版面，只有不一致 / 未解析才各给一行。
+ * 版本不同不等于写错了——可能是动态版本，也可能被别的依赖抬高，所以用提示色而不是错误色。
+ * @param {Record<string, any> | undefined} compared
+ */
+function depStatusLine(compared) {
+  if (compared === undefined || compared.status === 'same') return undefined
+  if (compared.status === 'differs') {
+    return h(
+      'div',
+      {
+        className: 'mcdev-dep-status',
+        'data-tone': 'warn',
+        title: t('detail.deps.compare.differsTitle', { declared: compared.declared }),
+      },
+      t('detail.deps.compare.differs', { version: compared.resolved }),
+    )
+  }
+  return h(
+    'div',
+    {
+      className: 'mcdev-dep-status',
+      'data-tone': 'muted',
+      title: t('detail.deps.compare.unresolvedTitle'),
+    },
+    t('detail.deps.compare.unresolved'),
+  )
 }
 
 /**
@@ -669,10 +733,12 @@ function dedupeByHome(jdks) {
  */
 function jdkSummary(java) {
   const selected = typeof java.selected === 'string' ? java.selected : ''
-  if (selected === '') return '没有可用的 JDK：装一个，或把路径加进来'
-  if (java.source === 'override') return `生效：${selected}（手动指定）`
-  if (java.source === 'configured') return `生效：${selected}（来自 gradle.properties）`
-  return `生效：${selected}（自动）${java.exact === true ? '' : '，大版本不完全匹配'}`
+  if (selected === '') return t('detail.jdk.summaryNone')
+  if (java.source === 'override') return t('detail.jdk.summaryOverride', { home: selected })
+  if (java.source === 'configured') return t('detail.jdk.summaryConfigured', { home: selected })
+  return java.exact === true
+    ? t('detail.jdk.summaryAuto', { home: selected })
+    : t('detail.jdk.summaryAutoMismatch', { home: selected })
 }
 
 /**
@@ -680,7 +746,7 @@ function jdkSummary(java) {
  * @returns {string}
  */
 function launchState(entry) {
-  if (entry.status === 'starting') return '启动中'
-  if (entry.mode === 'oneshot') return entry.verdict === 'passed' ? '已通过' : '执行中'
-  return '运行中'
+  if (entry.status === 'starting') return t('status.starting')
+  if (entry.mode === 'oneshot') return entry.verdict === 'passed' ? t('status.passedDone') : t('status.oneshotRunning')
+  return t('status.running')
 }

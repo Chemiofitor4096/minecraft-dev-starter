@@ -14,6 +14,8 @@ import { useState } from 'react'
 import { h } from './h.js'
 import { kindLabel, listRows, loaderLabel, PANEL_TITLE, projectSubtitle, projectTitle } from './format.js'
 import { IconChevronDown, IconChevronRight, IconRefresh } from './icons.js'
+import { t } from './messages.js'
+import { useLocale } from './useLocale.js'
 import { groupByModule, selectedTarget, targetKey } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { loadScan, selectTarget, store, useLaunches, useStoreState } from './state.js'
@@ -25,6 +27,7 @@ const SEARCH_THRESHOLD = 8
 export function Flyout() {
   const state = useStoreState()
   const launches = useLaunches(1500)
+  useLocale()
   const [query, setQuery] = useState('')
   const [showOthers, setShowOthers] = useState(false)
 
@@ -45,8 +48,10 @@ export function Flyout() {
       .some((value) => String(value).toLowerCase().includes(needle))
 
   const visible = projects.filter(matches)
-  const runnable = visible.filter((project) => (project.runTargets ?? []).length > 0)
-  const others = visible.filter((project) => (project.runTargets ?? []).length === 0)
+  // 重名按整张列表算：同一个工程名一个在「可运行」、一个在「其他」时也补后缀
+  const entries = listRows(visible)
+  const runnable = entries.filter(({ project }) => (project.runTargets ?? []).length > 0)
+  const others = entries.filter(({ project }) => (project.runTargets ?? []).length === 0)
   const othersOpen = showOthers || needle !== ''
 
   return h(
@@ -66,7 +71,7 @@ export function Flyout() {
           {
             type: 'button',
             className: 'mcdev-mini mcdev-mini-icon',
-            title: state.loading ? '扫描中…' : '重新扫描工作区',
+            title: state.loading ? t('flyout.scanning') : t('flyout.rescan'),
             disabled: state.loading,
             onClick: () => loadScan({ refresh: true }),
           },
@@ -86,7 +91,7 @@ export function Flyout() {
             'div',
             { className: 'mcdev-row', style: { justifyContent: 'space-between', gap: 8 } },
             h('div', { className: 'mcdev-muted mcdev-code mcdev-ellipsis', title: state.scan?.root ?? '' }, state.scan?.root ?? '—'),
-            projects.length === 0 ? undefined : h('span', { className: 'mcdev-count' }, `${projects.length} 个工程`),
+            projects.length === 0 ? undefined : h('span', { className: 'mcdev-count' }, t('flyout.projectCount', { count: projects.length })),
           ),
       state.error === undefined ? undefined : h('div', { className: 'mcdev-error' }, state.error),
       launches.error === undefined ? undefined : h('div', { className: 'mcdev-error' }, launches.error),
@@ -100,15 +105,15 @@ export function Flyout() {
           { className: 'mcdev-flyout-list' },
           projects.length === 0
             ? state.loading
-              ? h(Skeleton, { rows: 3, hint: '正在扫描工作区…' })
-              : h('div', { className: 'mcdev-hint', style: { padding: '10px 4px' } }, '没有找到 Gradle 工程')
+              ? h(Skeleton, { rows: 3, hint: t('flyout.scanningHint') })
+              : h('div', { className: 'mcdev-hint', style: { padding: '10px 4px' } }, t('flyout.noGradleProjects'))
             : [
                 projects.length > SEARCH_THRESHOLD
                   ? h('input', {
                       key: 'search',
                       className: 'mcdev-search',
                       type: 'search',
-                      placeholder: '按名字、loader 或路径过滤',
+                      placeholder: t('flyout.search.placeholder'),
                       value: query,
                       onChange: (event) => setQuery(event.target.value),
                     })
@@ -118,8 +123,8 @@ export function Flyout() {
                   : h(
                       'div',
                       { key: 'runnable', className: 'mcdev-group' },
-                      h('div', { className: 'mcdev-group-head' }, h('span', undefined, '可运行'), h('span', { className: 'mcdev-count' }, runnable.length)),
-                      rows(runnable, current),
+                      h('div', { className: 'mcdev-group-head' }, h('span', undefined, t('flyout.group.runnable')), h('span', { className: 'mcdev-count' }, runnable.length)),
+                      renderRows(runnable, current),
                     ),
                 others.length === 0
                   ? undefined
@@ -132,17 +137,17 @@ export function Flyout() {
                           type: 'button',
                           className: 'mcdev-group-head',
                           'data-toggle': 'true',
-                          title: '识别不出 loader 或没有可运行目标',
+                          title: t('flyout.group.othersTitle'),
                           onClick: () => setShowOthers(!showOthers),
                         },
                         h('span', { className: 'mcdev-icon' }, h(othersOpen ? IconChevronDown : IconChevronRight, { size: 12 })),
-                        h('span', undefined, '其他'),
+                        h('span', undefined, t('flyout.group.others')),
                         h('span', { className: 'mcdev-count' }, others.length),
                       ),
-                      othersOpen ? rows(others, current) : undefined,
+                      othersOpen ? renderRows(others, current) : undefined,
                     ),
                 visible.length === 0
-                  ? h('div', { key: 'empty', className: 'mcdev-hint', style: { padding: '10px 4px' } }, '没有匹配的工程')
+                  ? h('div', { key: 'empty', className: 'mcdev-hint', style: { padding: '10px 4px' } }, t('flyout.noMatches'))
                   : undefined,
               ],
         ),
@@ -160,7 +165,7 @@ export function Flyout() {
               h(
                 'span',
                 { className: 'mcdev-ellipsis', style: { minWidth: 0 } },
-                h('span', { className: 'mcdev-muted' }, '运行目标'),
+                h('span', { className: 'mcdev-muted' }, t('flyout.targets')),
                 running === undefined
                   ? undefined
                   : h(
@@ -171,13 +176,13 @@ export function Flyout() {
                         'data-state': running.status === 'starting' ? 'warn' : 'ok',
                         'data-pulse': 'true',
                       }),
-                      `${running.label} ${running.status === 'starting' ? '启动中' : '运行中'} · ${elapsed(running.startedAt)}`,
+                      `${running.label} ${running.status === 'starting' ? t('status.starting') : t('status.running')} · ${elapsed(running.startedAt)}`,
                     ),
               ),
               h(
                 'button',
                 { type: 'button', className: 'mcdev-mini', onClick: () => openDetailTab() },
-                '详情',
+                t('flyout.details'),
                 h('span', { className: 'mcdev-icon' }, h(IconChevronRight, { size: 12 })),
               ),
             ),
@@ -188,12 +193,12 @@ export function Flyout() {
 }
 
 /**
- * 一组工程行；同名工程补目录名。
- * @param {Array<Record<string, any>>} projects
+ * 一组工程行；后缀由 listRows 统一决定（父工程归属或重名目录）。
+ * @param {Array<{ project: Record<string, any>, title: string, suffix: string }>} rows
  * @param {Record<string, any> | undefined} current
  */
-function rows(projects, current) {
-  return listRows(projects).map(({ project, title, suffix }) =>
+function renderRows(rows, current) {
+  return rows.map(({ project, title, suffix }) =>
     h(
       'button',
       {
@@ -222,7 +227,7 @@ function rows(projects, current) {
  */
 function renderTargets(project, selection, locked) {
   const targets = /** @type {Array<Record<string, any>>} */ (project.runTargets ?? [])
-  if (targets.length === 0) return h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, '没有找到可运行目标')
+  if (targets.length === 0) return h('div', { className: 'mcdev-hint', style: { marginTop: 6 } }, t('flyout.targetsEmpty'))
 
   const chosen = selectedTarget(project, selection)
   const groups = groupByModule(targets)
@@ -249,7 +254,7 @@ function renderTargets(project, selection, locked) {
             }),
             h('span', { className: 'mcdev-option-label' }, target.label),
             target.guessed === true
-              ? h('span', { className: 'mcdev-badge', 'data-guessed': 'true', title: '按 loader 惯例推测，尚未验证' }, '未验证')
+              ? h('span', { className: 'mcdev-badge', 'data-guessed': 'true', title: t('flyout.guessedTitle') }, t('common.unverified'))
               : undefined,
           ),
         ),

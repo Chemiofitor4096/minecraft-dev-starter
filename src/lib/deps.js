@@ -13,6 +13,7 @@
  */
 
 import { stripComments } from './gradle.js'
+import { resolvePlaceholders } from './text.js'
 import { parseToml } from './toml.js'
 
 /**
@@ -286,6 +287,94 @@ export function resolveCatalogRefs(dependencies, catalog) {
     if (hit.version !== undefined) resolved.version = hit.version
     return resolved
   })
+}
+
+/**
+ * 把声明里的 `${property}` 换成 `gradle.properties` 的值。
+ *
+ * Gradle 脚本里 `"net.fabricmc:fabric-loader:${fabric_loader_version}"` 是常态；
+ * 不解析就会拿字面量去和 IDE 解析出的版本比，结果每一条都是"版本不同"。
+ * @param {BuildDependency[]} dependencies
+ * @param {Record<string, string>} properties
+ * @returns {BuildDependency[]}
+ */
+export function resolveDependencyPlaceholders(dependencies, properties) {
+  return dependencies.map((dependency) => {
+    const { value } = resolvePlaceholders(dependency.notation, properties)
+    if (value === undefined || value === dependency.notation) return dependency
+    /** @type {BuildDependency} */
+    const next = { ...dependency, notation: value }
+    // 坐标位置可能跟着占位符变了，重新拆一次；旧的 module/version 不能留
+    delete next.module
+    delete next.version
+    return Object.assign(next, splitCoordinates(value))
+  })
+}
+
+/**
+ * @typedef {object} ComparedDependency
+ * @property {string} module group:artifact
+ * @property {string} declared 构建脚本里声明的版本
+ * @property {string | null} resolved IDE 上次同步解析出的版本；未解析时是 null
+ * @property {'same' | 'differs' | 'unresolved'} status
+ */
+
+/**
+ * 声明的版本 vs IDE 上次 Gradle 同步解析出的版本。
+ *
+ * 只对照**声明项**：库表里多出来的传递依赖不列——它们不是"你写了什么"，
+ * 一个普通 Fabric 工程就能有 130 多条。同一模块在多个配置里声明时只对照第一次。
+ * 版本不同不一定是错：动态版本、被别的依赖抬高都会这样，所以 status 只描述事实。
+ * @param {BuildDependency[]} dependencies
+ * @param {Record<string, string>} resolved
+ * @returns {ComparedDependency[]}
+ */
+export function compareDependencies(dependencies, resolved) {
+  /** @type {ComparedDependency[]} */
+  const compared = []
+  /** @type {Set<string>} */
+  const seen = new Set()
+  const remapped = remappedCoordinates(resolved)
+  for (const dependency of dependencies) {
+    const module = dependency.module
+    const declared = dependency.version
+    // 没有坐标（project 依赖）或没有版本（交给平台统一管理）时无可对照
+    if (module === undefined || declared === undefined || seen.has(module)) continue
+    seen.add(module)
+    const actual = Object.hasOwn(resolved, module) ? resolved[module] : remapped.get(module)
+    if (actual === undefined) {
+      compared.push({ module, declared, resolved: null, status: 'unresolved' })
+      continue
+    }
+    compared.push({
+      module,
+      declared,
+      resolved: actual,
+      status: actual === declared ? 'same' : 'differs',
+    })
+  }
+  return compared
+}
+
+/**
+ * Loom 把 remap 后的坐标写成 `<mappings-id>.<原 group>:artifact`，直接按 group:artifact
+ * 永远对不上。这里只剥这一种有明确前缀的写法，不做宽泛的"按 artifact 猜"。
+ * 精确坐标优先：索引里已经有同名的真实条目时，别名不覆盖它。
+ * @param {Record<string, string>} resolved
+ * @returns {Map<string, string>}
+ */
+function remappedCoordinates(resolved) {
+  /** @type {Map<string, string>} */
+  const aliases = new Map()
+  for (const [key, version] of Object.entries(resolved)) {
+    const colon = key.indexOf(':')
+    if (colon <= 0) continue
+    const match = /^loom_mappings_[^.]+\.(.+)$/.exec(key.slice(0, colon))
+    if (match === null) continue
+    const alias = `${match[1]}:${key.slice(colon + 1)}`
+    if (!Object.hasOwn(resolved, alias) && !aliases.has(alias)) aliases.set(alias, version)
+  }
+  return aliases
 }
 
 /**

@@ -9,12 +9,21 @@
 
 /** @typedef {'all'|'info'|'warn'|'error'} LevelFilter */
 
-export const LEVEL_FILTERS = /** @type {const} */ ([
-  { value: 'all', label: '全部' },
-  { value: 'info', label: 'INFO+' },
-  { value: 'warn', label: 'WARN+' },
-  { value: 'error', label: 'ERROR' },
-])
+import { t } from './messages.js'
+
+export const LEVEL_FILTERS = /** @type {const} */ (['all', 'info', 'warn', 'error'])
+
+/**
+ * 档位显示名；「全部」走词典，其余是日志级别本身，不翻译。
+ * @param {LevelFilter} filter
+ * @returns {string}
+ */
+export function levelFilterLabel(filter) {
+  if (filter === 'all') return t('log.filter.all')
+  if (filter === 'info') return 'INFO+'
+  if (filter === 'warn') return 'WARN+'
+  return 'ERROR'
+}
 
 const STORAGE_KEY = 'mcdev.logLevel'
 

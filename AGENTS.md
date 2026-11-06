@@ -42,6 +42,7 @@ src/lib/
   argv.js             gradlew 命令行构造（含 Windows 引号规则）
   idea.js             IntelliJ `.idea` 工程模型（模块清单 / facet / 工程 JDK / 运行配置）
   xml.js              极简 XML 解析（零依赖，只服务 .idea）
+  messages.js         宿主侧 zh / en 字典：证据、警告、归因、错误（语言由客户端请求带上）
   text.js / toml.js   小工具
 src/client/
   index.js            客户端入口：胶囊 slot、两个标签类型、better-sidebar 可选注册
@@ -49,9 +50,10 @@ src/client/
   Flyout.js           浮层（单工程特化 / 多工程三段结构）
   DetailTab.js        工程面板（版本、环境、模块、证据、警告）
   LogTab.js           日志标签（历史、跟随、归因）
+  messages.js         客户端侧 zh / en 字典 + 取词（跟随宿主 locale）
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-test/                 160 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 195 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划与调研
 ```
 
@@ -340,6 +342,47 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
 
 160 个测试。
 
+### M19 声明版本的 IDE 对照（2026-11-06）
+
+- **索引与同步时间**：`readIdeaProject` 从库表补一份 `group:artifact → version` 索引（≤800 条，
+  只收带完整坐标的条目），同步时间取 `libraries.xml`（外部存储）或 `.idea/workspace.xml` 的 mtime。
+  外部存储开关明确关掉时不再读旧产物；读不到就不出现字段。
+- **对照**：`dependencies.compared` 只列声明项（传递依赖不列），状态为 `same` / `differs` /
+  `unresolved`。Gradle 脚本里的 `${property}` 先用 gradle.properties 解析；loom 的
+  `loom_mappings_….<group>` 做一次有边界的别名匹配，不按 artifact 乱猜。
+- **面板**：same 不显示；differs 用琥珀色「实际 x.y.z」（tooltip 给出声明值并说明版本不同不等于错）；
+  unresolved 用灰色「未解析」。依赖区块顶部标「对照自 IDE 同步 · 时间」。
+- 外部库表的测试全部在临时目录造 `cache-state.xml` + `libraries.xml` 并删除，不提交夹具；
+  覆盖三种状态、无 `.idea`、开关关闭、从未同步与 800 条上限。真机 BurstDoorOpen 的
+  fabric-loader 与 fabric-api 均对上（`com.mojang:minecraft` 被 loom 改写成
+  `net.minecraft:minecraft-merged-*`，保持 unresolved）。
+
+### M20 双语与语言通道（2026-11-06）
+
+- **客户端字典**（`src/client/messages.js`，C3a 抽出，127 个 key）：`en` 按 **300px 侧栏**取舍，
+  换行/截断的地方缩成 `Build` / `Target` / `Unverified` / `Logs` / `Not running`，完整说法进 tooltip。
+  `运行中` 与 `执行中` 在英文里都是 `Running`，`通过` 与 `已通过` 都是 `Passed`（oneshot 的差别由结论词承担）。
+- **相对时间**用 `Intl.RelativeTimeFormat`，不改手写文案：zh 的 short 是「5秒前」，补空格对齐 0.1.12 的
+  「5 秒前」；en 的 short 带缩写点（`12 min. ago`），秒/分取 short 再去点、小时取 long，得到
+  `5 sec ago` / `12 min ago` / `3 hours ago`。单复数仍由 ICU 负责。
+- **宿主字典**（`src/lib/messages.js`，约 70 个 key）：证据、警告、冲突、崩溃归因、错误消息、结论摘要。
+  归因规则的 `hint` / `suggestion` 不再是常量，按 `code` 从词典取，读日志时才定语言。
+- **语言通道**：宿主插件的 ctx 里**没有** locale 服务（整个 DSH 只有一处 `ctx.provide("locale")`，
+  在网页客户端那层，邻居是 `slots`）。所以**客户端每次请求带上 `lang`**，`/mcdev/api` 入口调
+  `setLanguage`；`projects.scan` 的缓存 key 必须带语言，否则切语言后会拿到旧语言那份缓存。
+  语言是进程级的——同时只有一个界面语言，并发请求不会各说各话。
+- **不翻译**：loader 名、工程与 `.idea` 路径、Gradle 任务路径、日志正文。
+- **切换语言时重绘**：`t()` 只在调用时读语言，组件自己不会重绘。`src/client/useLocale.js` 用
+  `useSyncExternalStore(ctx.locale.subscribe, () => getSnapshot().active)` 订阅当前语言，胶囊 / 浮层 /
+  详情 / 日志四个组件各调一次；订阅源是模块级常量，每次渲染新建对象会让 React 反复重订阅。
+- **工具输出（`src/tools.js`）的渲染文案仍是中文**（`mc_launch` 的结论行等是写死的）。但工具值里的
+  证据 / 警告文本来自 detect / launches，走宿主词典；宿主语言又是进程级的（由最近一次界面请求设置），
+  所以界面为英文时工具输出会出现「中文渲染 + 英文证据」的混排。要彻底解决得把 `lang` 变成调用参数
+  穿透 detect / launches，而不是模块级状态；见「还没做的事」。
+- 验证：195 个测试。`test/host-messages.test.js` 覆盖双语 key 对齐、八条归因规则的两种语言、
+  英文下识别结果零中文、缓存按语言分开；`test/messages.test.js` 覆盖客户端侧的同类护栏、相对时间与
+  语言订阅源（引用稳定、转发订阅）。
+
 ## 发布记录
 
 - `0.1.0` → 首版。
@@ -400,3 +443,6 @@ npm 包页面上会出现两条告警，都来自 peer 依赖图，不是本包�
 ## 还没做的事
 
 - 桌面版目前仍用 `link:` 安装（改代码即时生效）；切到 npm 版本需要每次改完都发版。
+- 宿主语言还是进程级的（`src/lib/messages.js` 的 `setLanguage`）：界面请求会改全局，工具输出跟着变，
+  两个语言不同的并发请求理论上会串；`src/tools.js` 的渲染文案也还没进词典。要干净解决，得把 `lang`
+  做成 detect / launches 的调用参数，而不是模块级状态。

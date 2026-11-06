@@ -2,6 +2,8 @@
  * 识别引擎的回归：四种工程形态各断言一次，用的是 test/fixtures 里的最小工程。
  */
 import assert from 'node:assert/strict'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
@@ -100,6 +102,8 @@ test('画像里带声明依赖：元数据的 depends 拉成列表', async () =>
     ['fabricloader:>=0.16.10', 'minecraft:~1.21.1'],
   )
   assert.equal(dependencies.catalogFile, null)
+  // 没有 .idea 就没有可对照的解析结果：字段整个不出现，而不是空数组
+  assert.equal('compared' in dependencies, false)
 })
 
 test('子模块工程：任务带模块前缀，Gradle 根指回聚合根', async () => {
@@ -109,7 +113,7 @@ test('子模块工程：任务带模块前缀，Gradle 根指回聚合根', asyn
   assert.equal(profile.loader, 'neoforge')
   assert.deepEqual(
     profile.runTargets.map((target) => target.taskPath),
-    [':modules/core:runClient', ':modules/core:runData'],
+    [':modules:core:runClient', ':modules:core:runData'],
   )
   assert.deepEqual(profile.runTargets.map((target) => target.module), ['modules/core', 'modules/core'])
   // wrapper 继承自父工程
@@ -131,3 +135,117 @@ test('聚合根：没有自己的元数据时用 rootProject.name 当工程名',
   assert.equal(profile.modId, undefined)
   assert.ok(profile.evidence.some((entry) => entry.kind === 'aggregator'))
 })
+
+test('依赖对照：声明 vs IDE 同步库表，same / differs / unresolved，传递依赖不列', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mcdev-compare-'))
+  try {
+    const projectDir = join(scratch, 'project')
+    await mkdir(join(projectDir, '.idea'), { recursive: true })
+    await writeFile(
+      join(projectDir, 'build.gradle'),
+      `plugins { id 'fabric-loom' version '1.10-SNAPSHOT' }\n`
+        + 'dependencies {\n'
+        + '  modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"\n'
+        + '  implementation "com.example:dynamic:1.2.+"\n'
+        + '  implementation "com.example:missing:3.0.0"\n'
+        + '}\n',
+    )
+    await writeFile(join(projectDir, 'gradle.properties'), 'fabric_loader_version=0.16.10\n')
+    await writeFile(
+      join(projectDir, '.idea', 'misc.xml'),
+      '<project version="4"><component name="ExternalStorageConfigurationManager" enabled="true" /></project>',
+    )
+    await writeExternalLibraries(scratch, projectDir, [
+      { group: 'net.fabricmc', artifact: 'fabric-loader', version: '0.16.10' },
+      { group: 'com.example', artifact: 'dynamic', version: '1.2.7' },
+      // 传递依赖：只在库表里，没有在构建脚本里声明
+      { group: 'com.google.guava', artifact: 'guava', version: '32.1.2-jre' },
+    ])
+
+    const profile = await detectProject(projectDir, { jdks, externalRoots: [join(scratch, 'jetbrains')] })
+    const dependencies = /** @type {Record<string, any>} */ (profile.dependencies)
+    const idea = /** @type {Record<string, any>} */ (profile.idea)
+    // 声明里的 ${fabric_loader_version} 先按 gradle.properties 解析，再对照
+    assert.equal(dependencies.build[0].notation, 'net.fabricmc:fabric-loader:0.16.10')
+    assert.equal(typeof idea.libraries.syncedAt, 'string')
+    assert.deepEqual(dependencies.compared, [
+      { module: 'net.fabricmc:fabric-loader', declared: '0.16.10', resolved: '0.16.10', status: 'same' },
+      { module: 'com.example:dynamic', declared: '1.2.+', resolved: '1.2.7', status: 'differs' },
+      { module: 'com.example:missing', declared: '3.0.0', resolved: null, status: 'unresolved' },
+    ])
+    // 原始索引太大，不跟着画像进扫描结果
+    assert.equal('resolved' in idea.libraries, false)
+  } finally {
+    await rm(scratch, { recursive: true, force: true })
+  }
+})
+
+test('外部存储开关关掉时不读旧库表，也没有 compared', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mcdev-external-off-'))
+  try {
+    const projectDir = join(scratch, 'project')
+    await mkdir(join(projectDir, '.idea'), { recursive: true })
+    await writeFile(join(projectDir, 'build.gradle'), 'dependencies { implementation "com.example:thing:1.0" }\n')
+    await writeFile(
+      join(projectDir, '.idea', 'misc.xml'),
+      '<project version="4"><component name="ExternalStorageConfigurationManager" enabled="false" /></project>',
+    )
+    await writeExternalLibraries(scratch, projectDir, [{ group: 'com.example', artifact: 'thing', version: '1.0' }])
+
+    const profile = await detectProject(projectDir, { jdks, externalRoots: [join(scratch, 'jetbrains')] })
+    const dependencies = /** @type {Record<string, any>} */ (profile.dependencies)
+    assert.equal(profile.idea?.libraries, undefined)
+    assert.equal('compared' in dependencies, false)
+  } finally {
+    await rm(scratch, { recursive: true, force: true })
+  }
+})
+
+test('有 .idea 但从没同步过：没有 compared 字段', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mcdev-never-synced-'))
+  try {
+    const projectDir = join(scratch, 'project')
+    await mkdir(join(projectDir, '.idea'), { recursive: true })
+    await writeFile(join(projectDir, 'build.gradle'), 'dependencies { implementation "com.example:thing:1.0" }\n')
+    await writeFile(
+      join(projectDir, '.idea', 'misc.xml'),
+      '<project version="4"><component name="ExternalStorageConfigurationManager" enabled="true" /></project>',
+    )
+
+    const profile = await detectProject(projectDir, { jdks, externalRoots: [join(scratch, 'jetbrains')] })
+    const dependencies = /** @type {Record<string, any>} */ (profile.dependencies)
+    assert.equal(profile.idea?.libraries, undefined)
+    assert.equal('compared' in dependencies, false)
+  } finally {
+    await rm(scratch, { recursive: true, force: true })
+  }
+})
+
+/**
+ * 造一份 IDE 外部存储的缓存：cache-state.xml 用工程绝对路径认领，libraries.xml 放库表。
+ * @param {string} scratch
+ * @param {string} projectDir
+ * @param {Array<{ group: string, artifact: string, version: string }>} entries
+ */
+async function writeExternalLibraries(scratch, projectDir, entries) {
+  const cacheDir = join(scratch, 'jetbrains', 'IntelliJIdea2026.1', 'projects', 'project.test')
+  await mkdir(join(cacheDir, 'external_build_system', 'project'), { recursive: true })
+  const projectKey = projectDir.replace(/\\/g, '/')
+  const state = { projectData: { GRADLE: { [projectKey]: {} } } }
+  await writeFile(
+    join(cacheDir, 'cache-state.xml'),
+    `<project version="4"><component name="ExternalSystemProjectTracker"><![CDATA[${JSON.stringify(state)}]]></component></project>`,
+  )
+  const libraries = entries
+    .map(
+      (entry) =>
+        `<library name="Gradle: ${entry.group}:${entry.artifact}:${entry.version}" type="java-imported">`
+        + `<properties groupId="${entry.group}" artifactId="${entry.artifact}" version="${entry.version}" />`
+        + '</library>',
+    )
+    .join('')
+  await writeFile(
+    join(cacheDir, 'external_build_system', 'project', 'libraries.xml'),
+    `<component name="libraryTable">${libraries}</component>`,
+  )
+}

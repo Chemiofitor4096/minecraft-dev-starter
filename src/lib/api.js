@@ -10,6 +10,7 @@ import { resolveProjectDir } from './idea.js'
 import { discoverJdks, readJdk } from './java.js'
 import { loadJdkPrefs, overrideFor, projectKey, saveJdkPrefs, shouldInjectJdk, withExtra } from './jdks.js'
 import { createLaunchService } from './launches.js';
+import { currentLanguage, t } from './messages.js'
 import { baseStateDir } from './state.js'
 import { scanWorkspace } from './scanner.js'
 
@@ -51,7 +52,7 @@ export function createApi(options) {
   async function resolveRoot(requested) {
     const root = requested ?? (await options.resolveRoot())
     if (root === undefined || root === '') {
-      throw new Error('找不到工作区目录：请求里没带 root，宿主也没有活跃会话')
+      throw new Error(t('error.noWorkspace'))
     }
     // 传进来的是 `.idea`（从 IDE 里复制路径很常见）时退回工程根
     return resolveProjectDir(root)
@@ -99,7 +100,8 @@ export function createApi(options) {
     'projects.scan': async (payload) => {
       const input = /** @type {{ root?: string, depth?: number, refresh?: boolean }} */ (payload ?? {})
       const root = await resolveRoot(input.root)
-      const key = `${root}|${input.depth ?? 3}`
+      // 语言进 key：切英文后不能再拿中文那次的缓存顶上去
+      const key = `${root}|${input.depth ?? 3}|${currentLanguage()}`
       const cached = cache.get(key)
       if (input.refresh !== true && cached !== undefined && Date.now() - cached.at < CACHE_TTL_MS) {
         return cached.value
@@ -153,7 +155,7 @@ export function createApi(options) {
       } else {
         const info = await readJdk(home)
         if (info === undefined) {
-          throw Object.assign(new Error(`这个目录不像 JDK：${home}`), { code: 'BAD_JDK' })
+          throw Object.assign(new Error(t('error.badJdkDir', { home })), { code: 'BAD_JDK' })
         }
         projects[key] = info.home
         prefs = withExtra({ ...prefs, projects }, info.home)
@@ -176,10 +178,10 @@ export function createApi(options) {
     'projects.jdk.add': async (payload) => {
       const input = /** @type {{ path?: string }} */ (payload ?? {})
       const path = typeof input.path === 'string' ? input.path.trim() : ''
-      if (path === '') throw Object.assign(new Error('缺少 JDK 目录'), { code: 'BAD_REQUEST' })
+      if (path === '') throw Object.assign(new Error(t('error.missingJdkDir')), { code: 'BAD_REQUEST' })
       const info = await readJdk(path)
       if (info === undefined) {
-        throw Object.assign(new Error(`这个目录不像 JDK（没有 release 文件，目录名里也没有版本号）：${path}`), { code: 'BAD_JDK' })
+        throw Object.assign(new Error(t('error.badJdkDirDetail', { path })), { code: 'BAD_JDK' })
       }
       const prefs = withExtra(await loadJdkPrefs(jdkDir), info.home)
       await saveJdkPrefs(jdkDir, prefs)
@@ -206,10 +208,10 @@ export function createApi(options) {
       // 否则切到另一个工程的会话后会被误判成"越界"。
       const workspaces = options.resolveRoots === undefined ? [await resolveRoot(undefined)] : await options.resolveRoots()
       if (!workspaces.some((workspace) => isInside(root, workspace))) {
-        throw Object.assign(new Error(`工程不在当前工作区内：${root}`), { code: 'OUTSIDE_WORKSPACE' })
+        throw Object.assign(new Error(t('error.outsideWorkspace', { root })), { code: 'OUTSIDE_WORKSPACE' })
       }
       if (typeof input.taskPath !== 'string' || input.taskPath === '') {
-        throw Object.assign(new Error('缺少 taskPath'), { code: 'BAD_REQUEST' })
+        throw Object.assign(new Error(t('error.missingTaskPath')), { code: 'BAD_REQUEST' })
       }
       const { prefs, jdks } = await environment()
       const overrideJavaHome = overrideFor(prefs, root)
@@ -217,7 +219,7 @@ export function createApi(options) {
       const targets = /** @type {Array<Record<string, any>>} */ (profile.runTargets ?? [])
       const target = targets.find((entry) => entry.taskPath === input.taskPath)
       if (target === undefined) {
-        throw Object.assign(new Error(`工程里没有这个可运行目标：${input.taskPath}`), { code: 'UNKNOWN_TARGET' })
+        throw Object.assign(new Error(t('error.unknownTarget', { taskPath: input.taskPath })), { code: 'UNKNOWN_TARGET' })
       }
       const choice = javaChoiceFor(profile)
       const record = await launches.start({
@@ -245,7 +247,7 @@ export function createApi(options) {
     'launch.stop': async (payload) => {
       const input = /** @type {{ id?: string }} */ (payload ?? {})
       if (typeof input.id !== 'string' || input.id === '') {
-        throw Object.assign(new Error('缺少实例 id'), { code: 'BAD_REQUEST' })
+        throw Object.assign(new Error(t('error.missingLaunchId')), { code: 'BAD_REQUEST' })
       }
       const record = await launches.stop(input.id)
       console.log(`[mcdev] launch.stop ${input.id} → ${record.status}/${record.outcome ?? '-'}`)
@@ -281,7 +283,7 @@ export function createApi(options) {
     'launch.logs': async (payload) => {
       const input = /** @type {{ id?: string, offset?: number, limit?: number }} */ (payload ?? {})
       if (typeof input.id !== 'string' || input.id === '') {
-        throw Object.assign(new Error('缺少实例 id'), { code: 'BAD_REQUEST' })
+        throw Object.assign(new Error(t('error.missingLaunchId')), { code: 'BAD_REQUEST' })
       }
       return launches.logs(input.id, Number.isFinite(input.offset) ? Number(input.offset) : 0, Number.isFinite(input.limit) ? Number(input.limit) : 400)
     },

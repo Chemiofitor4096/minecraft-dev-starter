@@ -13,6 +13,8 @@
  * @module minecraft-dev-starter/lib/verify
  */
 
+import { t } from './messages.js'
+
 /** 目标模式：常驻，还是会跑完。 */
 export const MODES = ['daemon', 'oneshot']
 
@@ -101,12 +103,12 @@ function pick(lines, patterns, limit = 8) {
 export function readVerdict(input) {
   const lines = input.lines ?? []
   if (input.outcome === 'killed') return { verdict: 'aborted' }
-  if (input.outcome === 'failed') return { verdict: 'error', summary: '进程没能启动' }
+  if (input.outcome === 'failed') return { verdict: 'error', summary: t('summary.notStarted') }
 
   const failures = pick(lines, FAILURE_LINES)
   if (failures.length > 0) return { verdict: 'failed', summary: failures[0], failures }
   if (typeof input.exitCode === 'number' && input.exitCode !== 0) {
-    return { verdict: 'failed', summary: `退出码 ${input.exitCode}` }
+    return { verdict: 'failed', summary: t('summary.exitCode', { code: input.exitCode }) }
   }
 
   const success = pick(lines, SUCCESS_LINES, 1)

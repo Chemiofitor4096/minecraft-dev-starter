@@ -7,6 +7,7 @@
  */
 
 import { chooseLogDock, LOG_DOCK_BOTTOM } from './dock.js'
+import { t } from './messages.js'
 
 /** 右侧栏「Mod Dev」详情标签的 kind。 */
 export const DETAIL_KIND = 'mcdev.detail'
@@ -64,7 +65,7 @@ export function openLogTab(config) {
   const service = betterSidebar()
   if (chooseLogDock(config, service !== undefined) === LOG_DOCK_BOTTOM) {
     try {
-      service.openTab({ type: BETTER_LOG_ID, title: '运行日志', target: 'bottom' })
+      service.openTab({ type: BETTER_LOG_ID, title: t('tab.logs'), target: 'bottom' })
       return true
     } catch {
       /* 落底部失败就退回右侧栏，不吞掉日志入口 */

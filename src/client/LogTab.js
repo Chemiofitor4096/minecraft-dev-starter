@@ -7,10 +7,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { call } from './api.js'
+import { formatClock } from './format.js'
 import { h } from './h.js'
 import { IconRefresh, IconWarning } from './icons.js'
-import { filterByLevel, LEVEL_FILTERS, readLevelFilter, writeLevelFilter } from './logFilter.js'
+import { filterByLevel, LEVEL_FILTERS, levelFilterLabel, readLevelFilter, writeLevelFilter } from './logFilter.js'
 import { highlightLines } from './logFormat.js'
+import { t } from './messages.js'
+import { useLocale } from './useLocale.js'
 import { launchStatusText, pickLogTarget } from './selection.js'
 import { Skeleton } from './Skeleton.js'
 import { loadLaunches, selectedProject, useLaunches } from './state.js'
@@ -20,6 +23,7 @@ let lastLogId
 
 export function LogTab() {
   const launches = useLaunches(1500)
+  useLocale()
   const project = selectedProject()
   const [logId, setLogId] = useState(/** @type {string | undefined} */ (lastLogId))
   const [log, setLog] = useState(/** @type {any} */ (undefined))
@@ -82,8 +86,8 @@ export function LogTab() {
     return h(
       'div',
       { className: 'mcdev-detail' },
-      h('div', { className: 'mcdev-title' }, '运行日志'),
-      h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, '还没有运行记录。用标题栏胶囊的 ▶ 启动一次。'),
+      h('div', { className: 'mcdev-title' }, t('tab.logs')),
+      h('div', { className: 'mcdev-muted', style: { marginTop: 8 } }, t('log.empty')),
     )
   }
 
@@ -127,7 +131,7 @@ export function LogTab() {
         'label',
         { className: 'mcdev-follow' },
         h('input', { type: 'checkbox', checked: follow, onChange: (event) => setFollow(event.target.checked) }),
-        '跟随',
+        t('log.follow'),
       ),
     ),
     h(
@@ -135,27 +139,27 @@ export function LogTab() {
       { className: 'mcdev-log-tools' },
       h(
         'div',
-        { className: 'mcdev-seg', role: 'group', 'aria-label': '日志级别' },
-        LEVEL_FILTERS.map((option) =>
+        { className: 'mcdev-seg', role: 'group', 'aria-label': t('log.levelAria') },
+        LEVEL_FILTERS.map((value) =>
           h(
             'button',
             {
-              key: option.value,
+              key: value,
               type: 'button',
               className: 'mcdev-seg-item',
-              'data-active': level === option.value ? 'true' : 'false',
+              'data-active': level === value ? 'true' : 'false',
               onClick: () => {
-                setLevel(option.value)
-                writeLevelFilter(option.value)
+                setLevel(value)
+                writeLevelFilter(value)
               },
             },
-            option.label,
+            levelFilterLabel(value),
           ),
         ),
       ),
       filtered.hidden === 0
         ? undefined
-        : h('span', { className: 'mcdev-hint' }, `已隐藏 ${filtered.hidden} 行`),
+        : h('span', { className: 'mcdev-hint' }, t('log.hidden', { count: filtered.hidden })),
     ),
     log?.diagnosis === undefined
       ? undefined
@@ -172,14 +176,14 @@ export function LogTab() {
         ),
     log?.error === undefined
       ? log === undefined && running
-        ? h(Skeleton, { rows: 4, hint: '正在读取日志…' })
+        ? h(Skeleton, { rows: 4, hint: t('log.loadingLines') })
         : h(
             'pre',
             { ref: body, className: 'mcdev-logs mcdev-logs-full' },
             filtered.lines.length === 0
               ? parsed.length === 0
-                ? '（还没有输出）'
-                : `（当前过滤条件下没有输出，共 ${parsed.length} 行）`
+                ? t('log.noOutput')
+                : t('log.noFilteredOutput', { count: parsed.length })
               : filtered.lines.map((parts, index) =>
                   h(
                     'span',
@@ -197,7 +201,7 @@ export function LogTab() {
         'button',
         { type: 'button', className: 'mcdev-mini', onClick: () => void loadLaunches() },
         h('span', { className: 'mcdev-icon' }, h(IconRefresh, { size: 12 })),
-        '刷新实例列表',
+        t('log.refresh'),
       ),
     ),
   )
@@ -208,10 +212,7 @@ export function LogTab() {
  * @returns {string}
  */
 function optionLabel(entry) {
-  const time = new Date(entry.startedAt)
-  const clock = Number.isNaN(time.getTime())
-    ? '--:--'
-    : `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
+  const clock = formatClock(entry.startedAt)
   const mark = entry.status === 'running' || entry.status === 'starting' ? '●' : entry.outcome === 'normal' ? '○' : '✕'
   return `${mark} ${entry.label} · ${clock} · ${launchStatusText(entry)}`
 }
@@ -222,7 +223,7 @@ function optionLabel(entry) {
  * @returns {string}
  */
 function statusText(log, running) {
-  if (log === undefined) return '加载中…'
+  if (log === undefined) return t('log.loading')
   void running
   return launchStatusText(log)
 }

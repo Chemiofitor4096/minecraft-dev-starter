@@ -378,11 +378,12 @@ export const CSS = `
 .mcdev-kv > .k { color: var(--dsw-alias-label-tertiary); }
 .mcdev-kv > .v { overflow-wrap: anywhere; }
 .mcdev-dep-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+.mcdev-dep-item { padding: 2px 0; }
 .mcdev-dep-row {
   display: grid;
   grid-template-columns: minmax(84px, 32%) minmax(0, 1fr) auto;
   gap: 8px;
-  padding: 2px 0;
+  padding: 0;
   font-family: var(--dsw-font-mono);
   font-size: 11px;
   line-height: 1.45;
@@ -390,6 +391,19 @@ export const CSS = `
 .mcdev-dep-conf { color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mcdev-dep-coord { color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mcdev-dep-pos { color: var(--dsw-alias-label-tertiary); }
+.mcdev-dep-status {
+  padding-left: calc(max(84px, 32%) + 8px);
+  font-family: var(--dsw-font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.mcdev-dep-status[data-tone="warn"] { color: var(--dsw-alias-state-warn-primary); }
+.mcdev-dep-status[data-tone="muted"] { color: var(--dsw-alias-label-tertiary); }
+.mcdev-dep-sync {
+  margin-bottom: 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xxxs-11);
+}
 .mcdev-stack { display: flex; flex-direction: column; gap: 4px; }
 .mcdev-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .mcdev-icon-text { display: inline-flex; align-items: center; gap: 4px; }
