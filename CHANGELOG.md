@@ -7,6 +7,37 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
+## [0.1.13] — 2026-11-06
+
+### Added
+
+- Each declared dependency is compared with the version from the IDE's Gradle-synced library table,
+  without running Gradle: an equal version shows nothing, a different one shows `actual x.y.z` in an
+  advisory tone, and a declaration the table does not know shows `unresolved`. The section header
+  carries the sync time, because that table only reflects the last sync. Projects without a synced
+  `.idea` keep the plain declaration list, unchanged.
+- The panel, the flyout, the capsule and the log tab follow the DSH language setting: client strings,
+  host-side evidence / warning / crash-cause texts and relative times are translated, and switching
+  the language updates an open panel immediately. Loader names, project paths and Gradle task paths
+  are not translated.
+- The "last run" line reports how long a daemon actually ran (`ran 1m 27s`) instead of the
+  uninformative `exited`; one-shot targets still report their verdict.
+
+### Changed
+
+- An empty dependency section is collapsed instead of taking a whole screen.
+- The flyout keeps submodules of a composite build next to their parent project and labels them with
+  the parent directory name; duplicate titles are disambiguated across the whole list, so the same
+  project is not suffixed in one group and bare in another.
+
+### Fixed
+
+- Switching the DSH language left the panel in the previous language until something else re-rendered
+  it; the four surfaces now subscribe to the locale service.
+- Submodule task paths used `/` where Gradle expects the colon hierarchy
+  (`:modules:core:runClient`), which made every module of a composite build unlaunchable. Reported by
+  mmyddd (PR #2).
+
 ## [0.1.12] — 2026-11-05
 
 ### Added
