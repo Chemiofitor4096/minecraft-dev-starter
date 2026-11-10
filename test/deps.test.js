@@ -13,7 +13,7 @@ import {
   resolveDependencyPlaceholders,
   splitCoordinates,
   toModDependencies,
-} from '../src/lib/deps.js'
+} from '../src/lib/detect/deps.js'
 
 const GROOVY = `
 dependencies {

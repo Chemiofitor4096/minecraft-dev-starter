@@ -6,17 +6,17 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { call } from './api.js'
-import { formatClock } from './format.js'
-import { h } from './h.js'
-import { IconRefresh, IconWarning } from './icons.js'
-import { filterByLevel, LEVEL_FILTERS, levelFilterLabel, readLevelFilter, writeLevelFilter } from './logFilter.js'
-import { highlightLines } from './logFormat.js'
-import { t } from './messages.js'
-import { useLocale } from './useLocale.js'
-import { launchStatusText, pickLogTarget } from './selection.js'
+import { call } from '../lib/api.js'
+import { formatClock } from '../lib/format.js'
+import { h } from '../lib/h.js'
+import { IconRefresh, IconWarning } from '../lib/icons.js'
+import { filterByLevel, LEVEL_FILTERS, levelFilterLabel, readLevelFilter, writeLevelFilter } from '../lib/logFilter.js'
+import { highlightLines } from '../lib/logFormat.js'
+import { t } from '../lib/messages.js'
+import { useLocale } from '../lib/useLocale.js'
+import { launchStatusText, pickLogTarget } from '../lib/selection.js'
 import { Skeleton } from './Skeleton.js'
-import { loadLaunches, selectedProject, useLaunches } from './state.js'
+import { loadLaunches, selectedProject, useLaunches } from '../lib/state.js'
 
 /** 关掉标签再打开时，尽量回到上次看的那条。 */
 let lastLogId

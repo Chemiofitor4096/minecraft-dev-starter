@@ -6,8 +6,8 @@ import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
-import { parseModsToml, parseYamlSubset } from '../src/lib/metadata.js'
-import { parseToml } from '../src/lib/toml.js'
+import { parseModsToml, parseYamlSubset } from '../src/lib/detect/metadata.js'
+import { parseToml } from '../src/lib/util/toml.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 

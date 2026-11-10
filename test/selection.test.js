@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { capsuleParts, capsuleSummary, capsuleText, groupByModule, hasActiveLaunch, hasRunnableProject, launchStatusText, pickLogTarget, selectedTarget, targetKey } from '../src/client/selection.js'
+import { capsuleParts, capsuleSummary, capsuleText, groupByModule, hasActiveLaunch, hasRunnableProject, launchStatusText, pickLogTarget, selectedTarget, targetKey } from '../src/client/lib/selection.js'
 
 const project = {
   root: 'C:\\Projects\\rationality',

@@ -13,8 +13,8 @@
  */
 
 import { stripComments } from './gradle.js'
-import { resolvePlaceholders } from './text.js'
-import { parseToml } from './toml.js'
+import { resolvePlaceholders } from '../util/text.js'
+import { parseToml } from '../util/toml.js'
 
 /**
  * @typedef {object} BuildDependency

@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { highlightLine, highlightLines } from '../src/client/logFormat.js'
+import { highlightLine, highlightLines } from '../src/client/lib/logFormat.js'
 
 /** @param {Array<{ text: string, kind: string }>} parts */
 function text(parts) {

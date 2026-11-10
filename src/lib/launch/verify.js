@@ -13,7 +13,7 @@
  * @module minecraft-dev-starter/lib/verify
  */
 
-import { t } from './messages.js'
+import { t } from '../i18n/messages.js'
 
 /** 目标模式：常驻，还是会跑完。 */
 export const MODES = ['daemon', 'oneshot']

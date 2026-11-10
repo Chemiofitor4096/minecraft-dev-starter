@@ -26,11 +26,11 @@ import {
 } from './gradle.js'
 import { dependencyRanges, locateMetadata, primaryMetadata } from './metadata.js'
 import { compareDependencies, parseBuildDependencies, parseVersionCatalog, resolveCatalogRefs, resolveDependencyPlaceholders, toModDependencies } from './deps.js'
-import { readText, resolvePlaceholders, parseProperties } from './text.js'
-import { gradleSupportsJava, pickJdk, requiredJava } from './java.js'
-import { t } from './messages.js'
+import { readText, resolvePlaceholders, parseProperties } from '../util/text.js'
+import { gradleSupportsJava, pickJdk, requiredJava } from '../launch/java.js'
+import { t } from '../i18n/messages.js'
 import { describeIdea, findOwningAggregator, loadersFromPlatforms, readIdeaProject, resolveProjectDir } from './idea.js'
-import { modeOf } from './verify.js'
+import { modeOf } from '../launch/verify.js'
 
 /**
  * @typedef {{ file: string, kind: string, detail: string }} Evidence
@@ -72,7 +72,7 @@ const DEFAULT_TARGETS = {
 /**
  * 识别一个工程。
  * @param {string} root 工程根目录（绝对路径）
- * @param {{ jdks?: import('./java.js').JdkInfo[], maxModules?: number, overrideJavaHome?: string, externalRoots?: string[] }} [options]
+ * @param {{ jdks?: import('../launch/java.js').JdkInfo[], maxModules?: number, overrideJavaHome?: string, externalRoots?: string[] }} [options]
  *   `externalRoots` 只给测试用：默认按平台推断 IDE 的外部存储根
  * @returns {Promise<Record<string, unknown>>}
  */

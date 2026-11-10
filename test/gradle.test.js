@@ -13,7 +13,7 @@ import {
   parseSettingsIncludes,
   parseWrapperVersion,
   stripComments,
-} from '../src/lib/gradle.js'
+} from '../src/lib/detect/gradle.js'
 
 test('stripComments 不碰字符串里的 //', () => {
   const text = `plugins { id 'fabric-loom' } // 注释\nversion = "1.0.0" // 另一个`

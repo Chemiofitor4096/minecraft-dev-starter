@@ -5,8 +5,8 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { availableMajors, groupDependencies, kindLabel, listRows, loaderLabel, PANEL_TITLE, projectTitle, relativeTime, runDuration } from '../src/client/format.js'
-import { attachLocale } from '../src/client/messages.js'
+import { availableMajors, groupDependencies, kindLabel, listRows, loaderLabel, PANEL_TITLE, projectTitle, relativeTime, runDuration } from '../src/client/lib/format.js'
+import { attachLocale } from '../src/client/lib/messages.js'
 
 /**
  * 切换当前语言：走真实的解析路径（attachLocale 之后 getSnapshot().active），

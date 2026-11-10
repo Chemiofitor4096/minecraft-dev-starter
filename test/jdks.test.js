@@ -17,7 +17,7 @@ import {
   saveJdkPrefs,
   shouldInjectJdk,
   withExtra,
-} from '../src/lib/jdks.js'
+} from '../src/lib/launch/jdks.js'
 
 const jdks = [
   { home: 'C:/jdk/jdk-21', version: '21.0.7', major: 21, source: 'release' },

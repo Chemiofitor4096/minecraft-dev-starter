@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { modeOf, readVerdict } from '../src/lib/verify.js'
+import { modeOf, readVerdict } from '../src/lib/launch/verify.js'
 
 test('mode：客户端与服务端常驻，数据生成与 gametest 会跑完', () => {
   assert.equal(modeOf('client'), 'daemon')

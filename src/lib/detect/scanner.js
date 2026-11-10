@@ -15,9 +15,9 @@ import { isAbsolute, join, relative } from 'node:path'
 import { detectProject } from './detect.js'
 import { parseSettingsIncludes } from './gradle.js'
 import { readIdeaProject, resolveProjectDir } from './idea.js'
-import { readText } from './text.js'
-import { projectKey } from './jdks.js'
-import { discoverJdks } from './java.js'
+import { readText } from '../util/text.js'
+import { projectKey } from '../launch/jdks.js'
+import { discoverJdks } from '../launch/java.js'
 
 /** 扫描时直接跳过的目录名。 */
 export const PRUNE_DIRS = new Set([
@@ -50,7 +50,7 @@ const BUILD_FILES = new Set(['build.gradle', 'build.gradle.kts', 'settings.gradl
 /**
  * 扫一个工作区。
  * @param {string} root
- * @param {{ depth?: number, maxDirs?: number, maxProjects?: number, jdks?: import('./java.js').JdkInfo[], overrides?: Record<string, string>, signal?: AbortSignal }} [options]
+ * @param {{ depth?: number, maxDirs?: number, maxProjects?: number, jdks?: import('../launch/java.js').JdkInfo[], overrides?: Record<string, string>, signal?: AbortSignal }} [options]
  * @returns {Promise<ScanResult>}
  */
 export async function scanWorkspace(root, options = {}) {

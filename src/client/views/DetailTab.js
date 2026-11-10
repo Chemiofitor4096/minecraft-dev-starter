@@ -13,15 +13,15 @@
  */
 
 import { useEffect, useState } from 'react'
-import { call } from './api.js'
-import { h } from './h.js'
-import { formatDateTime, formatSyncTime, groupDependencies, kindLabel, loaderLabel, PANEL_TITLE, projectTitle, relativeTime, runDuration, text } from './format.js'
-import { IconChevronDown, IconChevronRight, IconInfo, IconPlay, IconRefresh, IconStop, IconWarning } from './icons.js'
-import { t } from './messages.js'
-import { useLocale } from './useLocale.js'
-import { groupByModule, selectedTarget, targetKey } from './selection.js'
+import { call } from '../lib/api.js'
+import { h } from '../lib/h.js'
+import { formatDateTime, formatSyncTime, groupDependencies, kindLabel, loaderLabel, PANEL_TITLE, projectTitle, relativeTime, runDuration, text } from '../lib/format.js'
+import { IconChevronDown, IconChevronRight, IconInfo, IconPlay, IconRefresh, IconStop, IconWarning } from '../lib/icons.js'
+import { t } from '../lib/messages.js'
+import { useLocale } from '../lib/useLocale.js'
+import { groupByModule, selectedTarget, targetKey } from '../lib/selection.js'
 import { Skeleton } from './Skeleton.js'
-import { openLogTab } from './runtime.js'
+import { openLogTab } from '../lib/runtime.js'
 import {
   loadScan,
   selectedProject,
@@ -31,7 +31,7 @@ import {
   store,
   useLaunches,
   useStoreState,
-} from './state.js'
+} from '../lib/state.js'
 
 /** 依赖列表一次最多渲染多少行（超出的只报数量）。 */
 const DEP_ROW_LIMIT = 200

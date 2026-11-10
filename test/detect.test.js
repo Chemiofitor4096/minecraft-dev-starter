@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
-import { detectProject } from '../src/lib/detect.js'
+import { detectProject } from '../src/lib/detect/detect.js'
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const multi = join(dirname(fileURLToPath(import.meta.url)), 'fixtures-multi')

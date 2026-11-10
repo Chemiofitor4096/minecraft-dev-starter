@@ -5,14 +5,14 @@
  * @module minecraft-dev-starter/lib/api
  */
 
-import { detectProject } from './detect.js'
-import { resolveProjectDir } from './idea.js'
-import { discoverJdks, readJdk } from './java.js'
-import { loadJdkPrefs, overrideFor, projectKey, saveJdkPrefs, shouldInjectJdk, withExtra } from './jdks.js'
-import { createLaunchService } from './launches.js';
-import { currentLanguage, t } from './messages.js'
+import { detectProject } from './detect/detect.js'
+import { resolveProjectDir } from './detect/idea.js'
+import { discoverJdks, readJdk } from './launch/java.js'
+import { loadJdkPrefs, overrideFor, projectKey, saveJdkPrefs, shouldInjectJdk, withExtra } from './launch/jdks.js'
+import { createLaunchService } from './launch/launches.js';
+import { currentLanguage, t } from './i18n/messages.js'
 import { baseStateDir } from './state.js'
-import { scanWorkspace } from './scanner.js'
+import { scanWorkspace } from './detect/scanner.js'
 
 /** 扫描结果的短缓存：面板打开/切会话会连着问几次，没必要每次重扫。 */
 const CACHE_TTL_MS = 5000
@@ -34,7 +34,7 @@ function isInside(child, parent) {
 }
 
 /**
- * @param {{ resolveRoot: () => Promise<string | undefined>, resolveRoots?: () => Promise<string[]>, version?: string, config?: Record<string, unknown>, launchService?: ReturnType<typeof createLaunchService>, listJdks?: (extraDirs: string[]) => Promise<import('./java.js').JdkInfo[]> }} options
+ * @param {{ resolveRoot: () => Promise<string | undefined>, resolveRoots?: () => Promise<string[]>, version?: string, config?: Record<string, unknown>, launchService?: ReturnType<typeof createLaunchService>, listJdks?: (extraDirs: string[]) => Promise<import('./launch/java.js').JdkInfo[]> }} options
  */
 export function createApi(options) {
   /** @type {Map<string, { at: number, value: unknown }>} */

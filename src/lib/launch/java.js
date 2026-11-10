@@ -8,8 +8,8 @@
 
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { t } from './messages.js'
-import { readText } from './text.js'
+import { t } from '../i18n/messages.js'
+import { readText } from '../util/text.js'
 
 /**
  * 目标 MC 版本需要的 JDK 大版本。

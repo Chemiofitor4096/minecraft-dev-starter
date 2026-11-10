@@ -6,10 +6,10 @@
  */
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { LOCALE_NS, attachLocale, en, interpolate, localeSource, t, zh } from '../src/client/messages.js'
+import { LOCALE_NS, attachLocale, en, interpolate, localeSource, t, zh } from '../src/client/lib/messages.js'
 
 const CLIENT_DIR = fileURLToPath(new URL('../src/client/', import.meta.url))
 const DICTIONARY_FILE = 'messages.js'
@@ -106,11 +106,24 @@ function withoutComments(source) {
   return out.replace(/\/\*[\s\S]*?\*\//g, ' ')
 }
 
-/** @returns {string[]} */
+/** 客户端所有 .js（递归 views/ 与 lib/），返回相对 CLIENT_DIR 的路径。 */
 function clientFiles() {
-  return readdirSync(CLIENT_DIR)
-    .filter((name) => name.endsWith('.js') && name !== DICTIONARY_FILE)
-    .sort()
+  /** @type {string[]} */
+  const out = []
+  /** @param {string} dir */
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        walk(full)
+        continue
+      }
+      if (!entry.name.endsWith('.js') || entry.name === DICTIONARY_FILE) continue
+      out.push(relative(CLIENT_DIR, full).replaceAll('\\', '/'))
+    }
+  }
+  walk(CLIENT_DIR)
+  return out.sort()
 }
 
 test('zh / en key 集合完全一致', () => {

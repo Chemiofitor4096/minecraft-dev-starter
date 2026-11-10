@@ -8,8 +8,8 @@
 
 import { readFileSync } from 'node:fs'
 import { createApi } from './lib/api.js'
-import { createLaunchService } from './lib/launches.js'
-import { setLanguage } from './lib/messages.js'
+import { createLaunchService } from './lib/launch/launches.js'
+import { setLanguage } from './lib/i18n/messages.js'
 import { profileName, stateDir } from './lib/state.js'
 import { applyTools } from './tools.js'
 

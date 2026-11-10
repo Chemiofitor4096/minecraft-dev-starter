@@ -7,8 +7,8 @@
 
 import { readdir, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
-import { t } from './messages.js'
-import { readText } from './text.js'
+import { t } from '../i18n/messages.js'
+import { readText } from '../util/text.js'
 import { attrOf, childOf, componentOf, findFirst, findAll, optionValue, parseXml, rootOf, textOf } from './xml.js'
 
 /** IDE 工程目录名。 */

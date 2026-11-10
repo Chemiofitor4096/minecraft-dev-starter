@@ -10,16 +10,16 @@
  * @module minecraft-dev-starter/client
  */
 
-import { Capsule } from './Capsule.js'
-import { DetailTab } from './DetailTab.js'
-import { PANEL_TITLE } from './format.js'
-import { LogTab } from './LogTab.js'
-import { attachLocale, t } from './messages.js'
-import { report } from './debug.js'
-import { h } from './h.js'
-import { IconCube, IconTerminal } from './icons.js'
-import { BETTER_DETAIL_ID, BETTER_LOG_ID, DETAIL_KIND, LOG_KIND, runtime } from './runtime.js'
-import { ensureStyles } from './styles.js'
+import { Capsule } from './views/Capsule.js'
+import { DetailTab } from './views/DetailTab.js'
+import { PANEL_TITLE } from './lib/format.js'
+import { LogTab } from './views/LogTab.js'
+import { attachLocale, t } from './lib/messages.js'
+import { report } from './lib/debug.js'
+import { h } from './lib/h.js'
+import { IconCube, IconTerminal } from './lib/icons.js'
+import { BETTER_DETAIL_ID, BETTER_LOG_ID, DETAIL_KIND, LOG_KIND, runtime } from './lib/runtime.js'
+import { ensureStyles } from './lib/styles.js'
 
 export const name = 'mcdev-client'
 

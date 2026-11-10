@@ -10,8 +10,8 @@
  */
 
 import { join } from 'node:path'
-import { parseToml } from './toml.js'
-import { readText } from './text.js'
+import { parseToml } from '../util/toml.js'
+import { readText } from '../util/text.js'
 
 /**
  * @typedef {object} MetadataHit

@@ -27,33 +27,41 @@ IDEA 风格的运行控件（选中目标 → 启动 / 停止 / 看日志）。
 ```
 src/index.js          宿主入口：inject + apply，挂 HTTP 路由与工具
 src/tools.js          六个模型工具（mc_projects / mc_project_detail / mc_launch / mc_launch_logs / mc_launch_list / mc_launch_stop）
-src/lib/
-  api.js              /mcdev/api 的方法实现（scan / detail / state / launch.*）
-  detect.js           工程画像：loader、模块、run 目标、证据与警告
-  scanner.js          工作区 BFS（深度 3、剪枝、上限）
-  gradle.js           build.gradle / settings.gradle / gradle.properties 的解析
-  metadata.js         mods.toml / fabric.mod.json / plugin.yml / archive.yml
-  java.js             JDK 探测与版本匹配（读 <jdk>/release，不起进程）
-  deps.js             声明依赖：dependencies 块、libs.versions.toml、元数据 depends
-  jdks.js             每个工程的 JDK 选择（优先级、jdk.json 持久化、要不要注入）
-  verify.js           目标分类（daemon / oneshot）与一次性任务的裁决（verdict）
-  launches.js         启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
+src/lib/              领域层。跨层依赖单向：detect / launch 可以用 util、i18n，反过来不行
+  api.js              /mcdev/api 的方法实现（scan / detail / state / launch.*），唯一聚合点
   state.js            ~/.dsh/mc-dev-starter 下的状态与日志（运行记录按 profile 分目录）
-  argv.js             gradlew 命令行构造（含 Windows 引号规则）
-  idea.js             IntelliJ `.idea` 工程模型（模块清单 / facet / 工程 JDK / 运行配置）
-  xml.js              极简 XML 解析（零依赖，只服务 .idea）
-  messages.js         宿主侧 zh / en 字典：证据、警告、归因、错误（语言由客户端请求带上）
   versions.js         版本解析：调用时向上游取 (loader, MC) 的精确版本，失败退回 seed
-  text.js / toml.js   小工具
+  detect/             识别一个工程是什么
+    detect.js         工程画像：loader、模块、run 目标、证据与警告
+    scanner.js        工作区 BFS（深度 3、剪枝、上限）
+    gradle.js         build.gradle / settings.gradle / gradle.properties 的解析
+    metadata.js       mods.toml / fabric.mod.json / plugin.yml / archive.yml
+    deps.js           声明依赖：dependencies 块、libs.versions.toml、元数据 depends
+    idea.js           IntelliJ `.idea` 工程模型（模块清单 / facet / 工程 JDK / 运行配置）
+    xml.js            极简 XML 解析（零依赖，只服务 .idea）
+  launch/             把一个工程跑起来并拿到结论
+    launches.js       启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
+    verify.js         目标分类（daemon / oneshot）与一次性任务的裁决（verdict）
+    argv.js           gradlew 命令行构造（含 Windows 引号规则）
+    jdks.js           每个工程的 JDK 选择（优先级、jdk.json 持久化、要不要注入）
+    java.js           JDK 探测与版本匹配（读 <jdk>/release，不起进程）
+  i18n/messages.js    宿主侧 zh / en 字典：证据、警告、归因、错误（语言由客户端请求带上）
+  util/               text.js / toml.js 这类无依赖小工具
 src/client/
   index.js            客户端入口：胶囊 slot、两个标签类型、better-sidebar 可选注册
-  Capsule.js          标题栏胶囊（状态点 + 目标名 + 启停）
-  Flyout.js           浮层（单工程特化 / 多工程三段结构）
-  DetailTab.js        工程面板（版本、环境、模块、证据、警告）
-  LogTab.js           日志标签（历史、跟随、归因）
-  messages.js         客户端侧 zh / en 字典 + 取词（跟随宿主 locale）
-  state.js / selection.js / format.js / icons.js / styles.js / runtime.js
+  views/              只放 React 组件
+    Capsule.js        标题栏胶囊（状态点 + 目标名 + 启停）
+    Flyout.js         浮层（单工程特化 / 多工程三段结构）
+    DetailTab.js      工程面板（版本、环境、模块、证据、警告）
+    LogTab.js         日志标签（历史、跟随、归因）
+    Skeleton.js       加载骨架
+  lib/                组件之外的客户端代码
+    messages.js       zh / en 字典 + 取词（跟随宿主 locale）；useLocale.js 订阅语言变化
+    state.js / store.js / selection.js / runtime.js / api.js
+    format.js / logFormat.js / logFilter.js / dock.js / h.js / icons.js / styles.js / debug.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
+scripts/              构建与发布：build-client.mjs / check-pack.mjs
+tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
 test/                 204 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
@@ -67,9 +75,9 @@ npm test                          # 同上，先重建客户端再跑
 node scripts/build-client.mjs     # 构建客户端（改 src/client 后必须跑）
 node scripts/build-client.mjs --watch
 node scripts/check-pack.mjs       # 发布前校验 npm 包内容（缺 lib/client.js、多带 test/ 都会失败）
-node scripts/scan-catalog.mjs     # 扫真实工程，输出识别结果表
-node scripts/inspect-project.mjs <工程目录>   # 摊开一个工程的证据 / .idea 模型 / 目标来源
-node scripts/seed-versions.mjs <loader> <mc>  # 把当前上游版本固化进 seed（新增热门线时用，平时不需要）
+node tools/scan-catalog.mjs       # 扫真实工程，输出识别结果表
+node tools/inspect-project.mjs <工程目录>   # 摊开一个工程的证据 / .idea 模型 / 目标来源
+node tools/seed-versions.mjs <loader> <mc>  # 把当前上游版本固化进 seed（新增热门线时用，平时不需要）
 ```
 
 CI 在 `.github/workflows/ci.yml`：ubuntu / windows / macOS × Node 20/22/24 跑构建与测试，
@@ -103,7 +111,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 仓库的 `node_modules` 神秘消失 | 在某个 profile 里把 `link:` 依赖换成 `file:`/npm 包时，pnpm 解链会**删掉被链接目录的 `node_modules`**（实测：`plugin add link:` → 在 → `plugin add file:tgz` → 没了） | 别在同一 profile 里来回切换安装方式；tarball/registry 验证用独立 profile；发现消失就 `npm install --ignore-scripts` 重装 |
 | 侧栏标签打不开 | `openTab` 的展开是异步的 | 打开后等一帧再断言 `isExpanded()` |
 | 发版后装不到新版本 | pnpm 缓存了 registry 元数据（`%LOCALAPPDATA%\pnpm-cache\metadata-v1.3\registry.npmjs.org\<pkg>.json`），`dsh plugin add` 会报 "latest is 0.1.2"、甚至"只有 4 个版本" | 删掉那个 `<pkg>.json` 再装；同时确认 `.npmrc` 里的代理是通的 |
-| 一次性任务被当成守护进程 | 用"等就绪"的语义管 `runData` / `runGameTestServer`：`BUILD SUCCESSFUL` 是**终止**信号却被当成**就绪**信号，而且跑完拿不到"过没过" | 目标带 `mode`（daemon / oneshot），oneshot 生下来就是 running、结束即算 `verdict`；见 `src/lib/verify.js` |
+| 一次性任务被当成守护进程 | 用"等就绪"的语义管 `runData` / `runGameTestServer`：`BUILD SUCCESSFUL` 是**终止**信号却被当成**就绪**信号，而且跑完拿不到"过没过" | 目标带 `mode`（daemon / oneshot），oneshot 生下来就是 running、结束即算 `verdict`；见 `src/lib/launch/verify.js` |
 | `runs { configureEach { } }` 变成假目标 | `runs` 是 NamedDomainObjectContainer，容器 API 的块也被当成 run 配置，产出 `runConfigureEach`（启动报 Task not found） | 容器 API 名单 + 只收顶层块 + 认 `create("name")`；见 `parseRuns` |
 | 测试挂了却判通过 | 部分 GameTest 运行器失败时进程仍退 0 | 裁决先看失败特征行、再看退出码；`readVerdict` 里顺序不能调 |
 | `libs.versions.toml` 解析成一整条字符串 | `parseToml` 不支持内联表，`{ module = "a:b", version = "1" }` 原样返回 | 已补 `parseInlineTable`；回归见 `test/toml.test.js` 与 `test/deps.test.js` |
@@ -125,6 +133,9 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
   最容易踩的那条约束；参数与返回交给 schema。工具执行结果（`render`）仍是中文，跟界面语言走。
 - 不做隐含的 `clean`；构建目录不碰。
 - 一个工程同时只允许一个实例；跨工程可以并行。
+- **目录分层是硬约束**：`src/lib/` 按 `detect` / `launch` / `i18n` / `util` 归位，跨层依赖单向；
+  `src/client/` 的 React 组件只放 `views/`，其余放 `lib/`；构建脚本在 `scripts/`，
+  开发期辅助在 `tools/`。新增文件先想清楚属于哪一层，别往顶层或 `src/lib` 根上放。
 - **版本由上游解析，不由我们维护版本表**（`src/lib/versions.js`）：生成工程时按 `(loader, MC 版本)`
   抓 Fabric meta / NeoForge maven，取这条线当前最新；抓不到才退回 `data/versions.json` 的 `seed`。
   `data/versions.json` 只有 `seed`（离线兜底）和 `verified`（真跑通过的组合，只增不改）——
@@ -274,7 +285,7 @@ server：`Done (…s)!`）；状态落盘并做重启后对账。顺带修了 GB
 
 ### M14 声明依赖与双语 README（2026-11-03）
 
-- **声明依赖**（`src/lib/deps.js`）：解析 `dependencies { }` 块（行号精确到声明那一行）、
+- **声明依赖**（`src/lib/detect/deps.js`）：解析 `dependencies { }` 块（行号精确到声明那一行）、
   `gradle/libs.versions.toml`（内联表 + `version.ref`）、元数据 `depends`。
   `libs.xxx` 的两种访问器写法（`libs.fabric.loader` / `libs.fabricLoader`）都能解析成真实坐标，
   解析不出来就保留原引用，不猜。面板「依赖」区块与 `mc_project_detail` 都输出这份清单。
@@ -368,20 +379,20 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
 
 ### M20 双语与语言通道（2026-11-06）
 
-- **客户端字典**（`src/client/messages.js`，C3a 抽出，127 个 key）：`en` 按 **300px 侧栏**取舍，
+- **客户端字典**（`src/client/lib/messages.js`，C3a 抽出，127 个 key）：`en` 按 **300px 侧栏**取舍，
   换行/截断的地方缩成 `Build` / `Target` / `Unverified` / `Logs` / `Not running`，完整说法进 tooltip。
   `运行中` 与 `执行中` 在英文里都是 `Running`，`通过` 与 `已通过` 都是 `Passed`（oneshot 的差别由结论词承担）。
 - **相对时间**用 `Intl.RelativeTimeFormat`，不改手写文案：zh 的 short 是「5秒前」，补空格对齐 0.1.12 的
   「5 秒前」；en 的 short 带缩写点（`12 min. ago`），秒/分取 short 再去点、小时取 long，得到
   `5 sec ago` / `12 min ago` / `3 hours ago`。单复数仍由 ICU 负责。
-- **宿主字典**（`src/lib/messages.js`，约 70 个 key）：证据、警告、冲突、崩溃归因、错误消息、结论摘要。
+- **宿主字典**（`src/lib/i18n/messages.js`，约 70 个 key）：证据、警告、冲突、崩溃归因、错误消息、结论摘要。
   归因规则的 `hint` / `suggestion` 不再是常量，按 `code` 从词典取，读日志时才定语言。
 - **语言通道**：宿主插件的 ctx 里**没有** locale 服务（整个 DSH 只有一处 `ctx.provide("locale")`，
   在网页客户端那层，邻居是 `slots`）。所以**客户端每次请求带上 `lang`**，`/mcdev/api` 入口调
   `setLanguage`；`projects.scan` 的缓存 key 必须带语言，否则切语言后会拿到旧语言那份缓存。
   语言是进程级的——同时只有一个界面语言，并发请求不会各说各话。
 - **不翻译**：loader 名、工程与 `.idea` 路径、Gradle 任务路径、日志正文。
-- **切换语言时重绘**：`t()` 只在调用时读语言，组件自己不会重绘。`src/client/useLocale.js` 用
+- **切换语言时重绘**：`t()` 只在调用时读语言，组件自己不会重绘。`src/client/lib/useLocale.js` 用
   `useSyncExternalStore(ctx.locale.subscribe, () => getSnapshot().active)` 订阅当前语言，胶囊 / 浮层 /
   详情 / 日志四个组件各调一次；订阅源是模块级常量，每次渲染新建对象会让 React 反复重订阅。
 - **工具输出（`src/tools.js`）的渲染文案仍是中文**（`mc_launch` 的结论行等是写死的）。但工具值里的
@@ -452,6 +463,6 @@ npm 包页面上会出现两条告警，都来自 peer 依赖图，不是本包�
 ## 还没做的事
 
 - 桌面版目前仍用 `link:` 安装（改代码即时生效）；切到 npm 版本需要每次改完都发版。
-- 宿主语言还是进程级的（`src/lib/messages.js` 的 `setLanguage`）：界面请求会改全局，工具输出跟着变，
+- 宿主语言还是进程级的（`src/lib/i18n/messages.js` 的 `setLanguage`）：界面请求会改全局，工具输出跟着变，
   两个语言不同的并发请求理论上会串；`src/tools.js` 的渲染文案也还没进词典。要干净解决，得把 `lang`
   做成 detect / launches 的调用参数，而不是模块级状态。

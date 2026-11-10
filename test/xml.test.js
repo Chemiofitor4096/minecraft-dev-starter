@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { attrOf, childOf, childrenOf, componentOf, findFirst, findAll, optionValue, parseXml, rootOf, textOf } from '../src/lib/xml.js'
+import { attrOf, childOf, childrenOf, componentOf, findFirst, findAll, optionValue, parseXml, rootOf, textOf } from '../src/lib/detect/xml.js'
 
 test('基本结构：属性、嵌套、自闭合', () => {
   const doc = parseXml(`<?xml version="1.0"?>

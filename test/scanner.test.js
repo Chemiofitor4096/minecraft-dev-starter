@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { join, dirname, basename, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
-import { scanWorkspace } from '../src/lib/scanner.js'
+import { scanWorkspace } from '../src/lib/detect/scanner.js'
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 

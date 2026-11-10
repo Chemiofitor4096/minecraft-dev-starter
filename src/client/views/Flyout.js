@@ -11,15 +11,15 @@
  */
 
 import { useState } from 'react'
-import { h } from './h.js'
-import { kindLabel, listRows, loaderLabel, PANEL_TITLE, projectSubtitle, projectTitle } from './format.js'
-import { IconChevronDown, IconChevronRight, IconRefresh } from './icons.js'
-import { t } from './messages.js'
-import { useLocale } from './useLocale.js'
-import { groupByModule, selectedTarget, targetKey } from './selection.js'
+import { h } from '../lib/h.js'
+import { kindLabel, listRows, loaderLabel, PANEL_TITLE, projectSubtitle, projectTitle } from '../lib/format.js'
+import { IconChevronDown, IconChevronRight, IconRefresh } from '../lib/icons.js'
+import { t } from '../lib/messages.js'
+import { useLocale } from '../lib/useLocale.js'
+import { groupByModule, selectedTarget, targetKey } from '../lib/selection.js'
 import { Skeleton } from './Skeleton.js'
-import { loadScan, selectTarget, store, useLaunches, useStoreState } from './state.js'
-import { openDetailTab } from './runtime.js'
+import { loadScan, selectTarget, store, useLaunches, useStoreState } from '../lib/state.js'
+import { openDetailTab } from '../lib/runtime.js'
 
 /** 工程多到这个数才给搜索框：再少的话列表一眼扫完，输入框只是噪音。 */
 const SEARCH_THRESHOLD = 8

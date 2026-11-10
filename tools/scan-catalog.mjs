@@ -5,7 +5,7 @@
  * 用法：node scripts/scan-catalog.mjs [目录] [深度]
  */
 import { relative } from 'node:path'
-import { scanWorkspace } from '../src/lib/scanner.js'
+import { scanWorkspace } from '../src/lib/detect/scanner.js'
 
 const root = process.argv[2] ?? process.cwd()
 const depth = Number(process.argv[3] ?? 2)

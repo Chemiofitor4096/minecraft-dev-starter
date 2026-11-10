@@ -8,12 +8,12 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { h } from './h.js'
-import { IconPlay, IconStop } from './icons.js'
-import { report } from './debug.js'
-import { t } from './messages.js'
-import { useLocale } from './useLocale.js'
-import { capsuleParts, hasActiveLaunch, hasRunnableProject, selectedTarget } from './selection.js'
+import { h } from '../lib/h.js'
+import { IconPlay, IconStop } from '../lib/icons.js'
+import { report } from '../lib/debug.js'
+import { t } from '../lib/messages.js'
+import { useLocale } from '../lib/useLocale.js'
+import { capsuleParts, hasActiveLaunch, hasRunnableProject, selectedTarget } from '../lib/selection.js'
 import {
   activeLaunchFor,
   loadScan,
@@ -24,7 +24,7 @@ import {
   store,
   useLaunches,
   useStoreState,
-} from './state.js'
+} from '../lib/state.js'
 import { Flyout } from './Flyout.js'
 
 /**

@@ -10,8 +10,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { gradlewCommand, isAlive, TASK_PATH_PATTERN } from '../src/lib/argv.js'
-import { createLaunchService, decodeLine, diagnose, splitBufferLines } from '../src/lib/launches.js'
+import { gradlewCommand, isAlive, TASK_PATH_PATTERN } from '../src/lib/launch/argv.js'
+import { createLaunchService, decodeLine, diagnose, splitBufferLines } from '../src/lib/launch/launches.js'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 

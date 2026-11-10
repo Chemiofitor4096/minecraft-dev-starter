@@ -11,7 +11,7 @@ import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import { createApi } from '../src/lib/api.js'
-import { createLaunchService } from '../src/lib/launches.js'
+import { createLaunchService } from '../src/lib/launch/launches.js'
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const fabricRoot = join(fixtures, 'fabric')

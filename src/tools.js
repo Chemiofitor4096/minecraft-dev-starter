@@ -9,7 +9,7 @@
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { modeOf } from './lib/verify.js'
+import { modeOf } from './lib/launch/verify.js'
 
 /** mc_project_detail 的渲染里最多列多少个目标（其余只报数量）。 */
 const TARGET_LINE_LIMIT = 12

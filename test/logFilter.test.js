@@ -3,8 +3,8 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { filterByLevel, levelOfParts, readLevelFilter, writeLevelFilter } from '../src/client/logFilter.js'
-import { highlightLine } from '../src/client/logFormat.js'
+import { filterByLevel, levelOfParts, readLevelFilter, writeLevelFilter } from '../src/client/lib/logFilter.js'
+import { highlightLine } from '../src/client/lib/logFormat.js'
 
 const parsed = [
   highlightLine('[01:00:00] [main/DEBUG] [x/]: debug 行'),

@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { chooseLogDock } from '../src/client/dock.js'
+import { chooseLogDock } from '../src/client/lib/dock.js'
 
 test('装了 better-sidebar 时默认落底部工作台', () => {
   assert.equal(chooseLogDock(undefined, true), 'bottom')

@@ -18,8 +18,8 @@ import { createWriteStream } from 'node:fs'
 import { mkdir, readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { gradlewCommand, isAlive, TASK_PATH_PATTERN } from './argv.js'
-import { t } from './messages.js'
-import { adoptLegacyState, baseStateDir, loadState, logPath, saveState, stateDir } from './state.js'
+import { t } from '../i18n/messages.js'
+import { adoptLegacyState, baseStateDir, loadState, logPath, saveState, stateDir } from '../state.js'
 import { modeOf, readVerdict } from './verify.js'
 
 /**
@@ -122,7 +122,7 @@ export function createLaunchService(options = {}) {
 
   /** 串行化状态写入，避免并发 start/stop 互相覆盖。 */
   let chain = Promise.resolve()
-  /** @type {import('./state.js').PersistentState | undefined} */
+  /** @type {import('../state.js').PersistentState | undefined} */
   let state
 
   /**
@@ -190,7 +190,7 @@ export function createLaunchService(options = {}) {
       const file = logPath(dir, id)
       await mkdir(dirname(file), { recursive: true })
 
-      /** @type {import('./state.js').LaunchRecord} */
+      /** @type {import('../state.js').LaunchRecord} */
       const record = {
         id,
         root: request.root,
@@ -292,7 +292,7 @@ export function createLaunchService(options = {}) {
    * 按字节切行再逐行解码：中文 Windows 上 Gradle 与游戏可能输出 GBK，
    * 逐块 toString('utf8') 会把多字节字符切坏，逐行才有机会回退到 GBK。
    * @param {Runtime} runtime
-   * @param {import('./state.js').LaunchRecord} record
+   * @param {import('../state.js').LaunchRecord} record
    * @param {NodeJS.ReadableStream | null} stream
    * @param {import('node:fs').WriteStream} sink
    */
@@ -320,7 +320,7 @@ export function createLaunchService(options = {}) {
 
   /**
    * @param {Runtime} runtime
-   * @param {import('./state.js').LaunchRecord} record
+   * @param {import('../state.js').LaunchRecord} record
    * @param {string} line
    */
   function pushLine(runtime, record, line) {
@@ -420,7 +420,7 @@ export function createLaunchService(options = {}) {
   }
 
   /**
-   * @param {import('./state.js').LaunchRecord} record
+   * @param {import('../state.js').LaunchRecord} record
    */
   function snapshot(record) {
     const running = record.status === 'starting' || record.status === 'running'
@@ -451,7 +451,7 @@ export function createLaunchService(options = {}) {
 
   /**
    * 已结束的实例没有内存缓冲时，用日志尾部给界面一个摘要。
-   * @param {import('./state.js').LaunchRecord} record
+   * @param {import('../state.js').LaunchRecord} record
    * @returns {string[]}
    */
   function lastLinesFromMarker(record) {
@@ -460,7 +460,7 @@ export function createLaunchService(options = {}) {
 
   /**
    * 粗粒度归因：M3 会做成规则表，这里先给一条能看懂的话。
-   * @param {import('./state.js').LaunchRecord} record
+   * @param {import('../state.js').LaunchRecord} record
    * @returns {string | undefined}
    */
   function crashSummary(record) {

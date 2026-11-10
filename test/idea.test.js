@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
-import { findOwningAggregator, readIdeaProject, resolveProjectDir } from '../src/lib/idea.js'
+import { findOwningAggregator, readIdeaProject, resolveProjectDir } from '../src/lib/detect/idea.js'
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures-multi')
 const demo = join(fixtures, 'demo')

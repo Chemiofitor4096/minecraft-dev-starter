@@ -11,10 +11,10 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import { createApi } from '../src/lib/api.js'
-import { detectProject } from '../src/lib/detect.js'
-import { createLaunchService } from '../src/lib/launches.js'
-import { diagnose } from '../src/lib/launches.js'
-import { currentLanguage, en, setLanguage, t, zh } from '../src/lib/messages.js'
+import { detectProject } from '../src/lib/detect/detect.js'
+import { createLaunchService } from '../src/lib/launch/launches.js'
+import { diagnose } from '../src/lib/launch/launches.js'
+import { currentLanguage, en, setLanguage, t, zh } from '../src/lib/i18n/messages.js'
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const jdks = [

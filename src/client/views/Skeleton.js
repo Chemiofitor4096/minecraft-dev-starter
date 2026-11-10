@@ -3,7 +3,7 @@
  * @module minecraft-dev-starter/client/Skeleton
  */
 
-import { h } from './h.js'
+import { h } from '../lib/h.js'
 
 /**
  * @param {{ rows?: number, hint?: string }} [props]
