@@ -1,117 +1,26 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "updatedAt": "2026-11-10",
-  "note": "支持的版本矩阵。行由人挑选（热门版本线），不由脚本自动追加；脚本只刷新每一行内部的版本号。",
-  "lines": [
-    { "mcVersion": "1.20.1", "label": "LTS", "note": "老整合包与长期维护模组的主战场" },
-    { "mcVersion": "1.21.1", "label": "主流", "note": "当前模组生态主流版本" },
-    { "mcVersion": "1.21.8", "label": "当前稳定", "note": "跟进上游的新工程" }
-  ],
-  "cells": [
+  "note": "不是支持的版本表。seed 只在抓不到上游时兜底；verified 是真正跑通过的组合，只增不改。",
+  "seed": [
     {
-      "id": "fabric-1.20.1",
-      "loader": "fabric",
-      "mcVersion": "1.20.1",
-      "java": 17,
-      "status": "supported",
-      "pinned": {
-        "loaderVersion": "0.20.1",
-        "yarn": "1.20.1+build.10",
-        "loom": "1.19.4",
-        "api": "0.92.12+1.20.1"
-      },
-      "latest": { "fetchedAt": "2026-11-10", "loaderVersion": "0.20.1", "yarn": "1.20.1+build.10", "loom": "1.19.4", "api": "0.92.12+1.20.1" },
-      "sources": [
-        { "kind": "fabric-meta", "mc": "1.20.1", "fields": ["loaderVersion", "yarn"] },
-        { "kind": "maven", "repo": "fabric", "coord": "net.fabricmc:fabric-loom", "field": "loom", "channel": "release" },
-        { "kind": "maven", "repo": "fabric", "coord": "net.fabricmc.fabric-api:fabric-api", "field": "api", "suffix": "+1.20.1" }
-      ]
-    },
-    {
-      "id": "fabric-1.21.1",
       "loader": "fabric",
       "mcVersion": "1.21.1",
-      "java": 21,
-      "status": "supported",
-      "pinned": {
+      "versions": {
         "loaderVersion": "0.20.1",
         "yarn": "1.21.1+build.3",
         "loom": "1.19.4",
         "api": "0.116.18+1.21.1"
-      },
-      "latest": { "fetchedAt": "2026-11-10", "loaderVersion": "0.20.1", "yarn": "1.21.1+build.3", "loom": "1.19.4", "api": "0.116.18+1.21.1" },
-      "sources": [
-        { "kind": "fabric-meta", "mc": "1.21.1", "fields": ["loaderVersion", "yarn"] },
-        { "kind": "maven", "repo": "fabric", "coord": "net.fabricmc:fabric-loom", "field": "loom", "channel": "release" },
-        { "kind": "maven", "repo": "fabric", "coord": "net.fabricmc.fabric-api:fabric-api", "field": "api", "suffix": "+1.21.1" }
-      ]
+      }
     },
     {
-      "id": "fabric-1.21.8",
-      "loader": "fabric",
-      "mcVersion": "1.21.8",
-      "java": 21,
-      "status": "supported",
-      "pinned": {
-        "loaderVersion": "0.20.1",
-        "yarn": "1.21.8+build.1",
-        "loom": "1.19.4",
-        "api": "0.136.1+1.21.8"
-      },
-      "latest": { "fetchedAt": "2026-11-10", "loaderVersion": "0.20.1", "yarn": "1.21.8+build.1", "loom": "1.19.4", "api": "0.136.1+1.21.8" },
-      "sources": [
-        { "kind": "fabric-meta", "mc": "1.21.8", "fields": ["loaderVersion", "yarn"] },
-        { "kind": "maven", "repo": "fabric", "coord": "net.fabricmc:fabric-loom", "field": "loom", "channel": "release" },
-        { "kind": "maven", "repo": "fabric", "coord": "net.fabricmc.fabric-api:fabric-api", "field": "api", "suffix": "+1.21.8" }
-      ]
-    },
-    {
-      "id": "neoforge-1.20.1",
-      "loader": "neoforge",
-      "mcVersion": "1.20.1",
-      "java": 17,
-      "status": "supported",
-      "pinned": {
-        "neoforge": "1.20.1-47.1.106",
-        "gradlePlugin": "7.1.39"
-      },
-      "latest": { "fetchedAt": "2026-11-10", "neoforge": "1.20.1-47.1.106", "gradlePlugin": "7.1.39" },
-      "sources": [
-        { "kind": "maven", "repo": "neoforged", "coord": "net.neoforged:forge", "field": "neoforge", "filter": "^1\\.20\\.1-" },
-        { "kind": "maven", "repo": "neoforged", "coord": "net.neoforged.gradle:userdev", "field": "gradlePlugin" }
-      ]
-    },
-    {
-      "id": "neoforge-1.21.1",
       "loader": "neoforge",
       "mcVersion": "1.21.1",
-      "java": 21,
-      "status": "supported",
-      "pinned": {
+      "versions": {
         "neoforge": "21.1.265",
         "gradlePlugin": "7.1.39"
-      },
-      "latest": { "fetchedAt": "2026-11-10", "neoforge": "21.1.265", "gradlePlugin": "7.1.39" },
-      "sources": [
-        { "kind": "maven", "repo": "neoforged", "coord": "net.neoforged:neoforge", "field": "neoforge", "filter": "^21\\.1\\." },
-        { "kind": "maven", "repo": "neoforged", "coord": "net.neoforged.gradle:userdev", "field": "gradlePlugin" }
-      ]
-    },
-    {
-      "id": "neoforge-1.21.8",
-      "loader": "neoforge",
-      "mcVersion": "1.21.8",
-      "java": 21,
-      "status": "supported",
-      "pinned": {
-        "neoforge": "21.8.57",
-        "gradlePlugin": "7.1.39"
-      },
-      "latest": { "fetchedAt": "2026-11-10", "neoforge": "21.8.57", "gradlePlugin": "7.1.39" },
-      "sources": [
-        { "kind": "maven", "repo": "neoforged", "coord": "net.neoforged:neoforge", "field": "neoforge", "filter": "^21\\.8\\." },
-        { "kind": "maven", "repo": "neoforged", "coord": "net.neoforged.gradle:userdev", "field": "gradlePlugin" }
-      ]
+      }
     }
-  ]
+  ],
+  "verified": []
 }
