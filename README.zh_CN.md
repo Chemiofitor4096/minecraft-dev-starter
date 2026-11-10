@@ -24,13 +24,9 @@
 
 ## 截图
 
-<table>
-<tr><td colspan="2"><img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-1-overview.png" width="820" alt="客户端运行中，日志落在底部工作台"></td></tr>
-<tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-2-detail.png" width="400" alt="Mod Dev 面板：工程画像、运行目标与声明依赖"></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-3-flyout.png" width="400" alt="标题栏胶囊的浮层：选择工程与运行目标"></td>
-</tr>
-</table>
+<img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-1-running.png" width="100%" alt="从 Mod Dev 面板启动的 Forge 1.20.1 客户端：目标标记为运行中，日志落在底部工作台">
+
+<img src="https://raw.githubusercontent.com/Chemiofitor4096/minecraft-dev-starter/main/assets/screenshot-2-panel.png" width="100%" alt="工程浮层与 Mod Dev 面板：状态条、目标下拉、构建环境、依赖、证据与诊断">
 
 ## 功能
 
