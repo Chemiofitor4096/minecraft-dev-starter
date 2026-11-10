@@ -7,6 +7,24 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
+## [0.2.0] — 2026-11-10
+
+### Changed
+
+- Tool descriptions are English and one or two sentences. The parameter list and the return shape live in
+  the schema, so a description now only says what the tool is for and the single constraint that is easy
+  to get wrong. Tool *results* stay in the interface language.
+- `mc_projects` marks a task path inferred by loader convention as `(guessed)` instead of a localized word,
+  so the same marker appears whatever the UI language is.
+
+### Internal
+
+- Version selection happens at call time: `src/lib/versions.js` asks Fabric meta / NeoForge maven for the
+  exact versions of a `(loader, MC version)` pair and falls back to a small seed. `data/versions.json`
+  keeps only that seed and the list of combinations that were actually run.
+- Source tree regrouped by domain — `detect` / `launch` / `i18n` / `util` on the host side, `views` / `lib`
+  on the client side. Build scripts live in `scripts/`, development helpers in `tools/`.
+
 ## [0.1.13] — 2026-11-06
 
 ### Added
