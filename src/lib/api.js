@@ -5,6 +5,7 @@
  * @module minecraft-dev-starter/lib/api
  */
 
+import { createProject } from './scaffold.js'
 import { detectProject } from './detect/detect.js'
 import { resolveProjectDir } from './detect/idea.js'
 import { discoverJdks, readJdk } from './launch/java.js'
@@ -112,6 +113,26 @@ export function createApi(options) {
       const value = { ...result, scannedAt: new Date().toISOString() }
       cache.set(key, { at: Date.now(), value })
       return value
+    },
+
+    /**
+     * 生成新工程：`{ dir, modid, name, group?, version?, loader?, mcVersion? }`。
+     * 目录必须不存在或为空；版本在调用时向上游解析。
+     * @param {unknown} payload
+     */
+    'projects.create': async (payload) => {
+      const input = /** @type {Record<string, any>} */ (payload ?? {})
+      const created = await createProject({
+        dir: String(input.dir ?? ''),
+        modid: input.modid,
+        name: input.name,
+        group: input.group,
+        version: input.version,
+        loader: input.loader,
+        mcVersion: input.mcVersion,
+      })
+      console.log(`[mcdev] projects.create ${created.dir} → ${created.files.length} 个文件（${created.loader} ${created.mcVersion}）`)
+      return created
     },
 
     /**

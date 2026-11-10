@@ -9,7 +9,7 @@
       "versions": {
         "loaderVersion": "0.20.1",
         "yarn": "1.21.1+build.3",
-        "loom": "1.19.4",
+        "loom": "1.10.5",
         "api": "0.116.18+1.21.1"
       }
     },
@@ -22,5 +22,12 @@
       }
     }
   ],
-  "verified": []
+  "verified": [
+    {
+      "loader": "fabric",
+      "mcVersion": "1.21.1",
+      "at": "2026-11-10",
+      "proof": "mc_mod_init scaffold + gradlew build (Gradle 9.8.1, loom 1.10.5, Java 21); detection reports no warnings"
+    }
+  ]
 }

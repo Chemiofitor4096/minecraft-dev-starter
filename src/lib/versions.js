@@ -25,6 +25,15 @@ const REPOS = {
 /** 上游抓取的缓存时间：同一会话里连续生成不用重复抓。 */
 const CACHE_TTL_MS = 5 * 60 * 1000
 
+/**
+ * loom 不能取"最新发布版"：loom 1.19 起自己要求 JVM 25，而 MC 1.20 / 1.21 线要 Java 17 / 21。
+ * 这里按目标 Java 版本钉一个已知能跑的 loom，Java 25 才放开用最新。
+ */
+const LOOM_BY_JAVA = {
+  17: '1.10.5',
+  21: '1.10.5',
+}
+
 /** 模块级缓存：url → { at, text }。测试传自己的 cache 绕开它。 */
 const defaultCache = new Map()
 
@@ -186,12 +195,14 @@ async function resolveUpstream(request) {
   const java = javaForMc(mcVersion)
 
   if (loader === 'fabric') {
-    const [loaderRaw, yarnRaw, loom, api] = await Promise.all([
+    const loomPinned = LOOM_BY_JAVA[java]
+    const [loaderRaw, yarnRaw, api] = await Promise.all([
       fetchText(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(mcVersion)}`, context),
       fetchText(`https://meta.fabricmc.net/v2/versions/yarn/${encodeURIComponent(mcVersion)}`, context),
-      mavenField(metadataUrl('fabric', 'net.fabricmc:fabric-loom'), 'loom', { releaseOnly: true }, context),
       mavenField(metadataUrl('fabric', 'net.fabricmc.fabric-api:fabric-api'), 'api', { suffix: `+${mcVersion}` }, context),
     ])
+    const loom =
+      loomPinned ?? (await mavenField(metadataUrl('fabric', 'net.fabricmc:fabric-loom'), 'loom', { releaseOnly: true }, context))
     const loaderVersion = JSON.parse(loaderRaw)?.[0]?.loader?.version
     const yarn = JSON.parse(yarnRaw)?.[0]?.version
     if (typeof loaderVersion !== 'string' || typeof yarn !== 'string') throw new Error('fabric meta: unexpected shape')

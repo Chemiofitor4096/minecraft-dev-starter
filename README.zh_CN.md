@@ -31,6 +31,7 @@
 ## 功能
 
 - **工程识别**：支持 Fabric、Forge、NeoForge、Architectury、Paper 与 Spigot，覆盖 Minecraft 1.7.10 至 26.x。支持单模块、多模块与聚合仓库；loader 声明位于子模块时同样可以识别。
+- **工程脚手架**：`mc_mod_init` 把一个空目录变成可构建的 Fabric 工程——调用时向上游解析 loader / yarn / loom / Fabric API 版本，写好 Gradle 文件与入口类，并拒绝非空的目录。
 - **运行目标**：从 Gradle 配置中提取 Client、Server、Data、GameTestServer 等任务，并区分常驻（`daemon`）与会跑完（`oneshot`）两类。按 loader 惯例推测的目标会标记为未验证，不影响选择与启动。
 - **托管启动**：通过 Gradle Wrapper 启动任务。常驻目标依据日志标记判定是否进入运行状态，而非仅依据进程存活；一次性目标跑完即给出结论，成功、失败、被停止、起不来分别可辨。停止时终止 Gradle 及其全部子进程。
 - **JDK 选择**：按 MC 版本与 `toolchain` 推断所需 JDK 大版本，在面板里列出本机探测到的 JDK 供选择，也可以直接填入 JDK 根目录把它加进列表。指定结果只存本机（`~/.dsh/mc-dev-starter/jdk.json`），不写进 `gradle.properties`；启动时以 `-Dorg.gradle.java.home` 与 `JAVA_HOME` 传给 Gradle，因此面板显示的就是实际使用的。自动挑选只在"大版本完全匹配且 Gradle 跑得动"时接管，避免把本来能跑的工程换成不兼容的 JVM。
@@ -39,7 +40,7 @@
 - **状态保持**：运行记录持久化到本地，并按 profile 分目录（`~/.dsh/mc-dev-starter/profiles/<name>/`），不同 profile 的实例互不干扰。宿主重启后按进程 ID 校验：确认存活则继续跟踪，无法确认则记为未知，不推测退出原因。
 - **运行日志**：独立侧边栏标签页或 better-sidebar 底部工作台，按工程展示启动历史，支持跟随输出。日志按级别着色：WARN 与 ERROR 高亮，堆栈帧与 Gradle 任务行区分显示，时间、线程与 logger 弱化；可按级别过滤（全部 / INFO+ / WARN+ / ERROR），选择会被记住。异常退出时给出可能原因，覆盖依赖解析失败、JDK 版本不匹配、端口占用、认证失败等情况。
 - **工作区跟随**：以当前会话的工作目录作为工作区，切换会话时自动重新扫描，无需手动刷新。工作区里没有可运行的工程时不显示标题栏胶囊，避免在非 Minecraft 项目里占位；面板标签仍可打开。
-- **模型工具**（可选）：提供六个工具，与面板共用同一套服务——`mc_projects`（列出工程与目标）、`mc_project_detail`（loader 依据、模块、JDK、声明依赖、各目标是常驻还是会跑完）、`mc_launch`（启动；常驻目标默认等到运行态，一次性目标默认等到结束并返回 `verdict` 与失败行）、`mc_launch_logs`（读日志，异常退出时附带结构化归因与建议）、`mc_launch_list`（历史实例与状态，含验证结论）、`mc_launch_stop`（停止整棵进程树）。
+- **模型工具**（可选）：提供七个工具，与面板共用同一套服务——`mc_projects`（列出工程与目标）、`mc_project_detail`（loader 依据、模块、JDK、声明依赖、各目标是常驻还是会跑完）、`mc_mod_init`（在空目录里生成一个 Fabric 工程）、`mc_launch`（启动；常驻目标默认等到运行态，一次性目标默认等到结束并返回 `verdict` 与失败行）、`mc_launch_logs`（读日志，异常退出时附带结构化归因与建议）、`mc_launch_list`（历史实例与状态，含验证结论）、`mc_launch_stop`（停止整棵进程树）。
 - **扩展集成**：安装 [dsh-better-sidebar](https://github.com/topics/dsh-better-sidebar) 后，面板与日志可在其侧边栏中作为带图标的标签页打开。
 
 ## 安装

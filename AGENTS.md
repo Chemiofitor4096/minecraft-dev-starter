@@ -26,11 +26,12 @@ IDEA 风格的运行控件（选中目标 → 启动 / 停止 / 看日志）。
 
 ```
 src/index.js          宿主入口：inject + apply，挂 HTTP 路由与工具
-src/tools.js          六个模型工具（mc_projects / mc_project_detail / mc_launch / mc_launch_logs / mc_launch_list / mc_launch_stop）
+src/tools.js          七个模型工具（mc_projects / mc_project_detail / mc_mod_init / mc_launch / mc_launch_logs / mc_launch_list / mc_launch_stop）
 src/lib/              领域层。跨层依赖单向：detect / launch 可以用 util、i18n，反过来不行
   api.js              /mcdev/api 的方法实现（scan / detail / state / launch.*），唯一聚合点
   state.js            ~/.dsh/mc-dev-starter 下的状态与日志（运行记录按 profile 分目录）
   versions.js         版本解析：调用时向上游取 (loader, MC) 的精确版本，失败退回 seed
+  scaffold.js         工程脚手架：校验参数、渲染 templates/、写盘（不跑 Gradle）
   detect/             识别一个工程是什么
     detect.js         工程画像：loader、模块、run 目标、证据与警告
     scanner.js        工作区 BFS（深度 3、剪枝、上限）
@@ -62,9 +63,10 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 204 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 210 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
+templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
 ```
 
 ## 命令
@@ -118,6 +120,9 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 读 `.idea` 时抛 `Cannot read properties of undefined` | 只有 `modules.xml`、没有 `misc.xml` 的工程：`componentOf(undefined)` 直接取 `.name` | `rootOf` / `componentOf` 容忍 undefined；回归见 `test/idea.test.js` |
 | worktree 里的 `node_modules` 一删，主仓库的也没了 | 用 junction 指向主仓库的 `node_modules`，`git worktree remove` 递归删除时会跟着目标走 | 别在 worktree 里 junction 主仓库依赖；要跑测试就复制或用独立 `npm ci`，删之前先确认链接类型 |
 | 本地全绿、CI 全红 | 测试夹具（`.idea`、图片等）被 `.gitignore` 忽略：本地有文件，干净 checkout 没有 | 夹具目录要在 `.gitignore` 里显式放行；发版前用 `git clone` 到临时目录跑一遍 |
+| 生成完的工程第一次构建就失败：`requires at least Gradle 9.8.0` | 模板 wrapper 的 Gradle 版本低于 loom 的最低要求（loom 1.19.4 要 9.8+） | 模板里的 `gradle-wrapper.properties` 必须跟 `versions.js` 解析出的 loom 版本对齐；升级 loom 时一起改，并用真实 `gradlew build` 验一次 |
+| 装到用户机器上 `mc_mod_init` 报找不到模板 | `templates/` 没进 `package.json` 的 `files`，npm 包里没有模板 | `files` 里带上 `templates`；`check:pack` 的文件数会变（少 10 个就是漏了） |
+| 模板里的占位符被 Gradle 先展开、Java 里没法写 | 模板用了 `${...}`，和 Gradle 自己的属性语法冲突 | 模板占位符一律 `{{name}}`；`renderText` 只认这个形式，残留会抛 `TEMPLATE_LEFTOVER` |
 
 其他约定：
 
@@ -402,6 +407,26 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
 - 验证：195 个测试。`test/host-messages.test.js` 覆盖双语 key 对齐、八条归因规则的两种语言、
   英文下识别结果零中文、缓存按语言分开；`test/messages.test.js` 覆盖客户端侧的同类护栏、相对时间与
   语言订阅源（引用稳定、转发订阅）。
+
+### M21 工程脚手架（2026-11-10）
+
+- **`mc_mod_init`**：把空目录变成可构建的 Fabric 工程。`src/lib/scaffold.js` 校验参数 → 调
+  `versions.js` 解析版本 → 渲染 `templates/fabric/` → 写盘；不跑 Gradle，拒绝非空目录，模板占位符
+  用 `{{name}}`（Gradle 自己用 `${...}`），残留会抛 `TEMPLATE_LEFTOVER`。
+- **模板**：`build.gradle` / `settings.gradle` / `gradle.properties` / `fabric.mod.json` / 入口类 /
+  `.gitignore` + Gradle wrapper（9.8.1，jar 与脚本原样复制）。`templates` 已进 `package.json` 的
+  `files`，否则装到用户机器上找不到模板。
+- **三个真机踩出来的修正**：
+  1. loom 不能取最新：loom 1.19 自己要求 JVM 25，而 1.21.1 的模组要 Java 21 → 按 Java 大版本钉
+     loom（17/21 → 1.10.5），只有 Java 25 才放开取最新；
+  2. `fabric.mod.json` 的 `"version": "${version}"` 会被识别引擎报「未解析占位符」→ 改成
+     `${mod_version}`，`processResources` 展开它，gradle.properties 里有同名键，识别直接可解析；
+  3. 不显式写 `loom { runs { client(); server() } }` 时目标只能按惯例推测（`guessed`）→ 模板里显式
+     声明，目标变成 `build-script`。
+- **验证**：真实生成 `demo_mod`（Fabric 1.21.1）→ `gradlew build` **BUILD SUCCESSFUL**（Gradle 9.8.1、
+  loom 1.10.5、Java 21，22s）→ 识别结果 `fabric` / `1.21.1` / `runClient`+`runServer`（build-script）、
+  JDK 21 精确匹配、**零警告**。该组合已写进 `data/versions.json` 的 `verified`。
+- 210 个测试；`test/scaffold.test.js` 覆盖参数校验、渲染、目录保护、seed 回退与二进制 wrapper 不被破坏。
 
 ## 发布记录
 

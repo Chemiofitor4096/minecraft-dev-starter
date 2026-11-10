@@ -78,7 +78,7 @@ test('Fabric：loader / yarn / loom / api 一次解析，api 后缀精确', asyn
   assert.deepEqual(resolved.versions, {
     loaderVersion: '0.20.1',
     yarn: '1.21.1+build.3',
-    loom: '1.19.4',
+    loom: '1.10.5',
     api: '0.116.18+1.21.1',
   })
 })

@@ -102,6 +102,7 @@ test('注册六个工具并且参数已转成 JSON Schema', () => {
     'mc_launch_list',
     'mc_launch_logs',
     'mc_launch_stop',
+    'mc_mod_init',
     'mc_project_detail',
     'mc_projects',
   ])

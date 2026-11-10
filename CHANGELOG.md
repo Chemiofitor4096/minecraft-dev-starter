@@ -9,6 +9,13 @@ break installations that look unrelated.
 
 ## [0.2.0] — 2026-11-10
 
+### Added
+
+- `mc_mod_init` scaffolds a new Fabric project into an empty directory: it resolves the loader, yarn, loom
+  and Fabric API versions from upstream at call time, renders the bundled template into the target, and
+  refuses a non-empty directory. The result builds with `gradlew build` and is detected by `mc_projects`
+  without warnings (Gradle 9.8.1, loom 1.10.5, Java 21).
+
 ### Changed
 
 - Tool descriptions are English and one or two sentences. The parameter list and the return shape live in
@@ -24,6 +31,8 @@ break installations that look unrelated.
   keeps only that seed and the list of combinations that were actually run.
 - Source tree regrouped by domain — `detect` / `launch` / `i18n` / `util` on the host side, `views` / `lib`
   on the client side. Build scripts live in `scripts/`, development helpers in `tools/`.
+- loom is pinned per Java line instead of "latest": loom 1.19 requires a Java 25 runtime, while Minecraft
+  1.20 / 1.21 mods target Java 17 / 21, so those lines pin loom 1.10.5.
 
 ## [0.1.13] — 2026-11-06
 
