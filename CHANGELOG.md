@@ -11,9 +11,9 @@ break installations that look unrelated.
 
 ### Added
 
-- `mc_mod_init` scaffolds a new Fabric project into an empty directory: it resolves the loader, yarn, loom
-  and Fabric API versions from upstream at call time, renders the bundled template into the target, and
-  refuses a non-empty directory. The result builds with `gradlew build` and is detected by `mc_projects`
+- `mc_mod_init` scaffolds a new mod project (Fabric or NeoForge) into an empty directory: it resolves the
+  loader, mappings, plugin and API versions from upstream at call time, renders the bundled template into
+  the target, and refuses a non-empty directory. The result builds with `gradlew build` and is detected by `mc_projects`
   without warnings (Gradle 9.8.1, loom 1.10.5, Java 21).
 
 ### Changed

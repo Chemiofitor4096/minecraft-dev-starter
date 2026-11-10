@@ -63,7 +63,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 210 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 211 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -411,12 +411,16 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
 
 ### M21 工程脚手架（2026-11-10）
 
-- **`mc_mod_init`**：把空目录变成可构建的 Fabric 工程。`src/lib/scaffold.js` 校验参数 → 调
-  `versions.js` 解析版本 → 渲染 `templates/fabric/` → 写盘；不跑 Gradle，拒绝非空目录，模板占位符
+- **`mc_mod_init`**：把空目录变成可构建的 Fabric / NeoForge 工程。`src/lib/scaffold.js` 校验参数 → 调
+  `versions.js` 解析版本 → 渲染 `templates/<loader>/` → 写盘；不跑 Gradle，拒绝非空目录，模板占位符
   用 `{{name}}`（Gradle 自己用 `${...}`），残留会抛 `TEMPLATE_LEFTOVER`。
-- **模板**：`build.gradle` / `settings.gradle` / `gradle.properties` / `fabric.mod.json` / 入口类 /
-  `.gitignore` + Gradle wrapper（9.8.1，jar 与脚本原样复制）。`templates` 已进 `package.json` 的
-  `files`，否则装到用户机器上找不到模板。
+- **模板**：Fabric 与 NeoForge 两套，各 10 个文件，结构对称：
+  - `templates/fabric/`：loom 插件、yarn 映射、`fabric.mod.json`、Gradle wrapper 9.8.1；
+  - `templates/neoforge/`：NeoGradle `userdev` 插件、`neoforge.mods.toml`、`@Mod(MODID)` 入口类、
+    Gradle wrapper 9.2.1（官方 1.21.1 MDK 用的就是 9.2.1），`runs` 里显式声明 client / server /
+    gameTestServer。
+  两套的 `gradle.properties` 都带 `mod_id` / `mod_name` / `mod_version` / `mod_group_id`。
+  `templates` 已进 `package.json` 的 `files`，否则装到用户机器上找不到模板。
 - **三个真机踩出来的修正**：
   1. loom 不能取最新：loom 1.19 自己要求 JVM 25，而 1.21.1 的模组要 Java 21 → 按 Java 大版本钉
      loom（17/21 → 1.10.5），只有 Java 25 才放开取最新；
@@ -424,10 +428,17 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
      `${mod_version}`，`processResources` 展开它，gradle.properties 里有同名键，识别直接可解析；
   3. 不显式写 `loom { runs { client(); server() } }` 时目标只能按惯例推测（`guessed`）→ 模板里显式
      声明，目标变成 `build-script`。
-- **验证**：真实生成 `demo_mod`（Fabric 1.21.1）→ `gradlew build` **BUILD SUCCESSFUL**（Gradle 9.8.1、
-  loom 1.10.5、Java 21，22s）→ 识别结果 `fabric` / `1.21.1` / `runClient`+`runServer`（build-script）、
-  JDK 21 精确匹配、**零警告**。该组合已写进 `data/versions.json` 的 `verified`。
-- 210 个测试；`test/scaffold.test.js` 覆盖参数校验、渲染、目录保护、seed 回退与二进制 wrapper 不被破坏。
+- **验证**：
+  - Fabric：生成 `demo_mod`（Fabric 1.21.1）→ `gradlew build` **BUILD SUCCESSFUL**（Gradle 9.8.1、
+    loom 1.10.5、Java 21，22s）→ 识别出 `runClient`+`runServer`（build-script）、JDK 21 精确匹配、零警告。
+  - NeoForge：生成 `demo_mod`（NeoForge 1.21.1）→ `gradlew build` **BUILD SUCCESSFUL**（Gradle 9.2.1、
+    NeoGradle 7.1.39、Java 21）；识别出 `runClient`/`runServer`（daemon）+ `runGameTestServer`（oneshot）、
+    **零警告**。
+  - NeoGradle 首次构建会反编译 Minecraft 并下载资源；`neoForm…DownloadAssets` 只服务 `runClient`，
+    构建本身不需要它。本次验证里该任务因 `resources.download.minecraft.net` 的 SSL 握手失败，
+    用 `-x neoFormJoined<...>DownloadAssets` 跳过——记录清楚，别把它当成模板缺陷。
+  - 两个组合都已写进 `data/versions.json` 的 `verified`。
+- 211 个测试；`test/scaffold.test.js` 覆盖两个 loader 的参数校验、渲染、目录保护、seed 回退与二进制 wrapper 不被破坏。
 
 ## 发布记录
 

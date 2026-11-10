@@ -682,14 +682,14 @@ export function applyTools(ctx, deps) {
     defineTool({
       name: 'mc_mod_init',
       description:
-        'Scaffold a new Fabric mod project into an empty directory: resolves loader, yarn, loom and Fabric API versions from upstream, then writes the Gradle files and a mod entrypoint. It refuses a non-empty directory; run mc_projects afterwards to confirm the workspace detects it.',
+        'Scaffold a new Minecraft mod project (Fabric or NeoForge) into an empty directory: resolves loader, mappings, plugin and API versions from upstream, then writes the Gradle files and a mod entrypoint. It refuses a non-empty directory; run mc_projects afterwards to confirm the workspace detects it.',
       parameters: {
         dir: { type: 'string', required: true, description: 'Target directory; relative paths resolve against the session workspace' },
         modid: { type: 'string', required: true, description: 'Mod id: lowercase letters, digits and underscores, e.g. my_mod' },
         name: { type: 'string', required: true, description: 'Display name, e.g. My Mod' },
         group: { type: 'string', description: 'Java package; default com.example.<modid>' },
         version: { type: 'string', description: 'Mod version; default 0.1.0' },
-        loader: { type: 'string', enum: ['fabric'], description: 'Mod loader; only fabric is supported today' },
+        loader: { type: 'string', enum: ['fabric', 'neoforge'], description: 'Mod loader' },
         mcVersion: { type: 'string', description: 'Minecraft version; default 1.21.1' },
       },
       output: {

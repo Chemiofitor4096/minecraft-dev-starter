@@ -14,6 +14,8 @@ const FABRIC_LOADER = 'https://meta.fabricmc.net/v2/versions/loader/1.21.1'
 const FABRIC_YARN = 'https://meta.fabricmc.net/v2/versions/yarn/1.21.1'
 const LOOM = 'https://maven.fabricmc.net/net/fabricmc/fabric-loom/maven-metadata.xml'
 const FABRIC_API = 'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml'
+const NEOFORGE = 'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml'
+const NEOGRADLE = 'https://maven.neoforged.net/releases/net/neoforged/gradle/userdev/maven-metadata.xml'
 
 /** @param {string[]} versions */
 function metadata(versions) {
@@ -27,6 +29,8 @@ const routes = {
   [FABRIC_YARN]: JSON.stringify([{ version: '1.21.1+build.3' }]),
   [LOOM]: metadata(['1.18.4', '1.19.4', '1.20.0-alpha.24']),
   [FABRIC_API]: metadata(['0.116.18+1.21.1', '0.141.6+1.21.11']),
+  [NEOFORGE]: metadata(['21.1.9', '21.1.265', '21.8.57']),
+  [NEOGRADLE]: metadata(['7.1.38', '7.1.39']),
 }
 
 const fakeFetch = async (url) => {
@@ -57,7 +61,7 @@ test('参数校验：modid / 包名 / 版本 / loader', () => {
   assert.throws(() => normalizeParams({ modid: 'demo', name: '' }), /name is required/)
   assert.throws(() => normalizeParams({ modid: 'demo', name: 'x', group: 'com.Example' }), /invalid Java package/)
   assert.throws(() => normalizeParams({ modid: 'demo', name: 'x', version: '1.0' }), /invalid version/)
-  assert.throws(() => normalizeParams({ modid: 'demo', name: 'x', loader: 'neoforge' }), /not supported yet/)
+  assert.throws(() => normalizeParams({ modid: 'demo', name: 'x', loader: 'forge' }), /not supported yet/)
 
   const params = normalizeParams({ modid: 'demo_mod', name: 'Demo Mod' })
   assert.equal(params.group, 'com.example.demo_mod')
@@ -124,6 +128,44 @@ test('生成工程：文件齐全、版本来自上游、没有残留占位符',
     // wrapper 是二进制复制，不能被文本渲染破坏
     const jar = await readFile(join(dir, 'gradle/wrapper/gradle-wrapper.jar'))
     assert.ok(jar.length > 10_000)
+  })
+})
+
+test('生成 NeoForge 工程：userdev 插件、模组元数据与入口类', async () => {
+  await withTempDir(async (parent) => {
+    const dir = join(parent, 'neo-demo')
+    const result = await createProject({
+      dir,
+      modid: 'demo_mod',
+      name: 'Demo Mod',
+      loader: 'neoforge',
+      fetchImpl: fakeFetch,
+      cache: new Map(),
+    })
+
+    assert.equal(result.source, 'upstream')
+    assert.equal(result.java, 21)
+    assert.deepEqual(result.versions, { neoforge: '21.1.265', gradlePlugin: '7.1.39' })
+    assert.ok(result.files.includes('src/main/resources/META-INF/neoforge.mods.toml'))
+    assert.ok(result.files.includes('src/main/java/com/example/demo_mod/DemoMod.java'))
+
+    const build = await readFile(join(dir, 'build.gradle'), 'utf8')
+    assert.match(build, /id 'net\.neoforged\.gradle\.userdev' version '7\.1\.39'/)
+    assert.match(build, /implementation "net\.neoforged:neoforge:\$\{neo_version\}"/)
+    assert.match(build, /languageVersion = JavaLanguageVersion\.of\(21\)/)
+
+    const properties = await readFile(join(dir, 'gradle.properties'), 'utf8')
+    assert.match(properties, /neo_version=21\.1\.265/)
+    assert.match(properties, /minecraft_version=1\.21\.1/)
+
+    const mods = await readFile(join(dir, 'src/main/resources/META-INF/neoforge.mods.toml'), 'utf8')
+    assert.match(mods, /modId = "demo_mod"/)
+    assert.match(mods, /versionRange = "\[21\.1\.265,\)"/)
+    assert.equal(/\{\{[a-zA-Z]/.test(mods), false)
+
+    const java = await readFile(join(dir, 'src/main/java/com/example/demo_mod/DemoMod.java'), 'utf8')
+    assert.match(java, /@Mod\(DemoMod\.MODID\)/)
+    assert.match(java, /public static final String MODID = "demo_mod";/)
   })
 })
 

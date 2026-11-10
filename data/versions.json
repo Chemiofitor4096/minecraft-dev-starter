@@ -28,6 +28,12 @@
       "mcVersion": "1.21.1",
       "at": "2026-11-10",
       "proof": "mc_mod_init scaffold + gradlew build (Gradle 9.8.1, loom 1.10.5, Java 21); detection reports no warnings"
+    },
+    {
+      "loader": "neoforge",
+      "mcVersion": "1.21.1",
+      "at": "2026-11-10",
+      "proof": "mc_mod_init scaffold + gradlew build (Gradle 9.2.1, NeoGradle 7.1.39, Java 21; asset download skipped, not needed for build); detection reports runClient/runServer/runGameTestServer with no warnings"
     }
   ]
 }

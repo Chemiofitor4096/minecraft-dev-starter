@@ -29,8 +29,8 @@ export const VERSION_PATTERN = /^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$/
 /** 直接按二进制复制的文件后缀。 */
 const BINARY = /\.(jar|png|ogg|zip|ico)$/
 
-/** 目前只支持 Fabric；NeoForge 的模板还没写。 */
-const SUPPORTED_LOADERS = ['fabric']
+/** 目前支持 Fabric 与 NeoForge（NeoForge 走 NeoGradle 的 userdev 插件）。 */
+const SUPPORTED_LOADERS = ['fabric', 'neoforge']
 
 /**
  * 从显示名推导 Java 类名：`My Cool Mod` → `MyCoolMod`。
@@ -177,6 +177,7 @@ export async function createProject(request) {
 
   const templateDir = join(request.templateRoot ?? TEMPLATE_ROOT, params.loader)
   const java = javaForMc(params.mcVersion)
+  const resolvedVersions = resolved.versions
   /** @type {Record<string, string | number>} */
   const values = {
     modid: params.modid,
@@ -187,10 +188,17 @@ export async function createProject(request) {
     version: params.version,
     mc: params.mcVersion,
     java,
-    loader: resolved.versions.loaderVersion,
-    yarn: resolved.versions.yarn,
-    loom: resolved.versions.loom,
-    api: resolved.versions.api,
+    loader: resolvedVersions.loaderVersion,
+    yarn: resolvedVersions.yarn,
+    loom: resolvedVersions.loom,
+    api: resolvedVersions.api,
+    neoforge: resolvedVersions.neoforge,
+    gradlePlugin: resolvedVersions.gradlePlugin,
+  }
+  // 另一种 loader 的字段不存在时直接删掉：模板里若误用，会在残留检查时抛错，
+  // 而不是把 "undefined" 写进工程
+  for (const key of Object.keys(values)) {
+    if (values[key] === undefined) delete values[key]
   }
 
   /** @type {string[]} */
