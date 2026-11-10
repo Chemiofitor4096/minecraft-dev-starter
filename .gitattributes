@@ -6,3 +6,9 @@
 .* text eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+*.jar binary
+
+# 模板会被原样复制到用户的工程里：shell 脚本必须是 LF，否则 Linux/macOS 上 ./gradlew 直接
+# "bad interpreter"；wrapper 的 .bat 保持 CRLF。
+templates/** text eol=lf
+templates/**/*.bat text eol=crlf

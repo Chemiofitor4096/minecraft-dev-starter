@@ -123,6 +123,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 生成完的工程第一次构建就失败：`requires at least Gradle 9.8.0` | 模板 wrapper 的 Gradle 版本低于 loom 的最低要求（loom 1.19.4 要 9.8+） | 模板里的 `gradle-wrapper.properties` 必须跟 `versions.js` 解析出的 loom 版本对齐；升级 loom 时一起改，并用真实 `gradlew build` 验一次 |
 | 装到用户机器上 `mc_mod_init` 报找不到模板 | `templates/` 没进 `package.json` 的 `files`，npm 包里没有模板 | `files` 里带上 `templates`；`check:pack` 的文件数会变（少 10 个就是漏了） |
 | 模板里的占位符被 Gradle 先展开、Java 里没法写 | 模板用了 `${...}`，和 Gradle 自己的属性语法冲突 | 模板占位符一律 `{{name}}`；`renderText` 只认这个形式，残留会抛 `TEMPLATE_LEFTOVER` |
+| 用户生成的工程在 Linux/macOS 上 `./gradlew` 报 `bad interpreter` | Windows 的 `core.autocrlf` 把模板里的 `gradlew` 转成 CRLF，生成时又被原样复制 | `.gitattributes` 里 `templates/** text eol=lf`、`templates/**/*.bat text eol=crlf`、`*.jar binary`；改完用 `git check-attr eol` 核对 |
 
 其他约定：
 
