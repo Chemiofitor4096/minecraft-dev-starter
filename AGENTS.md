@@ -54,7 +54,7 @@ src/client/
   state.js / selection.js / format.js / icons.js / styles.js / runtime.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 test/                 195 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
-doc/                  策划与调研
+doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 ```
 
 ## 命令
@@ -118,6 +118,8 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
   不是 `guessed`——它在 IDE 里真的被跑过。
 - 多模块工程里子模块各自成工程，任务路径必须带 Gradle 模块前缀、在聚合根执行；
   「在哪个目录跑 gradlew」这件事由识别结果决定，不允许调用方指定。
+- 工具描述是**英文契约**，一到两句（见 `doc/tool-vocabulary.md`）：第一句是什么与什么时候用，第二句只放
+  最容易踩的那条约束；参数与返回交给 schema。工具执行结果（`render`）仍是中文，跟界面语言走。
 - 不做隐含的 `clean`；构建目录不碰。
 - 一个工程同时只允许一个实例；跨工程可以并行。
 - 状态文件读写要 tmp + rename，进程探活失败记 `unknown`，不伪造结束原因。

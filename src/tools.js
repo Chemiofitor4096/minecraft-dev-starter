@@ -125,7 +125,7 @@ function renderProjects(value) {
     const targets = /** @type {string[]} */ (project.targets ?? [])
     const version = project.minecraftVersion === undefined || project.minecraftVersion === '' ? '' : ` ${project.minecraftVersion}`
     lines.push(
-      `- ${project.name} · ${project.loader}${version} · ${targets.length} 个目标：${targets.length === 0 ? '无可运行目标' : targets.join(', ')}`,
+      `- ${project.name} · ${project.loader}${version} · ${targets.length} 个目标：${targets.length === 0 ? '无可运行目标' : targets.join(', ').replaceAll(' (guessed)', '（未验证）')}`,
     )
   }
   return lines.join('\n')
@@ -142,12 +142,10 @@ export function applyTools(ctx, deps) {
   ctx.tools.register(
     defineTool({
       name: 'mc_projects',
-      description:
-        '列出当前工作区里识别到的 Minecraft 工程（Fabric/Forge/NeoForge/Paper/Architectury）以及每个工程可运行的目标（runClient、runServer…）。'
-        + ' 只读。要看某个工程的证据与警告用 mc_project_detail；要启动用 mc_launch。',
+      description: `List the Minecraft projects in the workspace and their taskPaths; read-only. Call it first — an empty list means there is no project here, so do not invent task names.`,
       parameters: {
-        root: { type: 'string', description: '工作区目录；省略则用当前会话的工作区' },
-        refresh: { type: 'boolean', description: '跳过 5 秒缓存重新扫描' },
+        root: { type: 'string', description: 'Workspace directory; defaults to the current session working directory' },
+        refresh: { type: 'boolean', description: 'Bypass the 5-second scan cache' },
       },
       output: {
         schema: {
@@ -185,7 +183,7 @@ export function applyTools(ctx, deps) {
             root: project.root,
             loader: project.loader,
             minecraftVersion: project.minecraftVersion ?? '',
-            targets: (project.runTargets ?? []).map((target) => `${target.taskPath}${target.guessed === true ? ' (推测)' : ''}`),
+            targets: (project.runTargets ?? []).map((target) => `${target.taskPath}${target.guessed === true ? ' (guessed)' : ''}`),
           })),
         }
       },
@@ -195,22 +193,16 @@ export function applyTools(ctx, deps) {
   ctx.tools.register(
     defineTool({
       name: 'mc_launch',
-      description:
-        '启动一个 Minecraft 开发工程的运行目标。两类目标语义不同：'
-        + '常驻的（runClient / runServer）默认等它进入运行态就返回，之后一直跑着；'
-        + '会跑完的（runData / runGameTestServer / 自定义 runGametest）默认等它结束并给出结论 verdict（passed/failed/aborted/error）。'
-        + ' 同一个工程同时只能有一个实例；任务路径必须是 mc_projects 列出的那些（形如 runClient 或 :fabric:runClient）。'
-        + ' 首次构建需要下载依赖，耗时可能数分钟；超时只代表还没等到目标状态，不代表失败。'
-        + ' 启动后可用 mc_launch_logs 看日志、mc_launch_stop 停止。',
+      description: `Run a target from mc_projects: daemon targets return once up, one-shot targets return when finished with a verdict (passed/failed/aborted/error). It builds and writes files, one instance per project (a second launch errors, it does not queue) — do not run gradlew yourself.`,
       parameters: {
-        root: { type: 'string', description: '工程根目录；省略则用当前工作区' },
-        taskPath: { type: 'string', required: true, description: 'Gradle 任务路径，例如 runClient、:fabric:runClient、runGameTestServer' },
+        root: { type: 'string', description: 'Project directory; defaults to the current workspace' },
+        taskPath: { type: 'string', required: true, description: 'Gradle task path, e.g. runClient, :fabric:runClient, :modules:core:runClient' },
         wait: {
           type: 'string',
           enum: ['ready', 'exit', 'detach'],
-          description: 'ready 等运行态；exit 等结束并拿结论；detach 立刻返回。省略时按目标类型决定：常驻用 ready，会跑完的用 exit',
+          description: 'ready waits for the target to be up; exit waits for it to finish and return a verdict; detach returns immediately. When omitted it follows the target mode: daemon → ready, one-shot → exit',
         },
-        timeoutMs: { type: 'number', description: '等 ready/exit 的上限，默认 600000（10 分钟）' },
+        timeoutMs: { type: 'number', description: 'Upper bound for ready/exit in ms; default 600000 (10 min)' },
       },
       output: {
         schema: {
@@ -251,7 +243,7 @@ export function applyTools(ctx, deps) {
         const settled = await waitForSettle(api, record.id, timeoutMs, exec.signal, until)
         const value = launchValue(settled ?? record, settled === undefined)
         if (mode === 'oneshot' && args.wait === 'ready') {
-          value.note = '这是会跑完的目标（跑完即结束），ready 按等结束处理'
+          value.note = 'This is a one-shot target (it exits when done); wait=ready was treated as exit'
         }
         return value
       },
@@ -261,12 +253,12 @@ export function applyTools(ctx, deps) {
   ctx.tools.register(
     defineTool({
       name: 'mc_launch_logs',
-      description: '读某个运行实例的日志（默认当前工程正在跑的那个）。异常退出时附带一句归因。',
+      description: `Read one instance's log, defaulting to the active instance of this project. Abnormal exits carry a diagnosis; raise limit for stack traces.`,
       parameters: {
-        id: { type: 'string', description: '实例 id（launch-N）；省略则用当前工程活跃实例' },
-        root: { type: 'string', description: '工程根目录；配合 id 省略时使用' },
-        offset: { type: 'number', description: '起始行号，默认 0' },
-        limit: { type: 'number', description: '最多返回多少行，默认 200' },
+        id: { type: 'string', description: 'Instance id (launch-N); omit to use the active instance of the session workspace' },
+        root: { type: 'string', description: 'Project directory; only used when id is omitted' },
+        offset: { type: 'number', description: '0-based line offset; default 0' },
+        limit: { type: 'number', description: 'How many lines to return; default 200' },
       },
       output: {
         schema: {
@@ -308,7 +300,7 @@ export function applyTools(ctx, deps) {
         let id = args.id
         if (id === undefined || id === '') {
           const current = await api['launch.current']({ root: agentRoot(args, exec) })
-          if (current === null || current === undefined) throw new Error('当前工程没有运行中的实例；请传 id')
+          if (current === null || current === undefined) throw new Error('No active instance in this project; pass id')
           id = current.id
         }
         const result = await api['launch.logs']({
@@ -344,10 +336,10 @@ export function applyTools(ctx, deps) {
   ctx.tools.register(
     defineTool({
       name: 'mc_launch_stop',
-      description: '停止一个运行实例（连同它拉起的整个进程树）。省略 id 时停当前工程的活跃实例。',
+      description: `Stop an instance and its process tree. Only daemon targets need this — a one-shot target has already exited by itself.`,
       parameters: {
-        id: { type: 'string', description: '实例 id；省略则用当前工程活跃实例' },
-        root: { type: 'string', description: '工程根目录；配合 id 省略时使用' },
+        id: { type: 'string', description: 'Instance id; omit to use the active instance of the session workspace' },
+        root: { type: 'string', description: 'Project directory; only used when id is omitted' },
       },
       output: {
         schema: {
@@ -365,7 +357,7 @@ export function applyTools(ctx, deps) {
         let id = args.id
         if (id === undefined || id === '') {
           const current = await api['launch.current']({ root: agentRoot(args, exec) })
-          if (current === null || current === undefined) throw new Error('当前工程没有运行中的实例；请传 id')
+          if (current === null || current === undefined) throw new Error('No active instance in this project; pass id')
           id = current.id
         }
         const record = await api['launch.stop']({ id })
@@ -380,11 +372,10 @@ export function applyTools(ctx, deps) {
   ctx.tools.register(
     defineTool({
       name: 'mc_launch_list',
-      description:
-        '列出运行实例（默认当前工程，最近在前）。用于查历史：某个实例为什么退出、上次跑的是哪个目标。只读。',
+      description: `List this project's instances, newest first. status is the process state, verdict is the conclusion.`,
       parameters: {
-        root: { type: 'string', description: '工程根目录；省略则用当前会话的工作区' },
-        limit: { type: 'number', description: '最多返回多少条，默认 10' },
+        root: { type: 'string', description: 'Project directory; defaults to the session workspace' },
+        limit: { type: 'number', description: 'Max records; default 10' },
       },
       output: {
         schema: {
@@ -455,14 +446,9 @@ export function applyTools(ctx, deps) {
   ctx.tools.register(
     defineTool({
       name: 'mc_project_detail',
-      description:
-        '查看单个工程的完整画像：loader 判定依据、模块与目标、JDK 需求与选择、证据、冲突与警告。只读。'
-        + ' targets 里的 mode 说明目标是常驻（daemon）还是会跑完（oneshot）：后者（runData、runGameTestServer）可以用 mc_launch 直接拿到验证结论；'
-        + ' source 说明目标从哪读到的（build-script 构建脚本的 runs 块 / idea-run-config IDE 里跑过的运行配置 / guessed 按惯例推测）。'
-        + ' 工程里有 .idea 时还会输出 idea：IntelliJ 的工程模型（Gradle 模块清单、facet 平台、工程 JDK、运行配置数）。'
-        + ' 用于回答"为什么判成这个 loader""为什么启动不了""缺哪个 JDK""跑哪个任务能验证改动"。',
+      description: `Profile one project: loader evidence, targets with mode and source, JDK, dependencies, warnings. Cheap and read-only — check it before launching, and do not run a guessed target without confirming it.`,
       parameters: {
-        root: { type: 'string', description: '工程根目录；省略则用当前会话的工作区' },
+        root: { type: 'string', description: 'Project directory; defaults to the session workspace' },
       },
       output: {
         schema: {
@@ -489,8 +475,8 @@ export function applyTools(ctx, deps) {
                 },
               },
             },
-            gradleRoot: { type: 'string', description: '实际执行 Gradle 的目录；子模块工程是它的聚合根' },
-            modulePath: { type: 'string', description: '子模块工程在聚合根里的模块路径' },
+            gradleRoot: { type: 'string', description: 'Directory where Gradle actually runs; for a subproject this is its aggregator root' },
+            modulePath: { type: 'string', description: 'Module path of this subproject inside the aggregator root' },
             targets: {
               type: 'array',
               items: {
@@ -504,7 +490,7 @@ export function applyTools(ctx, deps) {
                   source: {
                     type: 'string',
                     enum: ['build-script', 'idea-run-config', 'guessed'],
-                    description: '目标从哪读到的：构建脚本的 runs 块、IDE 的运行配置，还是按惯例推测',
+                    description: 'Where the target came from: a runs block in the build script, a configuration run in the IDE, or a loader convention (guessed)',
                   },
                 },
               },
@@ -512,29 +498,29 @@ export function applyTools(ctx, deps) {
             idea: {
               type: 'object',
               additionalProperties: false,
-              description: 'IntelliJ IDEA 的工程模型（读 .idea 得到）；没有 .idea 时不出现',
+              description: 'IntelliJ IDEA project model read from .idea; absent when there is no .idea',
               properties: {
                 name: { type: 'string', required: true },
                 dir: { type: 'string', required: true },
                 gradleRoot: { type: 'string' },
                 gradleJvm: { type: 'string' },
                 jdkName: { type: 'string' },
-                minecraftVersion: { type: 'string', description: 'MC Development 插件同步进 iml 的版本，只作佐证' },
+                minecraftVersion: { type: 'string', description: 'Minecraft version written into the iml by the MC Development plugin; corroborating evidence only' },
                 languageLevel: { type: 'integer' },
                 bytecodeTarget: { type: 'integer' },
-                modules: { type: 'integer', description: 'Gradle 链接进来的模块数（含根）' },
-                imls: { type: 'integer', description: 'iml 模块文件数' },
-                runConfigurations: { type: 'integer', description: 'IDE 里跑过的运行配置数' },
-                platforms: { type: 'array', items: { type: 'string' }, description: 'iml 里 minecraft facet 的 platformType 合集' },
-                linkedProjects: { type: 'array', items: { type: 'string' }, description: '复合构建里链接到的其它 Gradle 工程' },
+                modules: { type: 'integer', description: 'Number of Gradle-linked modules, including the root' },
+                imls: { type: 'integer', description: 'Number of iml module files' },
+                runConfigurations: { type: 'integer', description: 'Number of run configurations in the IDE' },
+                platforms: { type: 'array', items: { type: 'string' }, description: 'Union of platformType values from minecraft facets in the iml files' },
+                linkedProjects: { type: 'array', items: { type: 'string' }, description: 'Other Gradle projects linked into this composite build' },
                 libraries: {
                   type: 'object',
                   additionalProperties: false,
-                  description: 'Gradle 同步出的库表（.idea/libraries 或 IDE 外部存储）',
+                  description: 'Library table from the Gradle sync (.idea/libraries or the IDE external storage)',
                   properties: {
                     storage: { type: 'string', enum: ['project', 'external'], required: true },
                     count: { type: 'integer', required: true },
-                    local: { type: 'integer', required: true, description: '指向工程内 remap 产物的条数' },
+                    local: { type: 'integer', required: true, description: 'Entries pointing at in-project remap artifacts' },
                   },
                 },
               },

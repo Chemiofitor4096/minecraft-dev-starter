@@ -208,7 +208,7 @@ test('mc_launch 对会跑完的目标显式传 ready 时按等结束处理并说
   })
   const value = await byName.mc_launch.execute({ taskPath: 'runData', wait: 'ready' }, {})
   assert.equal(value.verdict, 'passed')
-  assert.match(value.note, /按等结束处理/)
+  assert.match(value.note, /treated as exit/)
   assertLossless(value)
 })
 
@@ -249,8 +249,8 @@ test('mc_launch_stop 省略 id 时停当前实例', async () => {
 
 test('没有活跃实例时给可读错误', async () => {
   const { byName } = build({ 'launch.current': async () => null })
-  await assert.rejects(() => byName.mc_launch_logs.execute({}, {}), /没有运行中的实例/)
-  await assert.rejects(() => byName.mc_launch_stop.execute({}, {}), /没有运行中的实例/)
+  await assert.rejects(() => byName.mc_launch_logs.execute({}, {}), /No active instance/)
+  await assert.rejects(() => byName.mc_launch_stop.execute({}, {}), /No active instance/)
 })
 
 // ── 会话工作区 ────────────────────────────────────────────────────────
