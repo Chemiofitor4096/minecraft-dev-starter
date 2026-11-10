@@ -55,6 +55,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 test/                 195 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
+data/versions.json    版本矩阵：支持的 (loader, MC 版本) 单元、pinned 版本、验证状态与刷新来源
 ```
 
 ## 命令
@@ -67,6 +68,7 @@ node scripts/build-client.mjs --watch
 node scripts/check-pack.mjs       # 发布前校验 npm 包内容（缺 lib/client.js、多带 test/ 都会失败）
 node scripts/scan-catalog.mjs     # 扫真实工程，输出识别结果表
 node scripts/inspect-project.mjs <工程目录>   # 摊开一个工程的证据 / .idea 模型 / 目标来源
+node scripts/refresh-versions.mjs # 对照上游刷新 data/versions.json 的 latest（默认只比较，--write 才写回）
 ```
 
 CI 在 `.github/workflows/ci.yml`：ubuntu / windows / macOS × Node 20/22/24 跑构建与测试，
@@ -122,6 +124,9 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
   最容易踩的那条约束；参数与返回交给 schema。工具执行结果（`render`）仍是中文，跟界面语言走。
 - 不做隐含的 `clean`；构建目录不碰。
 - 一个工程同时只允许一个实例；跨工程可以并行。
+- **版本矩阵（`data/versions.json`）的行由人挑**：只跟热门版本线（1.20.1 / 1.21.1 / 1.21.8），
+  不跟"上游刚发了什么"。刷新脚本只更新单元内的版本号和 `latest`，绝不新增行、不改 `status`；
+  `verified` 只能由"真的生成并跑通"置位。
 - 状态文件读写要 tmp + rename，进程探活失败记 `unknown`，不伪造结束原因。
 
 ## 验证记录

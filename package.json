@@ -13,6 +13,7 @@
   "files": [
     "src",
     "lib",
+    "data",
     "cordis.patch.yml",
     "README.md",
     "README.zh_CN.md",
@@ -47,7 +48,8 @@
     "prepack": "node scripts/build-client.mjs",
     "pretest": "node scripts/build-client.mjs",
     "test": "node --test",
-    "check:pack": "node scripts/check-pack.mjs"
+    "check:pack": "node scripts/check-pack.mjs",
+    "versions:refresh": "node scripts/refresh-versions.mjs"
   },
   "license": "MIT",
   "repository": {
