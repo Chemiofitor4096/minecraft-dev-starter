@@ -497,9 +497,8 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
   `GROUP_DIR_EXISTS`，不做合并。
 - **不留空壳**：搬走 `com/example/coalcraft` 之后，`com/example` 这类变空的父目录会被删到 java 根为止
   （第一次真机改包名时它留了下来，agent 只能手动清）。
-- **文档不改写，但报出来**：`README*.md` 里若还提到旧包名（`com.example.mod` 或
-  `com/example/mod` 两种写法都认），进返回值 `references`，渲染里写「仍提到旧包名（未改）」。
-  自动改文档会碰到来历不明的说明文字，只报告、由调用方决定。
+- **文档与构建脚本不碰**：全仓的文本引用是 grep 的活。只扫根目录会给出"没有残留"的假信号，
+  比不查更糟，所以工具不做这件事；描述里写明 `leaves docs and build scripts alone`。
 - **让默认值可见**：`mc_mod_init` 返回值新增 `group`，渲染里直接写「包名 com.example.coalcraft」——
   这样模型和人都能立刻看到用的是默认包，而不是回头去读文件才发现。
 - 测试：`test/scaffold.test.js` 覆盖 Fabric（目录移动 + JSON 入口）与 NeoForge（只有 package 行）、

@@ -252,7 +252,7 @@ export async function createProject(request) {
  * 不猜"可能是哪个包"，因为改错文件的代价比让调用方先确认一次高。
  *
  * @param {{ root: string, group: string }} request
- * @returns {Promise<{ root: string, group: string, from: string, moved: Array<{ from: string, to: string }>, files: string[], references: string[] }>}
+ * @returns {Promise<{ root: string, group: string, from: string, moved: Array<{ from: string, to: string }>, files: string[] }>}
  */
 export async function setGroup(request) {
   const root = resolve(String(request.root))
@@ -278,7 +278,7 @@ export async function setGroup(request) {
   }
   const previous = groupLine[1].trim()
   if (previous === next) {
-    return { root, group: next, from: previous, moved: [], files: [], references: [] }
+    return { root, group: next, from: previous, moved: [], files: [] }
   }
 
   /** @type {Array<{ from: string, to: string }>} */
@@ -372,26 +372,9 @@ export async function setGroup(request) {
   await writeFile(propertiesPath, updatedProperties, 'utf8')
   files.add('gradle.properties')
 
-  // 5. 文档与构建脚本不自动改写，但要报出来：旧包名留在 README 或 build.gradle 里没人知道就是坑。
-  //    两种写法都认：`com.example.mod`（包名）与 `com/example/mod`（路径）。
-  const pathForm = previous.split('.').join('/')
-  /** @type {string[]} */
-  const references = []
-  try {
-    for (const entry of await readdir(root, { withFileTypes: true })) {
-      if (!entry.isFile()) continue
-      const isDoc = /^readme.*\.md$/i.test(entry.name)
-      const isBuildScript = /\.gradle(\.kts)?$/i.test(entry.name)
-      if (!isDoc && !isBuildScript) continue
-      const file = join(root, entry.name)
-      const text = await readFile(file, 'utf8')
-      if (text.includes(previous) || text.includes(pathForm)) references.push(posix(relative(root, file)))
-    }
-  } catch {
-    // 读不了就不报
-  }
-
-  return { root, group: next, from: previous, moved, files: [...files].sort(), references: references.sort() }
+  // 文档与构建脚本一律不碰、也不检查：全仓的文本引用是 grep 的活，只扫根目录会给出
+  // "没有残留"的假信号，比不查更糟。
+  return { root, group: next, from: previous, moved, files: [...files].sort() }
 }
 
 /**

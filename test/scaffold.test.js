@@ -258,22 +258,22 @@ test('改包名：没有 mod_group_id 时拒绝，不动任何文件', async () 
 test('改包名：包名不合法时拒绝', async () => {
   await assert.rejects(() => setGroup({ root: 'C:/nope', group: 'Com.Acme' }), /invalid Java package/)
 })
-test('改包名：清掉留下的空包目录，并报出仍提到旧包名的文档', async () => {
+test('改包名：清掉留下的空包目录，文档与构建脚本一律不碰', async () => {
   await withTempDir(async (parent) => {
     const dir = join(parent, 'rename-docs')
     await createProject({ dir, modid: 'demo_mod', name: 'Demo Mod', loader: 'fabric', fetchImpl: fakeFetch, cache: new Map() })
     await writeFile(join(dir, 'README.md'), '# Demo\n\n源码在 `src/main/java/com/example/demo_mod/` 下。\n')
-    await writeFile(join(dir, 'notes.md'), 'com.example.demo_mod 出现在非 README 里，不动。\n')
-    // 构建脚本里硬编码的包路径也属于"改包名时要人看一眼"的地方
-    await writeFile(join(dir, 'build.gradle'), "plugins { id 'java' }\n// 硬编码：com.example.demo_mod\n")
+    const buildScript = join(dir, 'build.gradle')
+    const buildBefore = await readFile(buildScript, 'utf8')
 
     const result = await setGroup({ root: dir, group: 'com.acme.demo' })
 
     // com/example 搬空后应被清掉，源码树里不留空壳
     await assert.rejects(() => stat(join(dir, 'src/main/java/com/example')))
-    // 文档不改写，但要报出来
-    assert.deepEqual(result.references, ['README.md', 'build.gradle'].sort())
+    // 文本引用不在工具范围内：文档与构建脚本原样保留，也不出现在 files 里
+    assert.ok(!result.files.includes('README.md'))
+    assert.ok(!result.files.includes('build.gradle'))
     assert.match(await readFile(join(dir, 'README.md'), 'utf8'), /com\/example\/demo_mod/)
-    assert.match(await readFile(join(dir, 'notes.md'), 'utf8'), /com\.example\.demo_mod/)
+    assert.equal(await readFile(buildScript, 'utf8'), buildBefore)
   })
 })

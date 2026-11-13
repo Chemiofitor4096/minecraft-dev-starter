@@ -801,7 +801,7 @@ export function applyTools(ctx, deps) {
     defineTool({
       name: 'mc_set_group',
       description:
-        'Change the Java package (group) of a scaffolded project: moves the package directory under src/*/java and rewrites package/import lines plus metadata references. It edits files on disk; it refuses when gradle.properties has no mod_group_id, because then the current package cannot be determined safely.',
+        'Change the Java package (group) of a scaffolded project: moves the package directory under src/*/java and rewrites package/import lines plus metadata references. It edits files on disk, leaves docs and build scripts alone, and refuses when gradle.properties has no mod_group_id, because then the current package cannot be determined safely.',
       parameters: {
         root: { type: 'string', description: 'Project directory; defaults to the current workspace' },
         group: { type: 'string', required: true, description: 'New Java package, e.g. com.acme.coalcraft' },
@@ -827,7 +827,6 @@ export function applyTools(ctx, deps) {
               },
             },
             files: { type: 'array', required: true, items: { type: 'string' } },
-            references: { type: 'array', required: true, items: { type: 'string' } },
           },
         },
         render: (_args, value) => [
@@ -838,10 +837,7 @@ export function applyTools(ctx, deps) {
               + (value.moved.length === 0
                 ? '没有移动目录（源码里没有这个包）'
                 : `移动 ${value.moved.length} 个目录：${value.moved.map((entry) => entry.to).join('、')}`)
-              + `\n改写 ${value.files.length} 个文件：${value.files.join('、')}`
-              + (value.references.length === 0
-                ? ''
-                : `\n仍提到旧包名（未改，需要的话手动同步）：${value.references.join('、')}`),
+              + `\n改写 ${value.files.length} 个文件：${value.files.join('、')}`,
           },
         ],
       },
