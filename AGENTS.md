@@ -64,7 +64,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 225 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 226 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -495,12 +495,17 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
   里的入口类（Fabric 的 `"<group>.<Class>"`），最后写回 `mod_group_id`。
 - **只认 `mod_group_id`**：读不到就报 `NO_GROUP`，不猜"可能是哪个包"；目标包目录已存在则报
   `GROUP_DIR_EXISTS`，不做合并。
+- **不留空壳**：搬走 `com/example/coalcraft` 之后，`com/example` 这类变空的父目录会被删到 java 根为止
+  （第一次真机改包名时它留了下来，agent 只能手动清）。
+- **文档不改写，但报出来**：`README*.md` 里若还提到旧包名（`com.example.mod` 或
+  `com/example/mod` 两种写法都认），进返回值 `references`，渲染里写「仍提到旧包名（未改）」。
+  自动改文档会碰到来历不明的说明文字，只报告、由调用方决定。
 - **让默认值可见**：`mc_mod_init` 返回值新增 `group`，渲染里直接写「包名 com.example.coalcraft」——
   这样模型和人都能立刻看到用的是默认包，而不是回头去读文件才发现。
 - 测试：`test/scaffold.test.js` 覆盖 Fabric（目录移动 + JSON 入口）与 NeoForge（只有 package 行）、
   没有 `mod_group_id` 时不动文件、非法包名；`test/tools.test.js` 的工具名单加上 `mc_set_group`。
 
-225 个测试。
+226 个测试。
 
 ## 发布记录
 

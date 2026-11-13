@@ -12,8 +12,10 @@ break installations that look unrelated.
 ### Added
 
 - `mc_set_group` renames the Java package of a scaffolded project: it moves `src/*/java/<old>`, rewrites
-  `package`/import lines and metadata entrypoints, and updates `mod_group_id`. It refuses a project whose
-  `gradle.properties` has no `mod_group_id`.
+  `package`/import lines and metadata entrypoints, updates `mod_group_id`, and prunes the empty package
+  directories left behind. It refuses a project whose `gradle.properties` has no `mod_group_id`.
+  Documents are not rewritten, but `README*.md` files that still mention the old package are returned as
+  `references`.
 - `mc_mod_init` reports the group it used in its result and its rendered summary, so a default
   `com.example.<modid>` is visible instead of hidden in the generated files.
 - `mc_mod_init` scaffolds a new mod project (Fabric or NeoForge) into an empty directory: it resolves the

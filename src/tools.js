@@ -827,6 +827,7 @@ export function applyTools(ctx, deps) {
               },
             },
             files: { type: 'array', required: true, items: { type: 'string' } },
+            references: { type: 'array', required: true, items: { type: 'string' } },
           },
         },
         render: (_args, value) => [
@@ -837,7 +838,10 @@ export function applyTools(ctx, deps) {
               + (value.moved.length === 0
                 ? '没有移动目录（源码里没有这个包）'
                 : `移动 ${value.moved.length} 个目录：${value.moved.map((entry) => entry.to).join('、')}`)
-              + `\n改写 ${value.files.length} 个文件：${value.files.join('、')}`,
+              + `\n改写 ${value.files.length} 个文件：${value.files.join('、')}`
+              + (value.references.length === 0
+                ? ''
+                : `\n仍提到旧包名（未改，需要的话手动同步）：${value.references.join('、')}`),
           },
         ],
       },

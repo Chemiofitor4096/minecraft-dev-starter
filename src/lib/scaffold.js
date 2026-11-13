@@ -9,7 +9,7 @@
  * @module minecraft-dev-starter/lib/scaffold
  */
 
-import { copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rename, rmdir, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { javaForMc, resolveVersions } from './versions.js'
@@ -252,7 +252,7 @@ export async function createProject(request) {
  * 不猜"可能是哪个包"，因为改错文件的代价比让调用方先确认一次高。
  *
  * @param {{ root: string, group: string }} request
- * @returns {Promise<{ root: string, group: string, from: string, moved: Array<{ from: string, to: string }>, files: string[] }>}
+ * @returns {Promise<{ root: string, group: string, from: string, moved: Array<{ from: string, to: string }>, files: string[], references: string[] }>}
  */
 export async function setGroup(request) {
   const root = resolve(String(request.root))
@@ -278,7 +278,7 @@ export async function setGroup(request) {
   }
   const previous = groupLine[1].trim()
   if (previous === next) {
-    return { root, group: next, from: previous, moved: [], files: [] }
+    return { root, group: next, from: previous, moved: [], files: [], references: [] }
   }
 
   /** @type {Array<{ from: string, to: string }>} */
@@ -322,6 +322,8 @@ export async function setGroup(request) {
     await mkdir(dirname(toDir), { recursive: true })
     await rename(fromDir, toDir)
     moved.push({ from: posix(relative(root, fromDir)), to: posix(relative(root, toDir)) })
+    // 搬走之后 `com/example` 这类父目录会空掉：清到 java 根为止，别在源码树里留空壳
+    await pruneEmptyParents(dirname(fromDir), javaRoot)
   }
 
   // 2. 重写 Java 源码：package 行 + 旧包前缀（import 与全限定名）
@@ -370,5 +372,43 @@ export async function setGroup(request) {
   await writeFile(propertiesPath, updatedProperties, 'utf8')
   files.add('gradle.properties')
 
-  return { root, group: next, from: previous, moved, files: [...files].sort() }
+  // 5. 文档与构建脚本不自动改写，但要报出来：旧包名留在 README 或 build.gradle 里没人知道就是坑。
+  //    两种写法都认：`com.example.mod`（包名）与 `com/example/mod`（路径）。
+  const pathForm = previous.split('.').join('/')
+  /** @type {string[]} */
+  const references = []
+  try {
+    for (const entry of await readdir(root, { withFileTypes: true })) {
+      if (!entry.isFile()) continue
+      const isDoc = /^readme.*\.md$/i.test(entry.name)
+      const isBuildScript = /\.gradle(\.kts)?$/i.test(entry.name)
+      if (!isDoc && !isBuildScript) continue
+      const file = join(root, entry.name)
+      const text = await readFile(file, 'utf8')
+      if (text.includes(previous) || text.includes(pathForm)) references.push(posix(relative(root, file)))
+    }
+  } catch {
+    // 读不了就不报
+  }
+
+  return { root, group: next, from: previous, moved, files: [...files].sort(), references: references.sort() }
+}
+
+/**
+ * 从 `start` 往上删空目录，删到 `stop`（不含）为止；遇到非空目录就停。
+ * @param {string} start
+ * @param {string} stop
+ */
+async function pruneEmptyParents(start, stop) {
+  let current = start
+  while (current !== stop && current.startsWith(stop)) {
+    try {
+      const entries = await readdir(current)
+      if (entries.length > 0) return
+      await rmdir(current)
+    } catch {
+      return
+    }
+    current = dirname(current)
+  }
 }
