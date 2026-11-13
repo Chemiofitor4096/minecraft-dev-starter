@@ -64,7 +64,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 226 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 227 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -505,6 +505,23 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
   没有 `mod_group_id` 时不动文件、非法包名；`test/tools.test.js` 的工具名单加上 `mc_set_group`。
 
 226 个测试。
+
+## 架构边界（2026-11-14 复核）
+
+量过的数字（行数）：`tools.js` 889、`detect/detect.js` 771、`detect/idea.js` 654、
+`client/views/DetailTab.js` 690、`launch/launches.js` 480、`lib/api.js` 377、`scaffold.js` 341。
+
+- **边界成立**：客户端只 import `client/lib`；`tools.js` 通过 `deps.api` 拿服务，不 import `api.js`；
+  领域层（detect / launch）不 import 门面。
+- **`api.js` 是门面，不是上帝对象**：14 个方法、每个 5–20 行，只做"解析 root → 校验工作区 →
+  调领域服务 → 拼返回"。策略已全部下沉（JDK 选择在 `launch/jdks.js`，资源提示在 `launch/assets.js`）。
+- **真正在长的是 `tools.js`**：八个工具 ×（schema + execute + render）加十来个渲染辅助挤在一个文件里。
+- **拆分触发条件**（不到就别拆，拆了只是"更多文件"）：
+  - `tools.js` > 1000 行，或再加第九个工具 → 按工具拆 `src/tools/<name>.js`，
+    渲染辅助进 `src/tools/render.js`，`index.js` 只留 `applyTools` 循环；
+  - `api.js` > 500 行，或出现第二个入口（CLI / MCP / 独立 route）→ `src/lib/api/` 按
+    `projects.*` / `launch.*` / `shared` 拆；
+  - `DetailTab.js` > 800 行 → 再拆子组件（现在还是一个组件的自然长度）。
 
 ## 发布记录
 
