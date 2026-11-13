@@ -42,8 +42,9 @@ src/lib/              领域层。跨层依赖单向：detect / launch 可以用
     xml.js            极简 XML 解析（零依赖，只服务 .idea）
   launch/             把一个工程跑起来并拿到结论
     launches.js       启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
+    assets.js         首次运行检查：Minecraft 资源没下过时给一个提示码
     verify.js         目标分类（daemon / oneshot）与一次性任务的裁决（verdict）
-    argv.js           gradlew 命令行构造（含 Windows 引号规则）
+    argv.js           gradlew 命令行构造（Gradle 选项在任务名之前、Windows 引号规则）
     jdks.js           每个工程的 JDK 选择（优先级、jdk.json 持久化、要不要注入）
     java.js           JDK 探测与版本匹配（读 <jdk>/release，不起进程）
   i18n/messages.js    宿主侧 zh / en 字典：证据、警告、归因、错误（语言由客户端请求带上）
@@ -63,7 +64,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 211 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 221 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -124,6 +125,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 装到用户机器上 `mc_mod_init` 报找不到模板 | `templates/` 没进 `package.json` 的 `files`，npm 包里没有模板 | `files` 里带上 `templates`；`check:pack` 的文件数会变（少 10 个就是漏了） |
 | 模板里的占位符被 Gradle 先展开、Java 里没法写 | 模板用了 `${...}`，和 Gradle 自己的属性语法冲突 | 模板占位符一律 `{{name}}`；`renderText` 只认这个形式，残留会抛 `TEMPLATE_LEFTOVER` |
 | 用户生成的工程在 Linux/macOS 上 `./gradlew` 报 `bad interpreter` | Windows 的 `core.autocrlf` 把模板里的 `gradlew` 转成 CRLF，生成时又被原样复制 | `.gitattributes` 里 `templates/** text eol=lf`、`templates/**/*.bat text eol=crlf`、`*.jar binary`；改完用 `git check-attr eol` 核对 |
+| 传了 `-Dfoo=bar` 却报 `Task '.foo=bar' not found` | Gradle 的选项必须写在任务名**之前**；写在后面会被当成任务选项 | `argv.js` 里选项排在 `<taskPath>` 前面；`test/argv.test.js` 钉住这个顺序 |
 
 其他约定：
 
@@ -463,6 +465,24 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
 「首次构建要反编译 MC、首次 runClient 要下载资源，网络受限先配代理」的提示。
 
 211 个测试。
+
+### M23 Gradle 选项与首次资源提示（2026-11-13）
+
+- **`mc_launch` 的 Gradle 参数**：只收三种结构化选项——`offline`（`--offline`）、
+  `refreshDependencies`（`--refresh-dependencies`）、`gradleProperties`（`-Dkey=value`）。
+  **不收自由参数**：`-p` / `-x` / `--project-dir` 之类会推翻"在哪个目录跑、跑哪个任务"的判定，
+  而那两件事必须由识别结果决定。`org.gradle.java.home` 也拒绝转发（JDK 由 jdk.json / 面板管）。
+- **位置是硬要求**：选项必须排在任务名之前。`gradle build -Dfoo=bar` 会被 Gradle 当成任务选项
+  （实测报 `Task '.foo=bar' not found`），所以 `argv.js` 的顺序是
+  `gradlew [javaHome] [选项...] <taskPath>`，两侧平台一致。
+- **首次资源提示**：`src/lib/launch/assets.js` 只判断 `<GRADLE_USER_HOME>/caches/minecraft/assets/objects`
+  存不存在、空不空；NeoForge/Forge 的客户端目标在资源没下过时返回提示码 `first-run-assets`，
+  由工具渲染成中文（值保持语言中立）。
+- 测试：`test/argv.test.js` 覆盖展开顺序、校验与任务名位置（Windows 那层引号也在内）；
+  `test/assets.test.js` 用临时目录覆盖缺失/为空/有内容；`test/tools.test.js` 覆盖工具把选项结构化传给
+  api、并带出提示。
+
+221 个测试。
 
 ## 发布记录
 

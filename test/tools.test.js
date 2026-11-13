@@ -435,3 +435,54 @@ test('mc_launch_logs 把归因输出为结构化对象', async () => {
   assertLossless(value)
   assert.match(byName.mc_launch_logs.output.render({}, value)[0].text, /建议：检查网络/)
 })
+
+test('mc_launch 把 offline / gradleProperties 结构化传给 api，并带出首次资源提示', async () => {
+  /** @type {Record<string, any> | undefined} */
+  let received
+  const record = {
+    id: 'launch-1',
+    status: 'starting',
+    taskPath: 'runClient',
+    pid: 123,
+    mode: 'daemon',
+    logPath: 'C:/logs/launch-1.log',
+    notice: 'first-run-assets',
+  }
+  const { byName } = build({
+    'launch.start': async (payload) => {
+      received = payload
+      return record
+    },
+  })
+  const value = await byName.mc_launch.execute(
+    {
+      taskPath: 'runClient',
+      wait: 'detach',
+      offline: true,
+      refreshDependencies: true,
+      gradleProperties: [{ key: 'https.proxyHost', value: '127.0.0.1' }],
+    },
+    {},
+  )
+  assert.deepEqual(received?.gradle, {
+    offline: true,
+    refreshDependencies: true,
+    properties: { 'https.proxyHost': '127.0.0.1' },
+  })
+  assert.equal(value.notice, 'first-run-assets')
+  assertLossless(value)
+  assert.match(byName.mc_launch.output.render({}, value)[0].text, /首次 runClient 要下载 Minecraft 资源/)
+})
+
+test('mc_launch 没有 gradle 选项时不传空对象', async () => {
+  /** @type {Record<string, any> | undefined} */
+  let received
+  const { byName } = build({
+    'launch.start': async (payload) => {
+      received = payload
+      return { id: 'launch-1', status: 'starting', taskPath: 'runClient', pid: 1, mode: 'daemon', logPath: 'C:/l.log' }
+    },
+  })
+  await byName.mc_launch.execute({ taskPath: 'runClient', wait: 'detach' }, {})
+  assert.equal(received?.gradle, undefined)
+})

@@ -97,7 +97,7 @@ export function diagnose(lines) {
  * @property {string} [javaHome] 用哪个 JDK 跑构建（透传成 -Dorg.gradle.java.home 与 JAVA_HOME）
  * @property {string} [module]
  * @property {string} [gradleRoot] 聚合工程根：子模块工程的任务要在这里跑
- * @property {string[]} [extraArgs]
+ * @property {string[]} [options] 已经格式化好的 Gradle 选项（放在任务名之前）
  */
 
 /**
@@ -218,7 +218,7 @@ export function createLaunchService(options = {}) {
       const javaHome = typeof request.javaHome === 'string' && request.javaHome !== '' ? request.javaHome : undefined
       // 子模块工程：任务路径带模块前缀，必须在聚合根里执行
       const projectDir = request.gradleRoot ?? request.root
-      const command = commandFor({ platform, projectDir, taskPath: request.taskPath, javaHome, extraArgs: request.extraArgs })
+      const command = commandFor({ platform, projectDir, taskPath: request.taskPath, javaHome, options: request.options })
       /** @type {Runtime} */
       const runtime = { ring: [], ready: false, readyTimer: undefined, child: undefined }
 

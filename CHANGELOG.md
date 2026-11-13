@@ -15,6 +15,11 @@ break installations that look unrelated.
   loader, mappings, plugin and API versions from upstream at call time, renders the bundled template into
   the target, and refuses a non-empty directory. The result builds with `gradlew build` and is detected by `mc_projects`
   without warnings (Gradle 9.8.1, loom 1.10.5, Java 21).
+- `mc_launch` accepts `offline`, `refreshDependencies` and `gradleProperties` (key/value pairs) and passes
+  them to Gradle before the task name; free-form Gradle arguments are deliberately not exposed, because they
+  could override which directory runs and which task runs.
+- Launching a NeoForge/Forge client while the Minecraft asset cache is still empty returns a
+  `first-run-assets` notice that names the proxy properties, instead of letting the first run stall.
 
 ### Changed
 

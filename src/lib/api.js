@@ -6,6 +6,8 @@
  */
 
 import { createProject } from './scaffold.js'
+import { firstRunNotice } from './launch/assets.js'
+import { gradleOptionArgs } from './launch/argv.js'
 import { detectProject } from './detect/detect.js'
 import { resolveProjectDir } from './detect/idea.js'
 import { discoverJdks, readJdk } from './launch/java.js'
@@ -20,6 +22,38 @@ const CACHE_TTL_MS = 5000
 
 /** 客户端诊断上报的最近若干条（只在开发期用）。 */
 const clientReports = []
+
+/**
+ * 校验 `gradle` 参数：只认三个键，其余明确报错（模型看得懂"你传了个不存在的键"，
+ * 比默默忽略好）。
+ * @param {unknown} raw
+ * @returns {{ offline?: boolean, refreshDependencies?: boolean, properties?: Record<string, string> }}
+ */
+function parseGradleOptions(raw) {
+  if (raw === undefined || raw === null) return {}
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw Object.assign(new Error('gradle must be an object: { offline?, refreshDependencies?, properties? }'), { code: 'BAD_REQUEST' })
+  }
+  const input = /** @type {Record<string, any>} */ (raw)
+  const allowed = new Set(['offline', 'refreshDependencies', 'properties'])
+  for (const key of Object.keys(input)) {
+    if (!allowed.has(key)) {
+      throw Object.assign(new Error(`unknown gradle option: ${key}`), { code: 'BAD_REQUEST' })
+    }
+  }
+  const properties = input.properties
+  if (properties !== undefined) {
+    if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) {
+      throw Object.assign(new Error('gradle.properties must be an object of string values'), { code: 'BAD_REQUEST' })
+    }
+  }
+  /** @type {{ offline?: boolean, refreshDependencies?: boolean, properties?: Record<string, string> }} */
+  const parsed = {}
+  if (input.offline === true) parsed.offline = true
+  if (input.refreshDependencies === true) parsed.refreshDependencies = true
+  if (properties !== undefined) parsed.properties = properties
+  return parsed
+}
 
 /**
  * 判断子路径是否落在父路径之下（Windows 下大小写不敏感）。
@@ -218,12 +252,17 @@ export function createApi(options) {
     }),
 
     /**
-     * 启动实例：`{ root, taskPath, label?, kind?, module?, gradleRoot?, extraArgs? }`。
+     * 启动实例：`{ root, taskPath, label?, kind?, module?, gradleRoot?, gradle? }`。
+     * `gradle` 只收 `offline` / `refreshDependencies` / `properties`（结构化，不接受自由参数）。
      * 只允许启动"识别得出的目标"，并且工程必须落在当前工作区之内。
      * @param {unknown} payload
      */
     'launch.start': async (payload) => {
-      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, gradleRoot?: string, extraArgs?: string[] }} */ (payload ?? {})
+      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, gradleRoot?: string, gradle?: Record<string, any>, extraArgs?: string[] }} */ (payload ?? {})
+      // 自由参数是旧接口，留着是为了兼容；新调用方一律走 gradle 对象
+      const options = Array.isArray(input.extraArgs) && input.extraArgs.length > 0 && input.gradle === undefined
+        ? input.extraArgs.filter((entry) => typeof entry === 'string')
+        : gradleOptionArgs(parseGradleOptions(input.gradle))
       const root = await resolveRoot(input.root)
       // 工作区可能不止一个（每个会话一个 cwd）：只要落在其中任意一个之内就放行，
       // 否则切到另一个工程的会话后会被误判成"越界"。
@@ -255,10 +294,11 @@ export function createApi(options) {
         module: input.module ?? target.module ?? '.',
         // 子模块工程：任务在聚合根目录里执行（识别结果优先，不由调用方决定）
         gradleRoot: typeof profile.gradleRoot === 'string' && profile.gradleRoot !== root ? profile.gradleRoot : undefined,
-        extraArgs: Array.isArray(input.extraArgs) ? input.extraArgs.filter((entry) => typeof entry === 'string') : [],
+        options,
       })
       console.log(`[mcdev] launch.start ${record.id} ${record.taskPath} @ ${root} (pid ${record.pid}${record.javaHome === null ? '' : `, jdk ${record.javaHome}`})`)
-      return record
+      const notice = await firstRunNotice({ loader: profile.loader, kind: target.kind })
+      return notice === undefined ? record : { ...record, notice }
     },
 
     /**

@@ -15,6 +15,12 @@ import { modeOf } from './lib/launch/verify.js'
 /** mc_project_detail 的渲染里最多列多少个目标（其余只报数量）。 */
 const TARGET_LINE_LIMIT = 12
 
+/** 启动前提示码 → 中文说明（值是语言中立的 code，这里才翻）。 */
+const NOTICE_TEXT = {
+  'first-run-assets':
+    '首次 runClient 要下载 Minecraft 资源（几百 MB）；网络受限时用 gradleProperties 传 https.proxyHost / https.proxyPort，或先联网跑一次构建。',
+}
+
 /**
  * 工具的工作区根：调用参数优先，其次取**调用它的那个会话**的 cwd。
  *
@@ -204,6 +210,20 @@ export function applyTools(ctx, deps) {
           description: 'ready waits for the target to be up; exit waits for it to finish and return a verdict; detach returns immediately. When omitted it follows the target mode: daemon → ready, one-shot → exit',
         },
         timeoutMs: { type: 'number', description: 'Upper bound for ready/exit in ms; default 600000 (10 min)' },
+        offline: { type: 'boolean', description: 'Pass --offline to Gradle: fail fast instead of downloading missing artifacts' },
+        refreshDependencies: { type: 'boolean', description: 'Pass --refresh-dependencies so Gradle re-checks upstream versions' },
+        gradleProperties: {
+          type: 'array',
+          description: 'Extra Gradle system properties passed as -Dkey=value, e.g. https.proxyHost / https.proxyPort when the network blocks asset downloads',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              key: { type: 'string', required: true },
+              value: { type: 'string', required: true },
+            },
+          },
+        },
       },
       output: {
         schema: {
@@ -223,26 +243,49 @@ export function applyTools(ctx, deps) {
             summary: { type: 'string' },
             failures: { type: 'array', items: { type: 'string' } },
             note: { type: 'string' },
+            notice: { type: 'string' },
           },
         },
         render: (_args, value) => [
           {
             type: 'text',
-            text: `${describeLaunch(value)}${value.note === undefined ? '' : `\n（${value.note}）`}`,
+            text:
+              `${describeLaunch(value)}${value.note === undefined ? '' : `\n（${value.note}）`}`
+              + (value.notice === undefined ? '' : `\n提示：${NOTICE_TEXT[value.notice] ?? value.notice}`),
           },
         ],
       },
       async execute(args, exec) {
-        const record = await api['launch.start']({ root: agentRoot(args, exec), taskPath: args.taskPath })
+        /** @type {Record<string, any>} */
+        const gradle = {}
+        if (args.offline === true) gradle.offline = true
+        if (args.refreshDependencies === true) gradle.refreshDependencies = true
+        if (Array.isArray(args.gradleProperties) && args.gradleProperties.length > 0) {
+          /** @type {Record<string, string>} */
+          const properties = {}
+          for (const entry of args.gradleProperties) {
+            if (typeof entry?.key === 'string' && entry.key !== '') properties[entry.key] = String(entry.value ?? '')
+          }
+          if (Object.keys(properties).length > 0) gradle.properties = properties
+        }
+        const record = await api['launch.start']({
+          root: agentRoot(args, exec),
+          taskPath: args.taskPath,
+          ...(Object.keys(gradle).length === 0 ? {} : { gradle }),
+        })
+        const notice = record.notice
         const mode = record.mode ?? modeOf(record.kind)
         if (args.wait === 'detach') {
-          return launchValue(record, false)
+          const value = launchValue(record, false)
+          if (notice !== undefined) value.notice = notice
+          return value
         }
         // 会跑完的目标默认等到结束：它唯一的产出就是结论
         const until = args.wait === 'exit' || mode === 'oneshot' ? 'exit' : 'ready'
         const timeoutMs = Number.isFinite(args.timeoutMs) ? Number(args.timeoutMs) : 600_000
         const settled = await waitForSettle(api, record.id, timeoutMs, exec.signal, until)
         const value = launchValue(settled ?? record, settled === undefined)
+        if (notice !== undefined) value.notice = notice
         if (mode === 'oneshot' && args.wait === 'ready') {
           value.note = 'This is a one-shot target (it exits when done); wait=ready was treated as exit'
         }
