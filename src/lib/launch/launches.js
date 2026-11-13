@@ -39,6 +39,7 @@ const CRASH_MARKERS = [
   /Unsupported class file major version/i,
   /No matching toolchains found/i,
   /Could not resolve/i,
+  /Cannot download asset|Failed to download the file/i,
   /BUILD FAILED/i,
 ]
 
@@ -49,6 +50,10 @@ const CRASH_MARKERS = [
  * 文案不写在这里：`hint` / `suggestion` 按 `code` 从词典取，读日志时决定语言。
  */
 const DIAGNOSES = [
+  {
+    code: 'ASSET_DOWNLOAD_FAILED',
+    pattern: /Cannot download asset|DownloadAssets[^\n]*FAILED|resources\.download\.minecraft\.net|Failed to download the file/i,
+  },
   { code: 'DEPENDENCY_UNRESOLVED', pattern: /Could not resolve|Could not find [\w.:-]+:/ },
   { code: 'JDK_VERSION_MISMATCH', pattern: /Unsupported class file major version/ },
   { code: 'JDK_TOOLCHAIN_MISSING', pattern: /No matching toolchains found/ },

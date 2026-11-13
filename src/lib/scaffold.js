@@ -34,11 +34,15 @@ const SUPPORTED_LOADERS = ['fabric', 'neoforge']
 
 /**
  * 从显示名推导 Java 类名：`My Cool Mod` → `MyCoolMod`。
+ * 先去掉所有格（`Damascus's` / `Players'`），否则 `'s` 会被拆成一个单词，得到 `DamascusS`。
  * @param {string} name
  * @returns {string}
  */
 export function classNameFor(name) {
-  const words = String(name)
+  const normalized = String(name)
+    .replace(/['’]s\b/gi, '')
+    .replace(/['’]/g, '')
+  const words = normalized
     .split(/[^A-Za-z0-9]+/)
     .filter((word) => word !== '')
   const joined = words.map((word) => word[0].toUpperCase() + word.slice(1)).join('')

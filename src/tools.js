@@ -724,7 +724,9 @@ export function applyTools(ctx, deps) {
             text:
               `已生成 ${value.files.length} 个文件 → ${value.dir}\n`
               + `${value.loader} ${value.mcVersion} · Java ${value.java} · ${value.source === 'seed' ? '上游不可用，用了内置 seed' : '版本来自上游'}\n`
-              + (value.note === undefined ? '' : `${value.note}\n`)
+              + (value.loader === 'neoforge'
+                ? 'NeoForge 首次构建要反编译 Minecraft，首次 runClient 还要下载资源；网络受限时先给 Gradle 配代理。\n'
+                : '')
               + '下一步：mc_projects 确认识别，mc_launch runClient 启动。',
           },
         ],

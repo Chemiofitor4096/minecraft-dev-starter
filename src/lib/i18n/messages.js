@@ -62,6 +62,8 @@ export const zh = {
 
   'diagnosis.DEPENDENCY_UNRESOLVED.hint': '依赖解析失败：检查网络或 Gradle 离线缓存',
   'diagnosis.DEPENDENCY_UNRESOLVED.suggestion': '确认仓库可访问（代理/镜像），或先跑一次能联网的构建再重试',
+  'diagnosis.ASSET_DOWNLOAD_FAILED.hint': 'Minecraft 资源下载失败：首次运行要从 resources.download.minecraft.net 取资源',
+  'diagnosis.ASSET_DOWNLOAD_FAILED.suggestion': '给 Gradle 配代理（-Dhttps.proxyHost / -Dhttps.proxyPort，放在任务名前面），或先联网跑一次让资源落进 ~/.gradle/caches/minecraft/assets',
   'diagnosis.JDK_VERSION_MISMATCH.hint': 'JDK 版本不匹配：换成工程要求的 JDK',
   'diagnosis.JDK_VERSION_MISMATCH.suggestion': '检查面板里的「JDK 需求」与已选 JDK，或在 gradle.properties 设 org.gradle.java.home',
   'diagnosis.JDK_TOOLCHAIN_MISSING.hint': '缺少所需版本的 JDK：装一个或用已有版本覆盖',
@@ -143,6 +145,8 @@ export const en = {
 
   'diagnosis.DEPENDENCY_UNRESOLVED.hint': 'Dependency resolution failed: check the network or the Gradle offline cache',
   'diagnosis.DEPENDENCY_UNRESOLVED.suggestion': 'Make sure the repositories are reachable (proxy/mirror), or run a networked build once and retry',
+  'diagnosis.ASSET_DOWNLOAD_FAILED.hint': 'Minecraft asset download failed: the first run fetches assets from resources.download.minecraft.net',
+  'diagnosis.ASSET_DOWNLOAD_FAILED.suggestion': 'Give Gradle a proxy (-Dhttps.proxyHost / -Dhttps.proxyPort before the task name), or run a networked build once so assets land in ~/.gradle/caches/minecraft/assets',
   'diagnosis.JDK_VERSION_MISMATCH.hint': 'JDK version mismatch: switch to the JDK the project requires',
   'diagnosis.JDK_VERSION_MISMATCH.suggestion': 'Check the JDK requirement and the selected JDK in the panel, or set org.gradle.java.home in gradle.properties',
   'diagnosis.JDK_TOOLCHAIN_MISSING.hint': 'The required JDK is missing: install one, or override with an installed version',

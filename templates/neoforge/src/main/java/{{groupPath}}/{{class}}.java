@@ -8,6 +8,6 @@ public final class {{class}} {
     public static final String MODID = "{{modid}}";
 
     public {{class}}(IEventBus modEventBus) {
-        // 在这里注册内容（DeferredRegister 等）
+        // Register content here: DeferredRegister, event handlers, ...
     }
 }

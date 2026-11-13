@@ -24,6 +24,14 @@ break installations that look unrelated.
 - `mc_projects` marks a task path inferred by loader convention as `(guessed)` instead of a localized word,
   so the same marker appears whatever the UI language is.
 
+### Fixed
+
+- A display name with a possessive produced a wrong class name: `Damascus's Blacksmith` became
+  `DamascusSBlacksmith`. Possessives (`'s`, `’s`, trailing `'`) are dropped before splitting, so the class
+  is `DamascusBlacksmith`.
+- A run that fails while downloading Minecraft assets (first NeoForge/Forge `runClient`) is now attributed
+  as `ASSET_DOWNLOAD_FAILED` with a proxy hint instead of a generic Gradle build failure.
+
 ### Internal
 
 - Version selection happens at call time: `src/lib/versions.js` asks Fabric meta / NeoForge maven for the

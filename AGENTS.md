@@ -440,6 +440,30 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
   - 两个组合都已写进 `data/versions.json` 的 `verified`。
 - 211 个测试；`test/scaffold.test.js` 覆盖两个 loader 的参数校验、渲染、目录保护、seed 回退与二进制 wrapper 不被破坏。
 
+### M22 真机会话回放（2026-11-13）
+
+拿用户分享的真实会话（`C:\Projects\Damascus's Blacksmith`，NeoForge 1.21.1）复盘，全链路是通的：
+`mc_projects` 空 → `mc_mod_init` 生成 10 个文件（当时上游取不到，退回 seed）→ `mc_projects` 认出 1 个工程
+3 个目标 → `mc_project_detail` 置信度 95%、JDK 21 自动选中 → 构建通过 → `mc_launch runClient`
+**真的把游戏拉起来了**（Mod 列表里有 `Damascus's Blacksmith 0.1.0 (damasmith)`）→ `mc_launch_stop` 正常。
+
+三个从会话里读出来的问题，已修：
+
+1. **所有格把类名拆坏**：`Damascus's Blacksmith` → `DamascusSBlacksmith`（`'s` 被当成一个单词），
+   会话里的 agent 只能手动改名。`classNameFor` 现在先去掉 `'s` / `’s` / 尾部 `'`，得到
+   `DamascusBlacksmith`；回归在 `test/scaffold.test.js`。
+2. **首次 runClient 的资产下载失败没有归因**：NeoForge/Forge 要从 `resources.download.minecraft.net`
+   取 assets，网络受限时报的是 `Failed to download the file` / `DownloadAssets ... FAILED`，以前只会落到
+   `GRADLE_BUILD_FAILED`。新增 `ASSET_DOWNLOAD_FAILED` 规则（排在 Gradle 那条之前）与中英提示，
+   顺带进 `CRASH_MARKERS`。
+3. **生成物里带中文注释**：NeoForge 入口类里的 `// 在这里注册内容` 改成英文——生成的是用户的工程，
+   不是我们的界面。
+
+另外：`mc_mod_init` 的 `render` 不再重复打印英文 `note`（值里保留，给模型看），对 neoforge 多一行
+「首次构建要反编译 MC、首次 runClient 要下载资源，网络受限先配代理」的提示。
+
+211 个测试。
+
 ## 发布记录
 
 - `0.1.0` → 首版。

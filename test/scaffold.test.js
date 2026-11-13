@@ -52,6 +52,8 @@ async function withTempDir(run) {
 test('类名从显示名推导', () => {
   assert.equal(classNameFor('Demo Mod'), 'DemoMod')
   assert.equal(classNameFor('my-cool_mod'), 'MyCoolMod')
+  assert.equal(classNameFor("Damascus's Blacksmith"), 'DamascusBlacksmith')
+  assert.equal(classNameFor("Players' Guild"), 'PlayersGuild')
   assert.equal(classNameFor('123'), 'ExampleMod')
   assert.equal(classNameFor(''), 'ExampleMod')
 })

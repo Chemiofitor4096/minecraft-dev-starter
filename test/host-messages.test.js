@@ -26,6 +26,7 @@ const CJK = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]
 
 /** 每条归因规则各给一行能命中的日志。 */
 const DIAGNOSIS_SAMPLES = [
+  ['Failed to download the file: https://resources.download.minecraft.net/ce/cec25b0246d77e6f1dcef0d051ccb328ba39227a', 'ASSET_DOWNLOAD_FAILED'],
   ['Could not resolve net.fabricmc:fabric-loader', 'DEPENDENCY_UNRESOLVED'],
   ['java.lang.UnsupportedClassVersionError: Unsupported class file major version 65', 'JDK_VERSION_MISMATCH'],
   ['No matching toolchains found for requested specification: {languageVersion=21}', 'JDK_TOOLCHAIN_MISSING'],
