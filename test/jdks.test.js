@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import {
   emptyJdkPrefs,
+  javaChoiceFor,
   loadJdkPrefs,
   overrideFor,
   projectKey,
@@ -87,4 +88,23 @@ test('jdk.json 读写：缺文件时给空值，写入后可读回', async () =>
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test('javaChoiceFor：把识别结果里的 JDK 选择搬成 choice，缺字段时给出保守默认', async () => {
+  assert.equal(javaChoiceFor({}), undefined)
+  assert.equal(javaChoiceFor({ java: { selected: '' } }), undefined)
+
+  const choice = javaChoiceFor({
+    java: {
+      selected: 'C:/jdk-21',
+      source: 'override',
+      exact: true,
+      available: [{ home: 'C:/jdk-21', major: 21 }, { home: 'C:/jdk-17', major: 17 }],
+    },
+  })
+  assert.deepEqual(choice, { home: 'C:/jdk-21', source: 'override', exact: true, major: 21 })
+
+  // 没写 source / exact 时按"自动、非精确"处理——宁可少接管，也不硬换 JDK
+  const fallback = javaChoiceFor({ java: { selected: 'C:/jdk-25', available: [] } })
+  assert.deepEqual(fallback, { home: 'C:/jdk-25', source: 'auto', exact: false, major: undefined })
 })

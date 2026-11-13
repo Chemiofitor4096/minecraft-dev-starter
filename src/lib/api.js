@@ -11,7 +11,7 @@ import { gradleOptionArgs } from './launch/argv.js'
 import { detectProject } from './detect/detect.js'
 import { resolveProjectDir } from './detect/idea.js'
 import { discoverJdks, readJdk } from './launch/java.js'
-import { loadJdkPrefs, overrideFor, projectKey, saveJdkPrefs, shouldInjectJdk, withExtra } from './launch/jdks.js'
+import { javaChoiceFor, loadJdkPrefs, overrideFor, projectKey, saveJdkPrefs, shouldInjectJdk, withExtra } from './launch/jdks.js'
 import { createLaunchService } from './launch/launches.js';
 import { currentLanguage, t } from './i18n/messages.js'
 import { baseStateDir } from './state.js'
@@ -101,23 +101,6 @@ export function createApi(options) {
     const prefs = await loadJdkPrefs(jdkDir)
     const jdks = await listJdks(prefs.extra)
     return { prefs, jdks }
-  }
-
-  /**
-   * 这次启动该不该把 JDK 传给 Gradle。
-   * `source` 与 `exact` 来自识别结果，规则见 jdks.shouldInjectJdk。
-   * @param {Record<string, any>} profile
-   */
-  function javaChoiceFor(profile) {
-    const java = /** @type {Record<string, any>} */ (profile.java ?? {})
-    if (typeof java.selected !== 'string' || java.selected === '') return undefined
-    const hit = (java.available ?? []).find((jdk) => jdk.home === java.selected)
-    return {
-      home: java.selected,
-      source: java.source ?? 'auto',
-      exact: java.exact === true,
-      major: hit?.major,
-    }
   }
 
   /**

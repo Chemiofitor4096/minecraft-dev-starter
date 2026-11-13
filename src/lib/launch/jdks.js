@@ -150,3 +150,21 @@ export function shouldInjectJdk(choice, gradleVersion) {
   if (choice.source !== 'auto') return false
   return choice.exact === true && gradleSupportsJava(gradleVersion, choice.major).ok
 }
+
+/**
+ * 从识别结果里取这次启动的 JDK 选择（`profile.java` → `JdkChoice`）。
+ * 只是搬数据，不做决策；决策在 `shouldInjectJdk`。
+ * @param {Record<string, any>} profile
+ * @returns {JdkChoice | undefined}
+ */
+export function javaChoiceFor(profile) {
+  const java = /** @type {Record<string, any>} */ (profile.java ?? {})
+  if (typeof java.selected !== 'string' || java.selected === '') return undefined
+  const hit = (java.available ?? []).find((jdk) => jdk.home === java.selected)
+  return {
+    home: java.selected,
+    source: java.source ?? 'auto',
+    exact: java.exact === true,
+    major: hit?.major,
+  }
+}
