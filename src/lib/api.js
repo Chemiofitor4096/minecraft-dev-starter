@@ -5,7 +5,7 @@
  * @module minecraft-dev-starter/lib/api
  */
 
-import { createProject } from './scaffold.js'
+import { createProject, setGroup } from './scaffold.js'
 import { firstRunNotice } from './launch/assets.js'
 import { gradleOptionArgs } from './launch/argv.js'
 import { detectProject } from './detect/detect.js'
@@ -167,6 +167,18 @@ export function createApi(options) {
       })
       console.log(`[mcdev] projects.create ${created.dir} → ${created.files.length} 个文件（${created.loader} ${created.mcVersion}）`)
       return created
+    },
+
+    /**
+     * 改包名：`{ root, group }`。移动源码目录，改写 package / import / 元数据入口。
+     * @param {unknown} payload
+     */
+    'projects.setGroup': async (payload) => {
+      const input = /** @type {{ root?: string, group?: string }} */ (payload ?? {})
+      const root = await resolveRoot(input.root)
+      const result = await setGroup({ root, group: String(input.group ?? '') })
+      console.log(`[mcdev] projects.setGroup ${root}: ${result.from} → ${result.group}（${result.files.length} 个文件）`)
+      return result
     },
 
     /**

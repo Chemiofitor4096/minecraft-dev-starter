@@ -105,6 +105,7 @@ test('注册六个工具并且参数已转成 JSON Schema', () => {
     'mc_mod_init',
     'mc_project_detail',
     'mc_projects',
+    'mc_set_group',
   ])
   const launch = byName.mc_launch
   assert.equal(launch.parameters.type, 'object')

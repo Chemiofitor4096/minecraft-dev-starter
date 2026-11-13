@@ -26,12 +26,12 @@ IDEA 风格的运行控件（选中目标 → 启动 / 停止 / 看日志）。
 
 ```
 src/index.js          宿主入口：inject + apply，挂 HTTP 路由与工具
-src/tools.js          七个模型工具（mc_projects / mc_project_detail / mc_mod_init / mc_launch / mc_launch_logs / mc_launch_list / mc_launch_stop）
+src/tools.js          八个模型工具（mc_projects / mc_project_detail / mc_mod_init / mc_set_group / mc_launch / mc_launch_logs / mc_launch_list / mc_launch_stop）
 src/lib/              领域层。跨层依赖单向：detect / launch 可以用 util、i18n，反过来不行
   api.js              /mcdev/api 的方法实现（scan / detail / state / launch.*），唯一聚合点
   state.js            ~/.dsh/mc-dev-starter 下的状态与日志（运行记录按 profile 分目录）
   versions.js         版本解析：调用时向上游取 (loader, MC) 的精确版本，失败退回 seed
-  scaffold.js         工程脚手架：校验参数、渲染 templates/、写盘（不跑 Gradle）
+  scaffold.js         工程脚手架：校验参数、渲染 templates/、写盘；setGroup 改包名（移动目录 + 改写引用）
   detect/             识别一个工程是什么
     detect.js         工程画像：loader、模块、run 目标、证据与警告
     scanner.js        工作区 BFS（深度 3、剪枝、上限）
@@ -64,7 +64,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 221 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 225 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -483,6 +483,24 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
   api、并带出提示。
 
 221 个测试。
+
+### M24 改包名工具（2026-11-14）
+
+第二个真机会话（`C:\Projects\Test`，NeoForge 1.21.1，modid `coalcraft`）只花了 0.05 元就把工程建好、
+`runServer` 起起来、再停掉。但当时没给 `group`，于是落成默认的 `com.example.coalcraft`——要改只能手动
+挪目录、改 `package`、改 `gradle.properties`、改 `fabric.mod.json` 的入口串，四件事里漏一件就编译不过。
+
+- **`mc_set_group`**：`{ root?, group }`。移动每个 source set 的 `src/<set>/java/<old>` 目录，
+  把 `.java` 里的 `package` 行与旧包前缀（import、全限定名）换掉，再改 `src/main/resources/**/*.json`
+  里的入口类（Fabric 的 `"<group>.<Class>"`），最后写回 `mod_group_id`。
+- **只认 `mod_group_id`**：读不到就报 `NO_GROUP`，不猜"可能是哪个包"；目标包目录已存在则报
+  `GROUP_DIR_EXISTS`，不做合并。
+- **让默认值可见**：`mc_mod_init` 返回值新增 `group`，渲染里直接写「包名 com.example.coalcraft」——
+  这样模型和人都能立刻看到用的是默认包，而不是回头去读文件才发现。
+- 测试：`test/scaffold.test.js` 覆盖 Fabric（目录移动 + JSON 入口）与 NeoForge（只有 package 行）、
+  没有 `mod_group_id` 时不动文件、非法包名；`test/tools.test.js` 的工具名单加上 `mc_set_group`。
+
+225 个测试。
 
 ## 发布记录
 

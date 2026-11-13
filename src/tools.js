@@ -744,6 +744,7 @@ export function applyTools(ctx, deps) {
             files: { type: 'array', required: true, items: { type: 'string' } },
             loader: { type: 'string', required: true },
             mcVersion: { type: 'string', required: true },
+            group: { type: 'string', required: true },
             java: { type: 'integer', required: true },
             source: { type: 'string', required: true, enum: ['upstream', 'seed'] },
             versions: {
@@ -766,7 +767,7 @@ export function applyTools(ctx, deps) {
             type: 'text',
             text:
               `已生成 ${value.files.length} 个文件 → ${value.dir}\n`
-              + `${value.loader} ${value.mcVersion} · Java ${value.java} · ${value.source === 'seed' ? '上游不可用，用了内置 seed' : '版本来自上游'}\n`
+              + `${value.loader} ${value.mcVersion} · Java ${value.java} · 包名 ${value.group} · ${value.source === 'seed' ? '上游不可用，用了内置 seed' : '版本来自上游'}\n`
               + (value.loader === 'neoforge'
                 ? 'NeoForge 首次构建要反编译 Minecraft，首次 runClient 还要下载资源；网络受限时先给 Gradle 配代理。\n'
                 : '')
@@ -792,6 +793,59 @@ export function applyTools(ctx, deps) {
           ...rest,
           versions: Object.entries(versions ?? {}).map(([key, version]) => ({ key, version: String(version) })),
         }
+      },
+    }),
+  )
+
+  ctx.tools.register(
+    defineTool({
+      name: 'mc_set_group',
+      description:
+        'Change the Java package (group) of a scaffolded project: moves the package directory under src/*/java and rewrites package/import lines plus metadata references. It edits files on disk; it refuses when gradle.properties has no mod_group_id, because then the current package cannot be determined safely.',
+      parameters: {
+        root: { type: 'string', description: 'Project directory; defaults to the current workspace' },
+        group: { type: 'string', required: true, description: 'New Java package, e.g. com.acme.coalcraft' },
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            root: { type: 'string', required: true },
+            group: { type: 'string', required: true },
+            from: { type: 'string', required: true },
+            moved: {
+              type: 'array',
+              required: true,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  from: { type: 'string', required: true },
+                  to: { type: 'string', required: true },
+                },
+              },
+            },
+            files: { type: 'array', required: true, items: { type: 'string' } },
+          },
+        },
+        render: (_args, value) => [
+          {
+            type: 'text',
+            text:
+              `包名：${value.from} → ${value.group}\n`
+              + (value.moved.length === 0
+                ? '没有移动目录（源码里没有这个包）'
+                : `移动 ${value.moved.length} 个目录：${value.moved.map((entry) => entry.to).join('、')}`)
+              + `\n改写 ${value.files.length} 个文件：${value.files.join('、')}`,
+          },
+        ],
+      },
+      async execute(args, exec) {
+        return await api['projects.setGroup']({
+          root: args.root ?? agentRoot(args, exec),
+          group: args.group,
+        })
       },
     }),
   )

@@ -4,11 +4,11 @@
  * 模板是仓库里的真实文件（`templates/fabric`），版本用假 fetch 注入，不联网。
  */
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { classNameFor, createProject, normalizeParams, renderText } from '../src/lib/scaffold.js'
+import { classNameFor, createProject, normalizeParams, renderText, setGroup } from '../src/lib/scaffold.js'
 
 const FABRIC_LOADER = 'https://meta.fabricmc.net/v2/versions/loader/1.21.1'
 const FABRIC_YARN = 'https://meta.fabricmc.net/v2/versions/yarn/1.21.1'
@@ -201,4 +201,60 @@ test('上游不可用时退回 seed，并带上说明', async () => {
     assert.match(String(result.note), /offline/)
     assert.equal(result.versions.loaderVersion, '0.20.1')
   })
+})
+
+test('改包名：移动目录、改 package、属性与入口串', async () => {
+  await withTempDir(async (parent) => {
+    const dir = join(parent, 'rename-demo')
+    await createProject({ dir, modid: 'demo_mod', name: 'Demo Mod', loader: 'fabric', fetchImpl: fakeFetch, cache: new Map() })
+
+    const result = await setGroup({ root: dir, group: 'com.acme.demo' })
+    assert.equal(result.from, 'com.example.demo_mod')
+    assert.equal(result.group, 'com.acme.demo')
+    assert.deepEqual(result.moved, [
+      { from: 'src/main/java/com/example/demo_mod', to: 'src/main/java/com/acme/demo' },
+    ])
+    assert.deepEqual(result.files.sort(), [
+      'gradle.properties',
+      'src/main/java/com/acme/demo/DemoMod.java',
+      'src/main/resources/fabric.mod.json',
+    ].sort())
+
+    const java = await readFile(join(dir, 'src/main/java/com/acme/demo/DemoMod.java'), 'utf8')
+    assert.match(java, /package com\.acme\.demo;/)
+    await assert.rejects(() => stat(join(dir, 'src/main/java/com/example/demo_mod')))
+
+    const properties = await readFile(join(dir, 'gradle.properties'), 'utf8')
+    assert.match(properties, /mod_group_id=com\.acme\.demo/)
+    assert.doesNotMatch(properties, /com\.example\.demo_mod/)
+
+    const mod = JSON.parse(await readFile(join(dir, 'src/main/resources/fabric.mod.json'), 'utf8'))
+    assert.deepEqual(mod.entrypoints.main, ['com.acme.demo.DemoMod'])
+  })
+})
+
+test('改包名：NeoForge 工程同样改写（入口在注解里，靠 package 行）', async () => {
+  await withTempDir(async (parent) => {
+    const dir = join(parent, 'neo-rename')
+    await createProject({ dir, modid: 'demo_mod', name: 'Demo Mod', loader: 'neoforge', fetchImpl: fakeFetch, cache: new Map() })
+    const result = await setGroup({ root: dir, group: 'com.acme.neo' })
+    assert.equal(result.files.length, 2)
+    const java = await readFile(join(dir, 'src/main/java/com/acme/neo/DemoMod.java'), 'utf8')
+    assert.match(java, /package com\.acme\.neo;/)
+  })
+})
+
+test('改包名：没有 mod_group_id 时拒绝，不动任何文件', async () => {
+  await withTempDir(async (parent) => {
+    const dir = join(parent, 'no-group')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'gradle.properties'), 'minecraft_version=1.21.1\n')
+    await assert.rejects(() => setGroup({ root: dir, group: 'com.acme.demo' }), /mod_group_id not found/)
+    const properties = await readFile(join(dir, 'gradle.properties'), 'utf8')
+    assert.equal(properties, 'minecraft_version=1.21.1\n')
+  })
+})
+
+test('改包名：包名不合法时拒绝', async () => {
+  await assert.rejects(() => setGroup({ root: 'C:/nope', group: 'Com.Acme' }), /invalid Java package/)
 })
