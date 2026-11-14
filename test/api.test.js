@@ -120,3 +120,29 @@ test('扫描结果里不再出现 runs 容器 API 的假目标', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('launch.start 接受调用方自带的工作区：会话列表里没有它也能启动', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mcdev-api-'))
+  try {
+    const api = createApi({
+      resolveRoot: async () => fabricRoot,
+      resolveRoots: async () => [join(dir, 'other-workspace')],
+      version: '0.0.0-test',
+      launchService: createLaunchService({ dir }),
+      jdkDir: dir,
+      listJdks: fakeListJdks,
+    })
+    // 不带 workspace：按会话列表判定 → 越界，并且错误里点出允许的工作区
+    await assert.rejects(
+      api['launch.start']({ root: fabricRoot, taskPath: 'no-such-target' }),
+      (error) => error.code === 'OUTSIDE_WORKSPACE' && error.message.includes('other-workspace'),
+    )
+    // 带上自己的会话 cwd → 越过工作区校验，落到真正的错误（目标不存在）
+    await assert.rejects(
+      api['launch.start']({ root: fabricRoot, taskPath: 'no-such-target', workspace: fabricRoot }),
+      (error) => error.code === 'UNKNOWN_TARGET',
+    )
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

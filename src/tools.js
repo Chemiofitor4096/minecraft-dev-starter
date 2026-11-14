@@ -28,18 +28,34 @@ const NOTICE_TEXT = {
 }
 
 /**
+ * 调用方会话的工作区（就是它的 cwd）。
+ *
+ * 它是"这个模型正在哪个文件夹里干活"的唯一可信来源：宿主的会话列表在重启后可能只列出
+ * 一部分会话，拿它当工作区会让真实工程被判成越界（2026-11-14 的事故）。
+ * @param {{ agent?: any } | undefined} exec
+ * @returns {string | undefined}
+ */
+function agentWorkspace(exec) {
+  const cwd = exec?.agent?.session?.header?.cwd
+  return typeof cwd === 'string' && cwd !== '' ? cwd : undefined
+}
+
+/**
  * 工具的工作区根：调用参数优先，其次取**调用它的那个会话**的 cwd。
  *
  * 宿主里可能有多个会话、各自的 cwd 不同；用"最近一个会话"当默认会把
- * 别的会话的工程当成当前工作区。
+ * 别的会话的工程当成当前工作区。相对路径按会话 cwd 解析——模型写 `root: "."`
+ * 时指的是它自己的会话目录，不是宿主进程的 cwd。
  * @param {{ root?: string }} args
  * @param {{ agent?: any } | undefined} exec
  * @returns {string | undefined}
  */
 function agentRoot(args, exec) {
-  if (typeof args.root === 'string' && args.root !== '') return args.root
-  const cwd = exec?.agent?.session?.header?.cwd
-  return typeof cwd === 'string' && cwd !== '' ? cwd : undefined
+  const workspace = agentWorkspace(exec)
+  const requested = typeof args.root === 'string' && args.root !== '' ? args.root : undefined
+  if (requested === undefined) return workspace
+  if (workspace === undefined || isAbsolute(requested)) return requested
+  return resolve(workspace, requested)
 }
 
 /** 按步挂载判定的缓存时长：每步都要问一次，别每步都扫工作区。 */
@@ -316,8 +332,11 @@ export function applyTools(ctx, deps) {
           }
           if (Object.keys(properties).length > 0) gradle.properties = properties
         }
+        const workspace = agentWorkspace(exec)
         const record = await api['launch.start']({
           root: agentRoot(args, exec),
+          // 把"我在哪个工作区里"一起交过去：宿主的会话列表不能当作判据
+          ...(workspace === undefined ? {} : { workspace }),
           taskPath: args.taskPath,
           ...(Object.keys(gradle).length === 0 ? {} : { gradle }),
         })
@@ -893,7 +912,7 @@ export function applyTools(ctx, deps) {
       },
       async execute(args, exec) {
         return await api['projects.setGroup']({
-          root: args.root ?? agentRoot(args, exec),
+          root: agentRoot(args, exec),
           group: args.group,
         })
       },

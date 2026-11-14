@@ -279,6 +279,27 @@ test('显式 root 优先于会话 cwd', async () => {
   assert.equal(value.root, 'C:/explicit')
 })
 
+test("相对 root 按会话 cwd 解析，而不是宿主进程的 cwd", async () => {
+  const { byName } = build()
+  const cwd = process.cwd()
+  const value = await byName.mc_projects.execute({ root: '.' }, { agent: { session: { header: { cwd } } } })
+  assert.equal(value.root, cwd)
+})
+
+test('mc_launch 把会话 cwd 作为 workspace 交给宿主（工作区校验用）', async () => {
+  /** @type {Record<string, any> | undefined} */
+  let received
+  const { byName } = build({
+    'launch.start': async (payload) => {
+      received = payload
+      return { id: 'launch-9', status: 'starting', taskPath: 'runClient', pid: 1, mode: 'daemon', logPath: 'C:/l.log' }
+    },
+  })
+  await byName.mc_launch.execute({ taskPath: 'runClient', wait: 'detach' }, { agent: { session: { header: { cwd: 'C:/agent' } } } })
+  assert.equal(received?.workspace, 'C:/agent')
+  assert.equal(received?.root, 'C:/agent')
+})
+
 test('省略 id 的工具把会话 cwd 传给宿主', async () => {
   const seen = []
   const { byName } = build({

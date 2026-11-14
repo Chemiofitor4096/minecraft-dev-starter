@@ -247,23 +247,35 @@ export function createApi(options) {
     }),
 
     /**
-     * 启动实例：`{ root, taskPath, label?, kind?, module?, gradleRoot?, gradle? }`。
-     * `gradle` 只收 `offline` / `refreshDependencies` / `properties`（结构化，不接受自由参数）。
-     * 只允许启动"识别得出的目标"，并且工程必须落在当前工作区之内。
+     * 启动实例：`{ root, taskPath, label?, kind?, module?, gradleRoot?, gradle?, workspace? }`。
+     * `gradle` 只收 `offline` / `refreshDependencies` / `properties`（结构化，不接受自由参数）；
+     * `workspace` 是调用方会话自己的工作区，工具会带上它。
+     * 只允许启动"识别得出的目标"，并且工程必须落在工作区之内。
      * @param {unknown} payload
      */
     'launch.start': async (payload) => {
-      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, gradleRoot?: string, gradle?: Record<string, any>, extraArgs?: string[] }} */ (payload ?? {})
-      // 自由参数是旧接口，留着是为了兼容；新调用方一律走 gradle 对象
-      const options = Array.isArray(input.extraArgs) && input.extraArgs.length > 0 && input.gradle === undefined
+      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, gradleRoot?: string, gradle?: Record<string, any>, extraArgs?: string[], workspace?: string }} */ (payload ?? {})
+      // 自由参数是旧接口，留着是为了兼容；新调用方一律走 gradle 对象。
+      // 注意别叫 `options`：那会遮住 createApi 的 options，`options.resolveRoots` 变成
+      // undefined，工作区校验就永远退回"最近一个会话"——真实工程被判越界的元凶。
+      const gradleArgs = Array.isArray(input.extraArgs) && input.extraArgs.length > 0 && input.gradle === undefined
         ? input.extraArgs.filter((entry) => typeof entry === 'string')
         : gradleOptionArgs(parseGradleOptions(input.gradle))
       const root = await resolveRoot(input.root)
       // 工作区可能不止一个（每个会话一个 cwd）：只要落在其中任意一个之内就放行，
       // 否则切到另一个工程的会话后会被误判成"越界"。
-      const workspaces = options.resolveRoots === undefined ? [await resolveRoot(undefined)] : await options.resolveRoots()
+      // 调用方（工具）还会带上**它自己**的会话 cwd：会话服务列出的工作区不一定可信——
+      // 宿主重启后只列出一部分会话时，真实存在的工程会被判成越界（2026-11-14 的实测事故）。
+      /** @type {string[]} */
+      const workspaces = []
+      if (typeof input.workspace === 'string' && input.workspace !== '') workspaces.push(input.workspace)
+      if (options.resolveRoots === undefined) workspaces.push(await resolveRoot(undefined))
+      else workspaces.push(...await options.resolveRoots())
       if (!workspaces.some((workspace) => isInside(root, workspace))) {
-        throw Object.assign(new Error(t('error.outsideWorkspace', { root })), { code: 'OUTSIDE_WORKSPACE' })
+        throw Object.assign(
+          new Error(t('error.outsideWorkspace', { root, workspaces: workspaces.join('、') })),
+          { code: 'OUTSIDE_WORKSPACE' },
+        )
       }
       if (typeof input.taskPath !== 'string' || input.taskPath === '') {
         throw Object.assign(new Error(t('error.missingTaskPath')), { code: 'BAD_REQUEST' })
@@ -289,7 +301,7 @@ export function createApi(options) {
         module: input.module ?? target.module ?? '.',
         // 子模块工程：任务在聚合根目录里执行（识别结果优先，不由调用方决定）
         gradleRoot: typeof profile.gradleRoot === 'string' && profile.gradleRoot !== root ? profile.gradleRoot : undefined,
-        options,
+        options: gradleArgs,
       })
       console.log(`[mcdev] launch.start ${record.id} ${record.taskPath} @ ${root} (pid ${record.pid}${record.javaHome === null ? '' : `, jdk ${record.javaHome}`})`)
       const notice = await firstRunNotice({ loader: profile.loader, kind: target.kind })

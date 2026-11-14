@@ -64,7 +64,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 233 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 236 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -126,6 +126,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 模板里的占位符被 Gradle 先展开、Java 里没法写 | 模板用了 `${...}`，和 Gradle 自己的属性语法冲突 | 模板占位符一律 `{{name}}`；`renderText` 只认这个形式，残留会抛 `TEMPLATE_LEFTOVER` |
 | 用户生成的工程在 Linux/macOS 上 `./gradlew` 报 `bad interpreter` | Windows 的 `core.autocrlf` 把模板里的 `gradlew` 转成 CRLF，生成时又被原样复制 | `.gitattributes` 里 `templates/** text eol=lf`、`templates/**/*.bat text eol=crlf`、`*.jar binary`；改完用 `git check-attr eol` 核对 |
 | 传了 `-Dfoo=bar` 却报 `Task '.foo=bar' not found` | Gradle 的选项必须写在任务名**之前**；写在后面会被当成任务选项 | `argv.js` 里选项排在 `<taskPath>` 前面；`test/argv.test.js` 钉住这个顺序 |
+| `mc_launch` 说"工程不在当前工作区内"，但 `mc_projects` 同一个路径识别正常 | 两个原因叠加：`launch.start` 里 `const options = …`（Gradle 选项数组）**遮住了** `createApi` 的 `options`，`options.resolveRoots` 永远是 undefined，工作区校验退回"最近一个会话的 cwd"；工具也没把调用方自己的会话 cwd 传下去 | 局部变量改名 `gradleArgs`；`mc_launch` 带上 `workspace`（调用方 cwd）；错误里列出允许的工作区；回归见 `test/api.test.js`、`test/tools.test.js` |
 
 其他约定：
 
@@ -540,6 +541,27 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
 - 233 个测试；`test/tools.test.js` 覆盖"只有 projects/init 常驻"、无工程/库工程不挂载、
   缓存不重复扫、判不出来按可见、`mc_mod_init` 后立刻挂上。
 
+### M26 mc_launch 的工作区校验（2026-11-14）
+
+用户回放 `C:\Projects\Test` 的会话（导出包是 0 字节，直接读 `~/.dsh/sessions` 的原始 jsonl）：
+同一条路径 `mc_projects`、`mc_project_detail`、`mc_launch_list` 全正常，只有 `mc_launch` 报
+「工程不在当前工作区内」，而且连 `root` 指到那儿也不行——模型只好退回手跑 `gradlew`，
+丢掉了托管启动、就绪等待和结论裁决。
+
+- **真凶是变量遮蔽**：`launch.start` 里 `const options = …`（Gradle 选项数组）遮住了 `createApi` 的
+  `options`，于是 `options.resolveRoots` 永远是 `undefined`，工作区校验退回
+  `[await resolveRoot(undefined)]`——**最近一个会话**的 cwd。会话跑了一夜、桌面重启过几次之后，
+  "最近一个会话"已经不是它了，真实工程被判越界。M8 记的"放宽为落在任一活跃会话 cwd 之内"
+  其实从没生效过。
+- **补上调用方身份**：工具现在把调用方的会话 cwd 作为 `workspace` 交给 `launch.start`，
+  校验集合 = `[workspace] ∪ resolveRoots()`，都不给才退回 `resolveRoot()`。
+  权限上没有放松：`workspace` 就是调用方自己的目录。
+- **错误可诊断**：越界消息带上"允许的工作区"列表，下次一眼能看出是判据错了还是路径错了。
+- **相对 root**：`agentRoot` 按会话 cwd 解析相对路径（`root: "."` 以前会被原样送进校验，
+  再按宿主进程 cwd 解析），绝对路径保持原样不动。
+- 236 个测试；`test/api.test.js` 钉住"会话列表里没有它、但调用方自带 workspace 也能过"，
+  `test/tools.test.js` 钉住 `workspace` 透传与相对路径解析。
+
 ## 架构边界（2026-11-14 复核）
 
 量过的数字（行数）：`tools.js` 952、`detect/detect.js` 771、`detect/idea.js` 654、
@@ -586,6 +608,8 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
 - `0.2.0` → M21–M25：工程脚手架 `mc_mod_init`（Fabric / NeoForge 模板，版本调用时向上游解析）、
   改包名 `mc_set_group`、`mc_launch` 的结构化 Gradle 选项与首次资源提示、两个侧栏标签换成草方块与卷轴图标、
   工具按步挂载（非 MC 工作区不再付 1k token）。71 个文件，757 KiB。
+- `0.2.1` → M26：修 `mc_launch` 把真实工程判成"不在工作区内"（变量遮蔽让"任一活跃会话"的放宽从未生效），
+  工具改为把调用方会话 cwd 传给宿主，相对 `root` 按会话 cwd 解析，越界错误列出允许的工作区。
 
 发版注意：
 

@@ -7,6 +7,20 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
+## [0.2.1] — 2026-11-14
+
+### Fixed
+
+- `mc_launch` rejected a project that `mc_projects` and `mc_project_detail` accepted on the same path:
+  "The project is outside the current workspace", even with `root` pointing straight at it. The model
+  then fell back to running `gradlew` by hand and lost the managed launch, readiness wait and verdict.
+  Two causes, both fixed: a local variable shadowed the API options, so the "any session workspace"
+  check never ran and a single ambient workspace was compared against; and the tool never told the host
+  which workspace it was calling from. `mc_launch` now passes its own session directory, and the error
+  names the workspaces that were allowed, so a mismatch is visible instead of silent.
+- A relative `root` (for example `"."`) was forwarded unresolved and therefore resolved against the host
+  process directory instead of the session workspace.
+
 ## [0.2.0] — 2026-11-14
 
 ### Added
