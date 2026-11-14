@@ -17,7 +17,7 @@ import { LogTab } from './views/LogTab.js'
 import { attachLocale, t } from './lib/messages.js'
 import { report } from './lib/debug.js'
 import { h } from './lib/h.js'
-import { IconCube, IconTerminal } from './lib/icons.js'
+import { IconGrassBlock, IconScroll } from './lib/icons.js'
 import { BETTER_DETAIL_ID, BETTER_LOG_ID, DETAIL_KIND, LOG_KIND, runtime } from './lib/runtime.js'
 import { ensureStyles } from './lib/styles.js'
 
@@ -96,11 +96,11 @@ export function apply(ctx) {
     ctx.slots.inject('sidebar.right.pane.tab.title', () =>
       ctx.slots.register(
         { name: 'sidebar.right.pane.tab.title', key: DETAIL_ID },
-        tabTitleChip(IconCube, PANEL_TITLE),
+        tabTitleChip(IconGrassBlock, PANEL_TITLE),
       ),
     )
     ctx.slots.inject('sidebar.right.pane.tab.title', () =>
-      ctx.slots.register({ name: 'sidebar.right.pane.tab.title', key: LOG_ID }, tabTitleChip(IconTerminal, () => t('tab.logs'))),
+      ctx.slots.register({ name: 'sidebar.right.pane.tab.title', key: LOG_ID }, tabTitleChip(IconScroll, () => t('tab.logs'))),
     )
     report('tab.title.registered')
   } catch (error) {
@@ -151,7 +151,7 @@ function registerBetterSidebarTabs(ctx) {
         sidebar.registerTab({
           id: BETTER_DETAIL_ID,
           title: PANEL_TITLE,
-          icon: (size) => h(IconCube, { size }),
+          icon: (size) => h(IconGrassBlock, { size }),
           component: () => h(DetailTab),
         }),
       )
@@ -159,7 +159,7 @@ function registerBetterSidebarTabs(ctx) {
         sidebar.registerTab({
           id: BETTER_LOG_ID,
           title: () => t('tab.logs'),
-          icon: (size) => h(IconTerminal, { size }),
+          icon: (size) => h(IconScroll, { size }),
           component: () => h(LogTab),
         }),
       )

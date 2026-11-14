@@ -126,31 +126,46 @@ export function IconInfo({ size = 12 } = {}) {
   ])
 }
 
-/** 方块：代表"模组工程"（侧边栏标签图标）。 */
-export function IconCube({ size = 14 } = {}) {
+/**
+ * 草方块配色：草绿在上、泥土在下。这是图标集里唯一的实色——
+ * 它模仿 Minecraft 的草方块，靠色块区分面，和面板里的语义色无关。
+ */
+const GRASS = '#87CE54'
+const GRASS_SHADE = '#74B84A'
+const DIRT = '#C1885D'
+const DIRT_SHADE = '#A9724C'
+
+/**
+ * 草方块：代表"模组工程"（侧边栏标签图标）。
+ *
+ * 三个面只靠色差分层，不画接缝描边——14px 下描边会把面糊在一起；
+ * 草皮往下带一点点，才有草方块的样子，而不是一个纯色立方体。
+ */
+export function IconGrassBlock({ size = 14 } = {}) {
   return svg(size, [
-    h('path', {
-      key: 'a',
-      d: 'M8 1.9 13.6 4.7v6.6L8 14.1 2.4 11.3V4.7z',
-      stroke: 'currentColor',
-      strokeWidth: 1.3,
-      strokeLinejoin: 'round',
-    }),
-    h('path', { key: 'b', d: 'M2.6 4.8 8 7.5l5.4-2.7M8 7.5v6.4', stroke: 'currentColor', strokeWidth: 1.3, strokeLinejoin: 'round' }),
+    h('path', { key: 'top', d: 'M8 1.9 13.9 5 8 8.1 2.1 5z', fill: GRASS }),
+    h('path', { key: 'left', d: 'M2.1 5 8 8.1v6.1L2.1 11.1z', fill: DIRT }),
+    h('path', { key: 'right', d: 'M8 8.1 13.9 5v6.1L8 14.2z', fill: DIRT_SHADE }),
+    h('path', { key: 'leftGrass', d: 'M2.1 5 8 8.1v1.35L2.1 6.35z', fill: GRASS }),
+    h('path', { key: 'rightGrass', d: 'M8 8.1 13.9 5v1.35L8 9.45z', fill: GRASS_SHADE }),
   ])
 }
 
-/** 终端：代表"运行日志"（侧边栏标签图标）。 */
-export function IconTerminal({ size = 14 } = {}) {
+/** 卷轴：代表"运行日志"（侧边栏标签图标）。上下两根卷轴杆，中间是纸。 */
+export function IconScroll({ size = 14 } = {}) {
   return svg(size, [
-    h('rect', { key: 'a', x: 1.9, y: 2.9, width: 12.2, height: 10.2, rx: 2, stroke: 'currentColor', strokeWidth: 1.3 }),
-    h('path', {
-      key: 'b',
-      d: 'm4.6 6.4 1.9 1.9-1.9 1.9M8.6 10.4h2.9',
+    h('rect', { key: 'top', x: 2.4, y: 2, width: 11.2, height: 2.6, rx: 1.3, stroke: 'currentColor', strokeWidth: 1.3 }),
+    h('rect', {
+      key: 'bottom',
+      x: 2.4,
+      y: 11.4,
+      width: 11.2,
+      height: 2.6,
+      rx: 1.3,
       stroke: 'currentColor',
       strokeWidth: 1.3,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
     }),
+    h('path', { key: 'edges', d: 'M4.4 4.6v6.8M11.6 4.6v6.8', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }),
+    h('path', { key: 'text', d: 'M6 7h4M6 8.8h2.6', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }),
   ])
 }
