@@ -7,10 +7,15 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
-## [0.2.0] — 2026-11-10
+## [0.2.0] — 2026-11-14
 
 ### Added
 
+- The "Mod Dev" panel and the run log are sidebar tabs with icons of their own — a grass block and a
+  scroll — in the native right sidebar as well as in `dsh-better-sidebar`, instead of plain text titles.
+- Tools are activated per step on DSH 0.2.2+. Apart from `mc_projects` and `mc_mod_init`, a tool is only
+  declared when the workspace really holds a runnable Minecraft project, so eight tool schemas no longer
+  sit in the context window of every unrelated session. On 0.2.1 every tool stays visible, as before.
 - `mc_set_group` renames the Java package of a scaffolded project: it moves `src/*/java/<old>`, rewrites
   `package`/import lines and metadata entrypoints, updates `mod_group_id`, and prunes the empty package
   directories left behind. It refuses a project whose `gradle.properties` has no `mod_group_id`.
@@ -34,6 +39,8 @@ break installations that look unrelated.
   to get wrong. Tool *results* stay in the interface language.
 - `mc_projects` marks a task path inferred by loader convention as `(guessed)` instead of a localized word,
   so the same marker appears whatever the UI language is.
+- Tool descriptions lost their duplicated sentences and parameter explanations that the schema already
+  carries; the eight schemas cost about 1.4k tokens per request instead of 1.5k.
 
 ### Fixed
 
@@ -52,6 +59,8 @@ break installations that look unrelated.
   on the client side. Build scripts live in `scripts/`, development helpers in `tools/`.
 - loom is pinned per Java line instead of "latest": loom 1.19 requires a Java 25 runtime, while Minecraft
   1.20 / 1.21 mods target Java 17 / 21, so those lines pin loom 1.10.5.
+- The per-project JDK choice moved out of the API facade into `src/lib/launch/jdks.js`, which is what
+  `api.js` now calls.
 
 ## [0.1.13] — 2026-11-06
 

@@ -41,11 +41,12 @@ Run targets have two lifecycles. `runClient` / `runServer` are daemons that keep
 - **Run logs**: a sidebar tab, or a better-sidebar bottom workbench. Launch history per project, follow mode, level colouring (WARN and ERROR highlighted, stack frames and Gradle task lines distinguished, timestamps and loggers de-emphasised) and level filtering (All / INFO+ / WARN+ / ERROR) that is remembered. Abnormal exits come with a probable cause: dependency resolution, JDK mismatch, port in use, authentication failure.
 - **Workspace following**: the workspace is the current session's working directory; switching sessions rescans automatically. When the workspace has no runnable project the header capsule is not rendered, so it does not take up space in non-Minecraft projects; the panel tab stays available.
 - **Model tools** (optional): eight tools backed by the same service as the panel — `mc_projects` (projects and targets), `mc_project_detail` (loader evidence, modules, JDK, declared dependencies, targets with their modes), `mc_mod_init` (scaffold a new Fabric or NeoForge project into an empty directory), `mc_set_group` (rename the Java package of a scaffolded project), `mc_launch` (start; daemons wait for readiness, one-shot targets wait for completion and return a `verdict` plus failing lines; accepts `offline`, `refreshDependencies` and `-D` properties for proxy or cache problems), `mc_launch_logs` (log tail with structured diagnosis), `mc_launch_list` (history including verdicts), `mc_launch_stop` (kill the process tree). Apart from `mc_projects` and `mc_mod_init`, a tool is only declared when the workspace really holds a runnable Minecraft project (per-step activation, which keeps the tool schemas out of the window; needs DSH 0.2.2+).
+- **Sidebar tabs**: the Mod Dev panel and the run log open as their own tabs, each with an icon (a grass block and a scroll), in the native right sidebar as well as in `dsh-better-sidebar`.
 - **Optional integration**: with [dsh-better-sidebar](https://github.com/topics/dsh-better-sidebar) installed, the panel and the log open as icon tabs in its sidebar.
 
 ## Installation
 
-Requires DSH Desktop 0.2.1 or newer, or the matching `dsh` CLI.
+Requires DSH Desktop 0.2.1 or newer, or the matching `dsh` CLI. 0.2.2+ additionally enables per-step tool activation, so the model tools load only in workspaces that really hold a runnable project.
 
 ```powershell
 # From npm
@@ -55,7 +56,7 @@ dsh plugin --profile desktop add minecraft-dev-starter
 dsh plugin --profile desktop add link:C:/Projects/minecraft-dev-starter
 
 # From a packed tarball
-dsh plugin --profile desktop add file:./minecraft-dev-starter-0.1.10.tgz
+dsh plugin --profile desktop add file:./minecraft-dev-starter-0.2.0.tgz
 ```
 
 Restart DSH afterwards. To uninstall:
@@ -123,14 +124,14 @@ The JDK level is inferred from the Minecraft version: 1.7.10 and 1.12.2 need Jav
 
 Multi-module builds are supported: each submodule is listed as its own project, its run targets carry the Gradle module prefix (`:modules/core:runClient`) and they launch from the aggregator root, where the wrapper lives. When IntelliJ's `.idea` directory is present, its Gradle module list, minecraft facet platform, project JDK and run configurations are read as a **fallback** source — build scripts stay authoritative and are never overridden.
 
-Verified against **dsh 0.2.1-rc.4** (DSH NEXT 2.0.21-next) on Windows 11. Host-side changes are recorded in [CHANGELOG](./CHANGELOG.md); raising the supported range is treated as a breaking change.
+Verified against **dsh 0.2.2-rc.3** (DSH NEXT 2.0.23-next) on Windows 11. Host-side changes are recorded in [CHANGELOG](./CHANGELOG.md); raising the supported range is treated as a breaking change.
 
 ## Development
 
 ```powershell
 npm install
 npm run build        # builds the client into lib/client.js; required after editing src/client
-npm test             # 135 tests
+npm test             # 233 tests
 npm run check:pack   # asserts the npm tarball really contains the client and the sources
 npm run build -- --watch
 ```
@@ -179,7 +180,6 @@ Two advisories shown on the npm page are inherited from the host runtime, not fr
 
 ## Known limitations
 
-- Native sidebar tab types have no icon field; icons only appear on `dsh-better-sidebar` tabs.
 - An aggregator root is not listed once its submodules are: if the root carries its own run targets, they are not offered.
 - `.idea` is a fallback source only. A module that is neither in `settings.gradle` nor in the IDE module list is not discovered, and the facet platform never overrides a judged loader.
 - One-shot verdicts combine the exit code with log markers: a non-zero exit is always a failure, and a zero exit is still a failure when test-failure markers appear (for example `N required tests failed`), so a runner that swallows a failure does not look like a pass. When neither is available the verdict is unknown.

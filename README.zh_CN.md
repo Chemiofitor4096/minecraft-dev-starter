@@ -41,11 +41,12 @@
 - **运行日志**：独立侧边栏标签页或 better-sidebar 底部工作台，按工程展示启动历史，支持跟随输出。日志按级别着色：WARN 与 ERROR 高亮，堆栈帧与 Gradle 任务行区分显示，时间、线程与 logger 弱化；可按级别过滤（全部 / INFO+ / WARN+ / ERROR），选择会被记住。异常退出时给出可能原因，覆盖依赖解析失败、JDK 版本不匹配、端口占用、认证失败等情况。
 - **工作区跟随**：以当前会话的工作目录作为工作区，切换会话时自动重新扫描，无需手动刷新。工作区里没有可运行的工程时不显示标题栏胶囊，避免在非 Minecraft 项目里占位；面板标签仍可打开。
 - **模型工具**（可选）：提供八个工具，与面板共用同一套服务——`mc_projects`（列出工程与目标）、`mc_project_detail`（loader 依据、模块、JDK、声明依赖、各目标是常驻还是会跑完）、`mc_mod_init`（在空目录里生成一个 Fabric 或 NeoForge 工程）、`mc_set_group`（改脚手架生成工程的 Java 包名）、`mc_launch`（启动；常驻目标默认等到运行态，一次性目标默认等到结束并返回 `verdict` 与失败行；可传 `offline`、`refreshDependencies` 与 `-D` 属性处理代理或缓存问题）、`mc_launch_logs`（读日志，异常退出时附带结构化归因与建议）、`mc_launch_list`（历史实例与状态，含验证结论）、`mc_launch_stop`（停止整棵进程树）。除 `mc_projects` 与 `mc_mod_init` 外，其余工具只在工作区里确实有可运行的 Minecraft 工程时才出现（按步挂载，省上下文；DSH 0.2.2+ 生效）。
+- **侧栏标签**：Mod Dev 面板与运行日志各自是一个带图标的标签页（草方块 / 卷轴），原生右侧栏与 `dsh-better-sidebar` 中都一样。
 - **扩展集成**：安装 [dsh-better-sidebar](https://github.com/topics/dsh-better-sidebar) 后，面板与日志可在其侧边栏中作为带图标的标签页打开。
 
 ## 安装
 
-要求 DSH 桌面版 0.2.1 或更高版本，或对应的 `dsh` CLI。
+要求 DSH 桌面版 0.2.1 或更高版本，或对应的 `dsh` CLI。0.2.2+ 还会启用工具按步挂载：模型工具只在确实有可运行工程的工作区里加载。
 
 ```powershell
 # 从 npm 安装
@@ -55,7 +56,7 @@ dsh plugin --profile desktop add minecraft-dev-starter
 dsh plugin --profile desktop add link:C:/Projects/minecraft-dev-starter
 
 # 使用打包文件
-dsh plugin --profile desktop add file:./minecraft-dev-starter-0.1.10.tgz
+dsh plugin --profile desktop add file:./minecraft-dev-starter-0.2.0.tgz
 ```
 
 安装完成后需重启 DSH 生效。卸载：
@@ -123,14 +124,14 @@ JDK 版本按 Minecraft 版本推断：1.7.10 与 1.12.2 需要 Java 8，1.18 �
 
 支持多模块工程：每个子模块各自算一个工程，运行目标带 Gradle 模块前缀（`:modules/core:runClient`），并在 wrapper 所在的聚合根目录执行。工程里有 IntelliJ 的 `.idea` 时，会额外读取它的 Gradle 模块清单、minecraft facet 平台、工程 JDK 与运行配置，但只作为**兜底**证据——构建脚本优先，已判定的结论不会被推翻。
 
-已在 **dsh 0.2.1-rc.4**（DSH NEXT 2.0.21-next）+ Windows 11 上验证。宿主侧的变化记在 [CHANGELOG](./CHANGELOG.md)；上调支持范围按破坏性变更处理。
+已在 **dsh 0.2.2-rc.3**（DSH NEXT 2.0.23-next）+ Windows 11 上验证。宿主侧的变化记在 [CHANGELOG](./CHANGELOG.md)；上调支持范围按破坏性变更处理。
 
 ## 开发
 
 ```powershell
 npm install
 npm run build        # 构建客户端到 lib/client.js；修改 src/client 后必须执行
-npm test             # 135 个测试
+npm test             # 233 个测试
 npm run check:pack   # 校验 npm 包里真的有客户端产物与源码
 npm run build -- --watch
 ```
@@ -179,7 +180,6 @@ npm 页面上的两条告警来自宿主运行时，不是本包代码：
 
 ## 已知限制
 
-- 原生右侧栏的标签类型不提供图标字段，图标仅支持 `dsh-better-sidebar` 中的标签。
 - 子模块各自成工程后，聚合工程的根目录不再单列；根目录自己挂的 run 目标不会出现在列表里。
 - `.idea` 只是兜底证据：既不在 `settings.gradle`、也不在 IDE 模块清单里的模块不会被发现；facet 平台也不会推翻已判定的 loader。
 - 一次性目标的结论由退出码与日志特征共同判定：退出码非零必为失败；退出码为零但日志里出现测试失败特征（如 `N required tests failed`）同样判为失败，以免把「测试挂了但进程退了 0」当成通过。两者都缺失时记为未知，不猜。
