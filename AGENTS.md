@@ -120,6 +120,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | `libs.versions.toml` 解析成一整条字符串 | `parseToml` 不支持内联表，`{ module = "a:b", version = "1" }` 原样返回 | 已补 `parseInlineTable`；回归见 `test/toml.test.js` 与 `test/deps.test.js` |
 | 读 `.idea` 时抛 `Cannot read properties of undefined` | 只有 `modules.xml`、没有 `misc.xml` 的工程：`componentOf(undefined)` 直接取 `.name` | `rootOf` / `componentOf` 容忍 undefined；回归见 `test/idea.test.js` |
 | worktree 里的 `node_modules` 一删，主仓库的也没了 | 用 junction 指向主仓库的 `node_modules`，`git worktree remove` 递归删除时会跟着目标走 | 别在 worktree 里 junction 主仓库依赖；要跑测试就复制或用独立 `npm ci`，删之前先确认链接类型 |
+| 本地全绿、CI 全红（路径） | 测试里写死 Windows 风格的绝对路径：`path.isAbsolute('C:/explicit')` 在 POSIX 上是 **false**，于是被当成相对路径拼到会话 cwd 后面 | 用例里的绝对路径用 `process.cwd()` 或 `join(process.cwd(), …)` 现算；`C:/…` 只适合断言"原样透传"之外的场景 |
 | 本地全绿、CI 全红 | 测试夹具（`.idea`、图片等）被 `.gitignore` 忽略：本地有文件，干净 checkout 没有 | 夹具目录要在 `.gitignore` 里显式放行；发版前用 `git clone` 到临时目录跑一遍 |
 | 生成完的工程第一次构建就失败：`requires at least Gradle 9.8.0` | 模板 wrapper 的 Gradle 版本低于 loom 的最低要求（loom 1.19.4 要 9.8+） | 模板里的 `gradle-wrapper.properties` 必须跟 `versions.js` 解析出的 loom 版本对齐；升级 loom 时一起改，并用真实 `gradlew build` 验一次 |
 | 装到用户机器上 `mc_mod_init` 报找不到模板 | `templates/` 没进 `package.json` 的 `files`，npm 包里没有模板 | `files` 里带上 `templates`；`check:pack` 的文件数会变（少 10 个就是漏了） |
