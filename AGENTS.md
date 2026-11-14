@@ -64,7 +64,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 227 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 233 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -139,6 +139,12 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
   「在哪个目录跑 gradlew」这件事由识别结果决定，不允许调用方指定。
 - 工具描述是**英文契约**，一到两句（见 `doc/tool-vocabulary.md`）：第一句是什么与什么时候用，第二句只放
   最容易踩的那条约束；参数与返回交给 schema。工具执行结果（`render`）仍是中文，跟界面语言走。
+- **工具 schema 是每步都要付的上下文**，不是免费文档：本仓库 8 个工具约 1.4k token（按 4 字符/token 估），
+  整条 `tools` 数组每步随请求重发。所以除 `mc_projects` 与 `mc_mod_init` 外的工具都带
+  `register(definition, { when })` 按步挂载：工作区里没有能跑的工程时它们不进 schema、也不可调用。
+  `mc_mod_init` **永远在**——空目录里要先把工程建出来，它是挂载链的起点；`mc_projects` 留作探测器。
+  判据是 `runTargets`（不是 loader：库工程识别得出却跑不了），判不出来时按可见处理。
+  改工具描述时量一遍：`ceil(JSON.stringify(schemas).length / 4)`，别凭感觉删。
 - 不做隐含的 `clean`；构建目录不碰。
 - **图标**：`src/client/lib/icons.js` 里只有草方块用实色——草绿 `#87CE54`、泥土棕 `#C1885D`
   及各自的暗部，三个面**靠色差分界、不画描边**（14px 下描边会把面糊在一起）；
@@ -510,9 +516,33 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
 
 226 个测试。
 
+### M25 工具 schema 的上下文预算（2026-11-14）
+
+起因是 dsh-context 的面板：一次会话里"工具定义"占了 1.1 万 token。先把口径查清楚，再动刀。
+
+- **量法**：`@deepseek-ai/dsh-token-meter` 对工具部分只做一件事——
+  `ceil(JSON.stringify(tools).length / 4) + 4`（`estimate.ts` 的 `estimateToolsTokens`）。
+  把会话日志里的 epoch header 解出来直接算：那次会话 **52 个工具 / 45,508 字符 / 11,381 token**，
+  其中我们 8 个 1,376（12%）、autocad MCP 6 个 1,120、`schedule_*` 4 个 1,199、
+  内置其余的 34 个 7,686。**大头不在我们这儿**，但 1.4k 也不算小。
+- **`output.schema` 不进上下文**：`projectToolSchema` 只白名单 `name / description / parameters`
+  （`dsh-tools/src/schema.ts`），`tools.js` 里那份 3.9k 字符的 `mc_project_detail` 返回结构一个
+  token 都不占——它只有 101。所以"文件很长"不等于"很贵"，贵的是描述与参数文本。
+- **按步挂载**：`mc_projects` 与 `mc_mod_init` 之外的工具都带 `register(definition, { when })`。
+  `when` 返回 false 时既不进 schema 也不可调用；判据是**工作区里有 `runTargets` 非空的工程**
+  （库工程识别得出 loader 却跑不了，不算）。判定按会话 cwd 缓存 60 秒，`mc_mod_init` 成功后
+  清空缓存——建完工程下一步就能用 `mc_launch`。判不出来（没有 cwd、扫描抛错）按可见处理：
+  宁可多花 token，也不让模型在真需要时手里没工具。
+- **描述瘦身**：删重复的"第二句"，把参数说明里能由 schema 表达的收回去。8 个工具 1,493 → 1,398
+  （-6%）；常驻那 2 个 383。
+- **旧宿主退化**：0.2.1 的 `register` 只收 definition，第二个参数被忽略——工具永远可见，
+  只是省不下上下文。peer 范围补上 `^0.2.2-rc.1`。
+- 233 个测试；`test/tools.test.js` 覆盖"只有 projects/init 常驻"、无工程/库工程不挂载、
+  缓存不重复扫、判不出来按可见、`mc_mod_init` 后立刻挂上。
+
 ## 架构边界（2026-11-14 复核）
 
-量过的数字（行数）：`tools.js` 889、`detect/detect.js` 771、`detect/idea.js` 654、
+量过的数字（行数）：`tools.js` 952、`detect/detect.js` 771、`detect/idea.js` 654、
 `client/views/DetailTab.js` 690、`launch/launches.js` 480、`lib/api.js` 377、`scaffold.js` 341。
 
 - **边界成立**：客户端只 import `client/lib`；`tools.js` 通过 `deps.api` 拿服务，不 import `api.js`；

@@ -9,9 +9,19 @@ import { applyTools } from '../src/tools.js'
 function fakeCtx() {
   /** @type {Array<any>} */
   const registered = []
+  /** @type {Map<string, any>} */
+  const options = new Map()
   return {
-    ctx: { tools: { register: (definition) => registered.push(definition) } },
+    ctx: {
+      tools: {
+        register: (definition, settings) => {
+          registered.push(definition)
+          if (settings !== undefined) options.set(definition.name, settings)
+        },
+      },
+    },
     registered,
+    options,
   }
 }
 
@@ -79,10 +89,10 @@ function fakeApi(overrides = {}) {
 }
 
 function build(overrides) {
-  const { ctx, registered } = fakeCtx()
+  const { ctx, registered, options } = fakeCtx()
   const api = fakeApi(overrides)
   applyTools(ctx, { api })
-  return { registered, byName: Object.fromEntries(registered.map((entry) => [entry.name, entry])) }
+  return { registered, options, byName: Object.fromEntries(registered.map((entry) => [entry.name, entry])) }
 }
 
 /**
@@ -486,4 +496,96 @@ test('mc_launch 没有 gradle 选项时不传空对象', async () => {
   })
   await byName.mc_launch.execute({ taskPath: 'runClient', wait: 'detach' }, {})
   assert.equal(received?.gradle, undefined)
+})
+
+/** 按步挂载只看调用方会话的 cwd，这里给一个最小 agent 替身。 */
+function agentAt(cwd) {
+  return { session: { header: { cwd } } }
+}
+
+test('只有 mc_projects 与 mc_mod_init 永远挂载', () => {
+  const { options } = build()
+  assert.equal(options.has('mc_projects'), false)
+  assert.equal(options.has('mc_mod_init'), false)
+  assert.deepEqual([...options.keys()].sort(), [
+    'mc_launch',
+    'mc_launch_list',
+    'mc_launch_logs',
+    'mc_launch_stop',
+    'mc_project_detail',
+    'mc_set_group',
+  ])
+  for (const settings of options.values()) assert.equal(typeof settings.when, 'function')
+})
+
+test('工作区里没有工程时，操作类工具不挂载', async () => {
+  const { options } = build({
+    'projects.scan': async (payload) => ({ root: payload.root, truncated: false, projects: [] }),
+  })
+  assert.equal(await options.get('mc_launch').when({ agent: agentAt('C:/ws/empty-gate') }), false)
+})
+
+test('识别得出 loader 但没有目标的库工程不算能跑', async () => {
+  const { options } = build({
+    'projects.scan': async (payload) => ({
+      root: payload.root,
+      truncated: false,
+      projects: [{ name: 'lib', root: `${payload.root}/lib`, loader: 'fabric', runTargets: [] }],
+    }),
+  })
+  assert.equal(await options.get('mc_project_detail').when({ agent: agentAt('C:/ws/lib-gate') }), false)
+})
+
+test('有工程时挂载，并且判定结果在缓存期内不重复扫工作区', async () => {
+  let scans = 0
+  const { options } = build({
+    'projects.scan': async (payload) => {
+      scans += 1
+      return {
+        root: payload.root,
+        truncated: false,
+        projects: [{ name: 'demo', root: payload.root, loader: 'neoforge', runTargets: [{ taskPath: 'runClient' }] }],
+      }
+    },
+  })
+  const when = options.get('mc_launch').when
+  assert.equal(await when({ agent: agentAt('C:/ws/has-gate') }), true)
+  assert.equal(await when({ agent: agentAt('C:/ws/has-gate') }), true)
+  assert.equal(scans, 1)
+})
+
+test('判不出来时按可见处理：扫描抛错、会话没有 cwd', async () => {
+  const { options } = build({
+    'projects.scan': async () => {
+      throw new Error('boom')
+    },
+  })
+  assert.equal(await options.get('mc_launch').when({ agent: agentAt('C:/ws/throws-gate') }), true)
+  assert.equal(await options.get('mc_launch').when({ agent: { session: { header: {} } } }), true)
+})
+
+test('mc_mod_init 建出工程后，操作类工具下一步就挂上', async () => {
+  /** @type {Array<Record<string, any>>} */
+  let projects = []
+  const { byName, options } = build({
+    'projects.scan': async (payload) => ({ root: payload.root, truncated: false, projects }),
+    'projects.create': async (payload) => {
+      projects = [{ name: 'demo', root: payload.dir, loader: 'fabric', runTargets: [{ taskPath: 'runClient' }] }]
+      return {
+        dir: payload.dir,
+        files: ['build.gradle'],
+        loader: 'fabric',
+        mcVersion: '1.21.1',
+        group: 'com.example.demo',
+        java: 21,
+        source: 'seed',
+        versions: { loom: '1.10.5' },
+      }
+    },
+  })
+  const when = options.get('mc_launch').when
+  const agent = agentAt('C:/ws/init-gate')
+  assert.equal(await when({ agent }), false)
+  await byName.mc_mod_init.execute({ dir: 'demo', modid: 'demo', name: 'Demo' }, { agent })
+  assert.equal(await when({ agent }), true)
 })

@@ -1,10 +1,16 @@
 /**
  * 模型侧工具（M5）：面板能做的事，AI 也该能做，而且是同一套服务。
  *
- * 六个工具都薄封装在 `/mcdev/api` 的方法表上，不复制业务逻辑：
+ * 八个工具都薄封装在 `/mcdev/api` 的方法表上，不复制业务逻辑：
  *   mc_projects / mc_project_detail / mc_launch / mc_launch_logs / mc_launch_list / mc_launch_stop
+ *   mc_mod_init / mc_set_group
  *
- * 依赖 `@deepseek-ai/dsh-tools` 的 `defineTool`（与桌面运行时同版本 0.2.1-rc.3）。
+ * 工具 schema 每步都随请求重发（本仓库这 8 个约 1.4k token），所以除 mc_projects 与
+ * mc_mod_init 外的六个都**按步挂载**：工作区里没有能跑的工程时它们不进 schema、也不可调用。
+ * 挂载用 0.2.2 的 `register(definition, { when })`；0.2.1 忽略第二个参数，退化成"永远可见"，
+ * 不影响旧宿主。
+ *
+ * 依赖 `@deepseek-ai/dsh-tools` 的 `defineTool`。
  * @module minecraft-dev-starter/tools
  */
 
@@ -34,6 +40,38 @@ function agentRoot(args, exec) {
   if (typeof args.root === 'string' && args.root !== '') return args.root
   const cwd = exec?.agent?.session?.header?.cwd
   return typeof cwd === 'string' && cwd !== '' ? cwd : undefined
+}
+
+/** 按步挂载判定的缓存时长：每步都要问一次，别每步都扫工作区。 */
+const GATE_TTL_MS = 60_000
+
+/** @type {Map<string, { at: number, visible: boolean }>} cwd → 判定结果 */
+const gateCache = new Map()
+
+/**
+ * 操作类工具这一步该不该挂上：只有工作区里真有**能跑**的工程时才挂。
+ *
+ * 判据是识别结果里的 runTargets，不是 loader——库工程识别得出 loader 却跑不了，
+ * 挂上只会让模型多读一份用不上的 schema。判不出来（没有 cwd、扫描抛错）时按可见处理：
+ * 宁可多占几百 token，也不让模型在真需要时手里没工具。
+ * @param {Record<string, any>} api
+ * @param {{ session?: { header?: { cwd?: string } } } | undefined} agent
+ * @returns {Promise<boolean>}
+ */
+async function projectToolVisible(api, agent) {
+  const cwd = agent?.session?.header?.cwd
+  if (typeof cwd !== 'string' || cwd === '') return true
+  const cached = gateCache.get(cwd)
+  if (cached !== undefined && Date.now() - cached.at < GATE_TTL_MS) return cached.visible
+  let visible = true
+  try {
+    const scan = await api['projects.scan']({ root: cwd })
+    visible = (scan.projects ?? []).some((project) => (project.runTargets ?? []).length > 0)
+  } catch {
+    visible = true
+  }
+  gateCache.set(cwd, { at: Date.now(), visible })
+  return visible
 }
 
 /**
@@ -139,19 +177,29 @@ function renderProjects(value) {
 }
 
 /**
- * 注册 M5 的四个工具。
+ * 注册八个模型工具。
  * @param {any} ctx
  * @param {{ api: Record<string, any> }} deps
  */
 export function applyTools(ctx, deps) {
   const api = deps.api
 
+  /** 按步挂载条件：这一步的工作区里真有能跑的工程，才声明操作类工具。 */
+  const projectGate = { when: (context) => projectToolVisible(api, context?.agent) }
+
+  /**
+   * 注册一个按步挂载的工具。0.2.1 的 `register` 只收 definition，第二个参数被忽略，
+   * 工具退化成永远可见——旧宿主只是省不下上下文，不会坏。
+   * @param {any} definition
+   */
+  const registerGated = (definition) => ctx.tools.register(definition, projectGate)
+
   ctx.tools.register(
     defineTool({
       name: 'mc_projects',
-      description: `List the Minecraft projects in the workspace and their taskPaths; read-only. Call it first — an empty list means there is no project here, so do not invent task names.`,
+      description: `List Minecraft projects in the workspace and their taskPaths; read-only. Call it first: an empty list means no project here, so do not invent task names.`,
       parameters: {
-        root: { type: 'string', description: 'Workspace directory; defaults to the current session working directory' },
+        root: { type: 'string', description: 'Workspace directory; defaults to the session working directory' },
         refresh: { type: 'boolean', description: 'Bypass the 5-second scan cache' },
       },
       output: {
@@ -197,24 +245,24 @@ export function applyTools(ctx, deps) {
     }),
   )
 
-  ctx.tools.register(
+  registerGated(
     defineTool({
       name: 'mc_launch',
-      description: `Run a target from mc_projects: daemon targets return once up, one-shot targets return when finished with a verdict (passed/failed/aborted/error). It builds and writes files, one instance per project (a second launch errors, it does not queue) — do not run gradlew yourself.`,
+      description: `Run a target from mc_projects. Daemon targets return once up; one-shot targets return when finished with a verdict. Builds and writes files, one instance per project — a second launch errors instead of queueing, so do not run gradlew yourself.`,
       parameters: {
         root: { type: 'string', description: 'Project directory; defaults to the current workspace' },
-        taskPath: { type: 'string', required: true, description: 'Gradle task path, e.g. runClient, :fabric:runClient, :modules:core:runClient' },
+        taskPath: { type: 'string', required: true, description: 'Gradle task path, e.g. runClient or :modules:core:runClient' },
         wait: {
           type: 'string',
           enum: ['ready', 'exit', 'detach'],
-          description: 'ready waits for the target to be up; exit waits for it to finish and return a verdict; detach returns immediately. When omitted it follows the target mode: daemon → ready, one-shot → exit',
+          description: 'ready: until up; exit: until done, with a verdict; detach: return now. Default follows the target mode: daemon → ready, one-shot → exit',
         },
-        timeoutMs: { type: 'number', description: 'Upper bound for ready/exit in ms; default 600000 (10 min)' },
-        offline: { type: 'boolean', description: 'Pass --offline to Gradle: fail fast instead of downloading missing artifacts' },
-        refreshDependencies: { type: 'boolean', description: 'Pass --refresh-dependencies so Gradle re-checks upstream versions' },
+        timeoutMs: { type: 'number', description: 'Cap for ready/exit in ms; default 600000 (10 min)' },
+        offline: { type: 'boolean', description: 'Gradle --offline: fail fast instead of downloading' },
+        refreshDependencies: { type: 'boolean', description: 'Gradle --refresh-dependencies: re-check upstream versions' },
         gradleProperties: {
           type: 'array',
-          description: 'Extra Gradle system properties passed as -Dkey=value, e.g. https.proxyHost / https.proxyPort when the network blocks asset downloads',
+          description: 'Extra -Dkey=value Gradle properties, e.g. https.proxyHost when asset downloads are blocked',
           items: {
             type: 'object',
             additionalProperties: false,
@@ -294,15 +342,15 @@ export function applyTools(ctx, deps) {
     }),
   )
 
-  ctx.tools.register(
+  registerGated(
     defineTool({
       name: 'mc_launch_logs',
-      description: `Read one instance's log, defaulting to the active instance of this project. Abnormal exits carry a diagnosis; raise limit for stack traces.`,
+      description: `Read one instance's log, defaulting to this project's active instance. Abnormal exits carry a diagnosis; raise limit for stack traces.`,
       parameters: {
-        id: { type: 'string', description: 'Instance id (launch-N); omit to use the active instance of the session workspace' },
+        id: { type: 'string', description: "Instance id (launch-N); omit for this project's active instance" },
         root: { type: 'string', description: 'Project directory; only used when id is omitted' },
         offset: { type: 'number', description: '0-based line offset; default 0' },
-        limit: { type: 'number', description: 'How many lines to return; default 200' },
+        limit: { type: 'number', description: 'Lines to return; default 200' },
       },
       output: {
         schema: {
@@ -377,12 +425,12 @@ export function applyTools(ctx, deps) {
     }),
   )
 
-  ctx.tools.register(
+  registerGated(
     defineTool({
       name: 'mc_launch_stop',
-      description: `Stop an instance and its process tree. Only daemon targets need this — a one-shot target has already exited by itself.`,
+      description: `Stop an instance and its process tree. Only daemon targets need this; a one-shot target has already exited.`,
       parameters: {
-        id: { type: 'string', description: 'Instance id; omit to use the active instance of the session workspace' },
+        id: { type: 'string', description: "Instance id; omit for this project's active instance" },
         root: { type: 'string', description: 'Project directory; only used when id is omitted' },
       },
       output: {
@@ -413,7 +461,7 @@ export function applyTools(ctx, deps) {
     }),
   )
 
-  ctx.tools.register(
+  registerGated(
     defineTool({
       name: 'mc_launch_list',
       description: `List this project's instances, newest first. status is the process state, verdict is the conclusion.`,
@@ -487,10 +535,10 @@ export function applyTools(ctx, deps) {
     }),
   )
 
-  ctx.tools.register(
+  registerGated(
     defineTool({
       name: 'mc_project_detail',
-      description: `Profile one project: loader evidence, targets with mode and source, JDK, dependencies, warnings. Cheap and read-only — check it before launching, and do not run a guessed target without confirming it.`,
+      description: `Profile one project: loader evidence, targets with mode and source, JDK, dependencies, warnings. Read-only; check it before launching, and never run a guessed target without confirming it.`,
       parameters: {
         root: { type: 'string', description: 'Project directory; defaults to the session workspace' },
       },
@@ -725,10 +773,10 @@ export function applyTools(ctx, deps) {
     defineTool({
       name: 'mc_mod_init',
       description:
-        'Scaffold a new Minecraft mod project (Fabric or NeoForge) into an empty directory: resolves loader, mappings, plugin and API versions from upstream, then writes the Gradle files and a mod entrypoint. It refuses a non-empty directory; run mc_projects afterwards to confirm the workspace detects it.',
+        'Scaffold a new Fabric or NeoForge mod project into an empty directory: resolves loader, mappings and API versions from upstream, then writes the Gradle files and a mod entrypoint. Refuses a non-empty directory; run mc_projects afterwards to confirm it.',
       parameters: {
-        dir: { type: 'string', required: true, description: 'Target directory; relative paths resolve against the session workspace' },
-        modid: { type: 'string', required: true, description: 'Mod id: lowercase letters, digits and underscores, e.g. my_mod' },
+        dir: { type: 'string', required: true, description: 'Target directory, relative to the session workspace' },
+        modid: { type: 'string', required: true, description: 'Mod id: lowercase letters, digits, underscores' },
         name: { type: 'string', required: true, description: 'Display name, e.g. My Mod' },
         group: { type: 'string', description: 'Java package; default com.example.<modid>' },
         version: { type: 'string', description: 'Mod version; default 0.1.0' },
@@ -789,6 +837,8 @@ export function applyTools(ctx, deps) {
         })
         // 输出 schema 不支持"字符串到字符串"的映射，转成 [{ key, version }]
         const { versions, ...rest } = created
+        // 刚长出工程：让操作类工具在下一步就挂上，别等判定缓存过期
+        gateCache.clear()
         return {
           ...rest,
           versions: Object.entries(versions ?? {}).map(([key, version]) => ({ key, version: String(version) })),
@@ -797,13 +847,13 @@ export function applyTools(ctx, deps) {
     }),
   )
 
-  ctx.tools.register(
+  registerGated(
     defineTool({
       name: 'mc_set_group',
       description:
-        'Change the Java package (group) of a scaffolded project: moves the package directory under src/*/java and rewrites package/import lines plus metadata references. It edits files on disk, leaves docs and build scripts alone, and refuses when gradle.properties has no mod_group_id, because then the current package cannot be determined safely.',
+        'Change the Java package (group) of a scaffolded project: moves the package directory under src/*/java and rewrites package/import lines plus metadata references. Edits files on disk but leaves docs and build scripts alone; refuses when gradle.properties has no mod_group_id, since the current package is then unknown.',
       parameters: {
-        root: { type: 'string', description: 'Project directory; defaults to the current workspace' },
+        root: { type: 'string', description: 'Project directory; defaults to the session workspace' },
         group: { type: 'string', required: true, description: 'New Java package, e.g. com.acme.coalcraft' },
       },
       output: {
