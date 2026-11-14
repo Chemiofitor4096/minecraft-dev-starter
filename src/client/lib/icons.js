@@ -130,31 +130,37 @@ export function IconInfo({ size = 12 } = {}) {
 /**
  * 草方块：代表"模组工程"（侧边栏标签图标）。
  *
- * 线条版：白色外轮廓 + 绿色顶面。顶面那圈绿边同时也是"草皮与泥土的分界"，
- * 所以不需要再画一条平行带——那条带在 14px 下会被读成盒盖。
- * 线宽统一 1.3、圆角连接；绿色是 Minecraft 的语义色，不算主题色。
+ * 双层：草皮（顶面 + 侧面往下 1.95）与泥土各占一层，颜色是 Minecraft 的语义色；
+ * 描边仍是 currentColor，盖在色块上面，所以暗色/浅色主题都能勾出轮廓。
+ * 草皮深度试过 1.35 / 1.95 / 2.6，1.95 在 14px 下还能看出两层。
  */
-const GRASS = '#87CE54'
+const GRASS_TOP = '#87CE54'
+const GRASS_LEFT = '#78BE49'
+const GRASS_RIGHT = '#68AE41'
+const DIRT_LEFT = '#C1885D'
+const DIRT_RIGHT = '#A9724C'
+
+const GRASS_DEPTH = 1.95
+const BAND_TOP = (4.85 + GRASS_DEPTH).toFixed(2)
+const BAND_FRONT = (7.6 + GRASS_DEPTH).toFixed(2)
 
 export function IconGrassBlock({ size = 14 } = {}) {
   return svg(size, [
+    h('path', { key: 'top', d: 'M8 2.1 13.5 4.85 8 7.6 2.5 4.85z', fill: GRASS_TOP }),
+    h('path', { key: 'grassLeft', d: `M2.5 4.85 8 7.6 8 ${BAND_FRONT} 2.5 ${BAND_TOP}z`, fill: GRASS_LEFT }),
+    h('path', { key: 'grassRight', d: `M8 7.6 13.5 4.85 13.5 ${BAND_TOP} 8 ${BAND_FRONT}z`, fill: GRASS_RIGHT }),
+    h('path', { key: 'dirtLeft', d: `M2.5 ${BAND_TOP} 8 ${BAND_FRONT} 8 13.95 2.5 11.35z`, fill: DIRT_LEFT }),
+    h('path', { key: 'dirtRight', d: `M8 ${BAND_FRONT} 13.5 ${BAND_TOP} 13.5 11.35 8 13.95z`, fill: DIRT_RIGHT }),
     h('path', {
-      key: 'cube',
+      key: 'outline',
       d: 'M8 2.1 13.5 4.85v6.5L8 13.95 2.5 11.35v-6.5z',
       stroke: 'currentColor',
       strokeWidth: 1.3,
       strokeLinejoin: 'round',
     }),
     h('path', {
-      key: 'grass',
-      d: 'M8 2.1 13.5 4.85 8 7.6 2.5 4.85z',
-      stroke: GRASS,
-      strokeWidth: 1.3,
-      strokeLinejoin: 'round',
-    }),
-    h('path', {
-      key: 'spine',
-      d: 'M8 7.6v6.35',
+      key: 'edges',
+      d: `M2.5 4.85 8 7.6l5.5-2.75M8 ${BAND_FRONT}v${(13.95 - Number(BAND_FRONT)).toFixed(2)}`,
       stroke: 'currentColor',
       strokeWidth: 1.3,
       strokeLinejoin: 'round',
