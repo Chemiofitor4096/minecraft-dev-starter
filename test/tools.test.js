@@ -3,6 +3,7 @@
  * 用假的 ctx.tools 与假 api，不起真进程。
  */
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import { applyTools } from '../src/tools.js'
 
@@ -275,8 +276,10 @@ test('mc_projects 用调用会话的 cwd 当工作区', async () => {
 
 test('显式 root 优先于会话 cwd', async () => {
   const { byName } = build()
-  const value = await byName.mc_projects.execute({ root: 'C:/explicit' }, { agent: { session: { header: { cwd: 'C:/agent' } } } })
-  assert.equal(value.root, 'C:/explicit')
+  // 用平台相关的绝对路径：`C:/explicit` 在 POSIX 上不算绝对路径（CI 上就因为这个红过）
+  const explicit = process.cwd()
+  const value = await byName.mc_projects.execute({ root: explicit }, { agent: { session: { header: { cwd: join(process.cwd(), 'agent') } } } })
+  assert.equal(value.root, explicit)
 })
 
 test("相对 root 按会话 cwd 解析，而不是宿主进程的 cwd", async () => {
