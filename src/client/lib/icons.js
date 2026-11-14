@@ -130,39 +130,45 @@ export function IconInfo({ size = 12 } = {}) {
 /**
  * 草方块：代表"模组工程"（侧边栏标签图标）。
  *
- * 双层：草皮（顶面 + 侧面往下 1.95）与泥土各占一层，颜色是 Minecraft 的语义色；
- * 描边仍是 currentColor，盖在色块上面，所以暗色/浅色主题都能勾出轮廓。
- * 草皮深度试过 1.35 / 1.95 / 2.6，1.95 在 14px 下还能看出两层。
+ * 不上色块，用 14 根线段拼出立方体：上面 9 根草绿（顶面 4 + 两条外竖线上半 + 两条分层线 + 前棱上半），
+ * 下面 5 根泥土色（两条外竖线下半 + 底部两条 + 前棱下半）。分层位置取侧面中线（3.25），
+ * 上下各占一半，像两个立方体摞起来。
+ *
+ * 颜色是 Minecraft 的语义色，不随主题变；其余图标仍是 currentColor。
  */
-const GRASS_TOP = '#87CE54'
-const GRASS_LEFT = '#78BE49'
-const GRASS_RIGHT = '#68AE41'
-const DIRT_LEFT = '#C1885D'
-const DIRT_RIGHT = '#A9724C'
+const GRASS = '#87CE54'
+const DIRT = '#C1885D'
 
-const GRASS_DEPTH = 1.95
-const BAND_TOP = (4.85 + GRASS_DEPTH).toFixed(2)
-const BAND_FRONT = (7.6 + GRASS_DEPTH).toFixed(2)
+/** 侧面上的分层高度：6.5 / 2。 */
+const LAYER = 3.25
+const Y_OUTER = (4.85 + LAYER).toFixed(2)
+const Y_FRONT = (7.6 + LAYER).toFixed(2)
 
 export function IconGrassBlock({ size = 14 } = {}) {
   return svg(size, [
-    h('path', { key: 'top', d: 'M8 2.1 13.5 4.85 8 7.6 2.5 4.85z', fill: GRASS_TOP }),
-    h('path', { key: 'grassLeft', d: `M2.5 4.85 8 7.6 8 ${BAND_FRONT} 2.5 ${BAND_TOP}z`, fill: GRASS_LEFT }),
-    h('path', { key: 'grassRight', d: `M8 7.6 13.5 4.85 13.5 ${BAND_TOP} 8 ${BAND_FRONT}z`, fill: GRASS_RIGHT }),
-    h('path', { key: 'dirtLeft', d: `M2.5 ${BAND_TOP} 8 ${BAND_FRONT} 8 13.95 2.5 11.35z`, fill: DIRT_LEFT }),
-    h('path', { key: 'dirtRight', d: `M8 ${BAND_FRONT} 13.5 ${BAND_TOP} 13.5 11.35 8 13.95z`, fill: DIRT_RIGHT }),
+    // 草绿：顶面 + 上半段
     h('path', {
-      key: 'outline',
-      d: 'M8 2.1 13.5 4.85v6.5L8 13.95 2.5 11.35v-6.5z',
-      stroke: 'currentColor',
+      key: 'grassTop',
+      d: 'M8 2.1 13.5 4.85 8 7.6 2.5 4.85z',
+      stroke: GRASS,
       strokeWidth: 1.3,
       strokeLinejoin: 'round',
     }),
     h('path', {
-      key: 'edges',
-      d: `M2.5 4.85 8 7.6l5.5-2.75M8 ${BAND_FRONT}v${(13.95 - Number(BAND_FRONT)).toFixed(2)}`,
-      stroke: 'currentColor',
+      key: 'grassSides',
+      d: `M2.5 4.85V${Y_OUTER}M13.5 4.85V${Y_OUTER}M2.5 ${Y_OUTER} 8 ${Y_FRONT} 13.5 ${Y_OUTER}M8 7.6V${Y_FRONT}`,
+      stroke: GRASS,
       strokeWidth: 1.3,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+    }),
+    // 泥土：下半段
+    h('path', {
+      key: 'dirtSides',
+      d: `M2.5 ${Y_OUTER}V11.35M13.5 ${Y_OUTER}V11.35M2.5 11.35 8 13.95 13.5 11.35M8 ${Y_FRONT}V13.95`,
+      stroke: DIRT,
+      strokeWidth: 1.3,
+      strokeLinecap: 'round',
       strokeLinejoin: 'round',
     }),
   ])
