@@ -13,14 +13,15 @@ import { h } from './h.js'
 /**
  * @param {number} size
  * @param {Array<any>} children
+ * @param {string} [viewBox]
  */
-function svg(size, children) {
+function svg(size, children, viewBox = '0 0 16 16') {
   return h(
     'svg',
     {
       width: size,
       height: size,
-      viewBox: '0 0 16 16',
+      viewBox,
       fill: 'none',
       'aria-hidden': 'true',
       focusable: 'false',
@@ -127,45 +128,54 @@ export function IconInfo({ size = 12 } = {}) {
 }
 
 /**
- * 草方块配色：草绿在上、泥土在下。这是图标集里唯一的实色——
- * 它模仿 Minecraft 的草方块，靠色块区分面，和面板里的语义色无关。
- */
-const GRASS = '#87CE54'
-const GRASS_SHADE = '#74B84A'
-const DIRT = '#C1885D'
-const DIRT_SHADE = '#A9724C'
-
-/**
  * 草方块：代表"模组工程"（侧边栏标签图标）。
  *
- * 三个面只靠色差分层，不画接缝描边——14px 下描边会把面糊在一起；
- * 草皮往下带一点点，才有草方块的样子，而不是一个纯色立方体。
+ * 线条版：白色外轮廓 + 绿色顶面。顶面那圈绿边同时也是"草皮与泥土的分界"，
+ * 所以不需要再画一条平行带——那条带在 14px 下会被读成盒盖。
+ * 线宽统一 1.3、圆角连接；绿色是 Minecraft 的语义色，不算主题色。
  */
+const GRASS = '#87CE54'
+
 export function IconGrassBlock({ size = 14 } = {}) {
   return svg(size, [
-    h('path', { key: 'top', d: 'M8 1.9 13.9 5 8 8.1 2.1 5z', fill: GRASS }),
-    h('path', { key: 'left', d: 'M2.1 5 8 8.1v6.1L2.1 11.1z', fill: DIRT }),
-    h('path', { key: 'right', d: 'M8 8.1 13.9 5v6.1L8 14.2z', fill: DIRT_SHADE }),
-    h('path', { key: 'leftGrass', d: 'M2.1 5 8 8.1v1.35L2.1 6.35z', fill: GRASS }),
-    h('path', { key: 'rightGrass', d: 'M8 8.1 13.9 5v1.35L8 9.45z', fill: GRASS_SHADE }),
+    h('path', {
+      key: 'cube',
+      d: 'M8 2.1 13.5 4.85v6.5L8 13.95 2.5 11.35v-6.5z',
+      stroke: 'currentColor',
+      strokeWidth: 1.3,
+      strokeLinejoin: 'round',
+    }),
+    h('path', {
+      key: 'grass',
+      d: 'M8 2.1 13.5 4.85 8 7.6 2.5 4.85z',
+      stroke: GRASS,
+      strokeWidth: 1.3,
+      strokeLinejoin: 'round',
+    }),
+    h('path', {
+      key: 'spine',
+      d: 'M8 7.6v6.35',
+      stroke: 'currentColor',
+      strokeWidth: 1.3,
+      strokeLinejoin: 'round',
+    }),
   ])
 }
 
-/** 卷轴：代表"运行日志"（侧边栏标签图标）。上下两根卷轴杆，中间是纸。 */
+/**
+ * 卷轴：代表"运行日志"（侧边栏标签图标）。
+ * 图形来自用户提供的 1024 栅格实心卷轴，只把填充色换成 `currentColor`。
+ */
 export function IconScroll({ size = 14 } = {}) {
-  return svg(size, [
-    h('rect', { key: 'top', x: 2.4, y: 2, width: 11.2, height: 2.6, rx: 1.3, stroke: 'currentColor', strokeWidth: 1.3 }),
-    h('rect', {
-      key: 'bottom',
-      x: 2.4,
-      y: 11.4,
-      width: 11.2,
-      height: 2.6,
-      rx: 1.3,
-      stroke: 'currentColor',
-      strokeWidth: 1.3,
-    }),
-    h('path', { key: 'edges', d: 'M4.4 4.6v6.8M11.6 4.6v6.8', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }),
-    h('path', { key: 'text', d: 'M6 7h4M6 8.8h2.6', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }),
-  ])
+  return svg(
+    size,
+    [
+      h('path', {
+        key: 'scroll',
+        d: 'M864 672v64a96 96 0 0 1-96 96H384a96 96 0 0 1-96-96V416H192a32 32 0 0 1-31.776-28.256L160 384V288a96 96 0 0 1 96-96h416a96 96 0 0 1 96 96v352h64a32 32 0 0 1 32 32zM672 256H346.56c3.52 10.016 5.44 20.8 5.44 32v448a32 32 0 0 0 64 0v-64a32 32 0 0 1 32-32h256V288a32 32 0 0 0-32-32z m-192 448v32c0 11.232-1.92 22.016-5.472 32H768a32 32 0 0 0 32-32v-32H480zM256 256a32 32 0 0 0-32 32v64h64V288a32 32 0 0 0-28.256-31.776L256 256z',
+        fill: 'currentColor',
+      }),
+    ],
+    '52 52 920 920',
+  )
 }

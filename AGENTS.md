@@ -140,9 +140,9 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 - 工具描述是**英文契约**，一到两句（见 `doc/tool-vocabulary.md`）：第一句是什么与什么时候用，第二句只放
   最容易踩的那条约束；参数与返回交给 schema。工具执行结果（`render`）仍是中文，跟界面语言走。
 - 不做隐含的 `clean`；构建目录不碰。
-- **图标**：`src/client/lib/icons.js` 里只有草方块用实色（`#87CE54` / `#C1885D` 及其暗部），
-  属于 Minecraft 语义色；其余图标一律 `currentColor`。`styles.test.js` 的色值护栏只扫
-  `views/`，所以图标的实色不受它约束——别把这个例外扩散到组件里。
+- **图标**：`src/client/lib/icons.js` 里只有草方块的**顶面**用实色 `#87CE54`（草皮语义色），
+  其余笔画一律 `currentColor`。`styles.test.js` 的色值护栏只扫 `views/`，
+  所以图标的实色不受它约束——别把这个例外扩散到组件里。
 - 一个工程同时只允许一个实例；跨工程可以并行。
 - **目录分层是硬约束**：`src/lib/` 按 `detect` / `launch` / `i18n` / `util` 归位，跨层依赖单向；
   `src/client/` 的 React 组件只放 `views/`，其余放 `lib/`；构建脚本在 `scripts/`，
