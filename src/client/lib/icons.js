@@ -131,22 +131,30 @@ export function IconInfo({ size = 12 } = {}) {
  * 草方块：代表"模组工程"（侧边栏标签图标）。
  *
  * 不上色块，用 14 根线段拼出立方体：上面 9 根草绿（顶面 4 + 两条外竖线上半 + 两条分层线 + 前棱上半），
- * 下面 5 根泥土色（两条外竖线下半 + 底部两条 + 前棱下半）。分层位置取侧面中线（3.25），
- * 上下各占一半，像两个立方体摞起来。
+ * 下面 5 根泥土色（两条外竖线下半 + 底部两条 + 前棱下半）。分层取侧面高度 2.4，
+ * 草皮薄、泥土厚，像草方块；草绿最后画，所以相接处绿色压在上面。
  *
  * 颜色是 Minecraft 的语义色，不随主题变；其余图标仍是 currentColor。
  */
 const GRASS = '#87CE54'
 const DIRT = '#C1885D'
 
-/** 侧面上的分层高度：6.5 / 2。 */
-const LAYER = 3.25
+/** 侧面上的草皮厚度（侧面总高 6.5）。 */
+const LAYER = 2.4
 const Y_OUTER = (4.85 + LAYER).toFixed(2)
 const Y_FRONT = (7.6 + LAYER).toFixed(2)
 
 export function IconGrassBlock({ size = 14 } = {}) {
   return svg(size, [
-    // 草绿：顶面 + 上半段
+    // 先画泥土：相接处会被草绿盖住，视觉上草皮在上
+    h('path', {
+      key: 'dirt',
+      d: `M2.5 ${Y_OUTER}V11.35M13.5 ${Y_OUTER}V11.35M2.5 11.35 8 13.95 13.5 11.35M8 ${Y_FRONT}V13.95`,
+      stroke: DIRT,
+      strokeWidth: 1.3,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+    }),
     h('path', {
       key: 'grassTop',
       d: 'M8 2.1 13.5 4.85 8 7.6 2.5 4.85z',
@@ -158,15 +166,6 @@ export function IconGrassBlock({ size = 14 } = {}) {
       key: 'grassSides',
       d: `M2.5 4.85V${Y_OUTER}M13.5 4.85V${Y_OUTER}M2.5 ${Y_OUTER} 8 ${Y_FRONT} 13.5 ${Y_OUTER}M8 7.6V${Y_FRONT}`,
       stroke: GRASS,
-      strokeWidth: 1.3,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-    }),
-    // 泥土：下半段
-    h('path', {
-      key: 'dirtSides',
-      d: `M2.5 ${Y_OUTER}V11.35M13.5 ${Y_OUTER}V11.35M2.5 11.35 8 13.95 13.5 11.35M8 ${Y_FRONT}V13.95`,
-      stroke: DIRT,
       strokeWidth: 1.3,
       strokeLinecap: 'round',
       strokeLinejoin: 'round',
