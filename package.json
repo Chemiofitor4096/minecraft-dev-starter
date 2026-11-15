@@ -50,7 +50,8 @@
     "pretest": "node scripts/build-client.mjs",
     "test": "node --test",
     "check:pack": "node scripts/check-pack.mjs",
-    "versions:seed": "node scripts/seed-versions.mjs"
+    "versions:seed": "node scripts/seed-versions.mjs",
+    "check:release": "node scripts/check-release.mjs"
   },
   "license": "MIT",
   "repository": {

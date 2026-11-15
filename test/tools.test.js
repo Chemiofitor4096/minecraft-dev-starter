@@ -303,6 +303,21 @@ test('mc_launch 把会话 cwd 作为 workspace 交给宿主（工作区校验用
   assert.equal(received?.root, 'C:/agent')
 })
 
+test('两个会话各报自己的 workspace，不会互相串', async () => {
+  /** @type {Array<Record<string, any>>} */
+  const seen = []
+  const { byName } = build({
+    'launch.start': async (payload) => {
+      seen.push(payload)
+      return { id: `launch-${seen.length}`, status: 'starting', taskPath: 'runClient', pid: 1, mode: 'daemon', logPath: 'C:/l.log' }
+    },
+  })
+  // 会话 A 先跑，B 后跑：以前的 bug 是两者共用"最近一个会话"
+  await byName.mc_launch.execute({ taskPath: 'runClient', wait: 'detach' }, { agent: { session: { header: { cwd: join(process.cwd(), 'a') } } } })
+  await byName.mc_launch.execute({ taskPath: 'runClient', wait: 'detach' }, { agent: { session: { header: { cwd: join(process.cwd(), 'b') } } } })
+  assert.deepEqual(seen.map((payload) => payload.workspace), [join(process.cwd(), 'a'), join(process.cwd(), 'b')])
+})
+
 test('省略 id 的工具把会话 cwd 传给宿主', async () => {
   const seen = []
   const { byName } = build({

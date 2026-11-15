@@ -62,9 +62,9 @@ src/client/
     state.js / store.js / selection.js / runtime.js / api.js
     format.js / logFormat.js / logFilter.js / dock.js / h.js / icons.js / styles.js / debug.js
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
-scripts/              构建与发布：build-client.mjs / check-pack.mjs
+scripts/              构建与发布：build-client.mjs / check-pack.mjs / check-release.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 236 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 237 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -78,6 +78,7 @@ npm test                          # 同上，先重建客户端再跑
 node scripts/build-client.mjs     # 构建客户端（改 src/client 后必须跑）
 node scripts/build-client.mjs --watch
 node scripts/check-pack.mjs       # 发布前校验 npm 包内容（缺 lib/client.js、多带 test/ 都会失败）
+node scripts/check-release.mjs    # 发版前四项：工作树干净 / 版本与 CHANGELOG 对齐 / 没发过 / HEAD 的 CI 绿
 node tools/scan-catalog.mjs       # 扫真实工程，输出识别结果表
 node tools/inspect-project.mjs <工程目录>   # 摊开一个工程的证据 / .idea 模型 / 目标来源
 node tools/seed-versions.mjs <loader> <mc>  # 把当前上游版本固化进 seed（新增热门线时用，平时不需要）
@@ -562,6 +563,20 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
   再按宿主进程 cwd 解析），绝对路径保持原样不动。
 - 236 个测试；`test/api.test.js` 钉住"会话列表里没有它、但调用方自带 workspace 也能过"，
   `test/tools.test.js` 钉住 `workspace` 透传与相对路径解析。
+
+### M27 发版守卫与多会话测试（2026-11-15）
+
+0.2.1 发出去之后复盘：包里的代码是对的，但 **CI 的 ubuntu/macOS 是红的**（测试里写死了 `C:/…`），
+我只看本地 Windows 就 `stage publish` 了，事后还得挪 tag。两件事一起补：
+
+- **`scripts/check-release.mjs`（`npm run check:release`）**：工作树干净 / `package.json` 版本 ==
+  CHANGELOG 最新一节 / 这个版本还没在 npm 上 / **HEAD 的 CI 是绿的**（`gh run list --commit`）。
+  gh 不可用时只警告不拦（离线也能发），CI 红/没跑完直接拦。脚本自身用 0.2.1 试过：正确地拦下了
+  "已经发过"和"工作树脏"。
+- **两个会话不串**：`test/tools.test.js` 加一条，会话 A、B 各带自己的 cwd 调 `mc_launch`，
+  断言宿主收到的是各自那个 workspace——M26 的 bug 正是"共用最近一个会话"。
+  绝对路径一律 `join(process.cwd(), …)` 现算，不写 `C:/…`。
+- 237 个测试。CI 增加守卫生效之后，发版顺序固定为：测试 → `check:pack` → **`check:release`** → `stage publish`。
 
 ## 架构边界（2026-11-14 复核）
 
