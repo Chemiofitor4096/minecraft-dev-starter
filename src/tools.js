@@ -41,21 +41,21 @@ function agentWorkspace(exec) {
 }
 
 /**
- * 工具的工作区根：调用参数优先，其次取**调用它的那个会话**的 cwd。
+ * 交给 api 的工作区信息：调用方要的 `root`（可能是相对路径）+ 它自己的会话 cwd。
  *
- * 宿主里可能有多个会话、各自的 cwd 不同；用"最近一个会话"当默认会把
- * 别的会话的工程当成当前工作区。相对路径按会话 cwd 解析——模型写 `root: "."`
- * 时指的是它自己的会话目录，不是宿主进程的 cwd。
+ * 相对路径**不在工具里解析**：`api.resolveRoot()` 是唯一入口，工具只负责把"我是谁"
+ * （会话 cwd）交上去。两处各拼一次路径，正是 M26 那类 bug 的土壤。
  * @param {{ root?: string }} args
  * @param {{ agent?: any } | undefined} exec
- * @returns {string | undefined}
+ * @returns {{ root?: string, workspace?: string }}
  */
-function agentRoot(args, exec) {
+function rootArgs(args, exec) {
   const workspace = agentWorkspace(exec)
-  const requested = typeof args.root === 'string' && args.root !== '' ? args.root : undefined
-  if (requested === undefined) return workspace
-  if (workspace === undefined || isAbsolute(requested)) return requested
-  return resolve(workspace, requested)
+  /** @type {{ root?: string, workspace?: string }} */
+  const payload = {}
+  if (typeof args.root === 'string' && args.root !== '') payload.root = args.root
+  if (workspace !== undefined) payload.workspace = workspace
+  return payload
 }
 
 /** 按步挂载判定的缓存时长：每步都要问一次，别每步都扫工作区。 */
@@ -245,7 +245,7 @@ export function applyTools(ctx, deps) {
         render: (_args, value) => [{ type: 'text', text: renderProjects(value) }],
       },
       async execute(args, exec) {
-        const scan = await api['projects.scan']({ root: agentRoot(args, exec), refresh: args.refresh === true })
+        const scan = await api['projects.scan']({ ...rootArgs(args, exec), refresh: args.refresh === true })
         return {
           root: scan.root,
           truncated: scan.truncated === true,
@@ -334,7 +334,7 @@ export function applyTools(ctx, deps) {
         }
         const workspace = agentWorkspace(exec)
         const record = await api['launch.start']({
-          root: agentRoot(args, exec),
+          ...rootArgs(args, exec),
           // 把"我在哪个工作区里"一起交过去：宿主的会话列表不能当作判据
           ...(workspace === undefined ? {} : { workspace }),
           taskPath: args.taskPath,
@@ -410,7 +410,7 @@ export function applyTools(ctx, deps) {
       async execute(args, exec) {
         let id = args.id
         if (id === undefined || id === '') {
-          const current = await api['launch.current']({ root: agentRoot(args, exec) })
+          const current = await api['launch.current']({ ...rootArgs(args, exec) })
           if (current === null || current === undefined) throw new Error('No active instance in this project; pass id')
           id = current.id
         }
@@ -467,7 +467,7 @@ export function applyTools(ctx, deps) {
       async execute(args, exec) {
         let id = args.id
         if (id === undefined || id === '') {
-          const current = await api['launch.current']({ root: agentRoot(args, exec) })
+          const current = await api['launch.current']({ ...rootArgs(args, exec) })
           if (current === null || current === undefined) throw new Error('No active instance in this project; pass id')
           id = current.id
         }
@@ -530,7 +530,7 @@ export function applyTools(ctx, deps) {
         ],
       },
       async execute(args, exec) {
-        const root = await api['projects.scan']({ root: agentRoot(args, exec) }).then((scan) => scan.root)
+        const root = await api['projects.scan']({ ...rootArgs(args, exec) }).then((scan) => scan.root)
         const all = await api['launch.list']({ root })
         const limit = Number.isFinite(args.limit) && args.limit > 0 ? Math.floor(args.limit) : 10
         const launches = all.slice(0, limit).map((record) => {
@@ -704,8 +704,8 @@ export function applyTools(ctx, deps) {
         ],
       },
       async execute(args, exec) {
-        const root = args.root ?? (await api['projects.scan']({ root: agentRoot(args, exec) }).then((scan) => scan.root))
-        const profile = await api['projects.detail']({ root })
+        // 只把"我在哪个会话、想要哪个目录"交上去：解析交给 api.resolveRoot
+        const profile = await api['projects.detail']({ ...rootArgs(args, exec) })
         /** @type {Record<string, any>} */
         const value = {
           root: profile.root,
@@ -843,7 +843,7 @@ export function applyTools(ctx, deps) {
         ],
       },
       async execute(args, exec) {
-        const base = agentRoot(args, exec) ?? process.cwd()
+        const base = agentWorkspace(exec) ?? process.cwd()
         const dir = isAbsolute(args.dir) ? args.dir : resolve(base, args.dir)
         const created = await api['projects.create']({
           dir,
@@ -912,7 +912,7 @@ export function applyTools(ctx, deps) {
       },
       async execute(args, exec) {
         return await api['projects.setGroup']({
-          root: agentRoot(args, exec),
+          ...rootArgs(args, exec),
           group: args.group,
         })
       },

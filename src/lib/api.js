@@ -13,6 +13,7 @@ import { resolveProjectDir } from './detect/idea.js'
 import { discoverJdks, readJdk } from './launch/java.js'
 import { javaChoiceFor, loadJdkPrefs, overrideFor, projectKey, saveJdkPrefs, shouldInjectJdk, withExtra } from './launch/jdks.js'
 import { createLaunchService } from './launch/launches.js';
+import { isAbsolute, resolve } from 'node:path'
 import { currentLanguage, t } from './i18n/messages.js'
 import { baseStateDir } from './state.js'
 import { scanWorkspace } from './detect/scanner.js'
@@ -81,16 +82,23 @@ export function createApi(options) {
   const listJdks = options.listJdks ?? ((extraDirs) => discoverJdks({ extraDirs }))
 
   /**
+   * 把"调用方想要哪个目录"变成一个绝对路径——**唯一入口**。
+   *
+   * `workspace` 是调用方自己的会话 cwd（工具会带上它）：相对 `root`（比如 `"."`）按它解析，
+   * 而不是按宿主进程的 cwd。宿主的会话列表不可信（重启后可能只列出一部分会话），
+   * 所以"我在哪个工作区"只能由调用方自己说（M26）。
    * @param {string | undefined} requested
+   * @param {string | undefined} [workspace]
    * @returns {Promise<string>}
    */
-  async function resolveRoot(requested) {
+  async function resolveRoot(requested, workspace) {
     const root = requested ?? (await options.resolveRoot())
     if (root === undefined || root === '') {
       throw new Error(t('error.noWorkspace'))
     }
+    const absolute = isAbsolute(root) || workspace === undefined ? root : resolve(workspace, root)
     // 传进来的是 `.idea`（从 IDE 里复制路径很常见）时退回工程根
-    return resolveProjectDir(root)
+    return resolveProjectDir(absolute)
   }
 
   /**
@@ -116,8 +124,8 @@ export function createApi(options) {
      * @param {unknown} payload
      */
     'projects.scan': async (payload) => {
-      const input = /** @type {{ root?: string, depth?: number, refresh?: boolean }} */ (payload ?? {})
-      const root = await resolveRoot(input.root)
+      const input = /** @type {{ root?: string, workspace?: string, depth?: number, refresh?: boolean }} */ (payload ?? {})
+      const root = await resolveRoot(input.root, input.workspace)
       // 语言进 key：切英文后不能再拿中文那次的缓存顶上去
       const key = `${root}|${input.depth ?? 3}|${currentLanguage()}`
       const cached = cache.get(key)
@@ -157,8 +165,8 @@ export function createApi(options) {
      * @param {unknown} payload
      */
     'projects.setGroup': async (payload) => {
-      const input = /** @type {{ root?: string, group?: string }} */ (payload ?? {})
-      const root = await resolveRoot(input.root)
+      const input = /** @type {{ root?: string, workspace?: string, group?: string }} */ (payload ?? {})
+      const root = await resolveRoot(input.root, input.workspace)
       const result = await setGroup({ root, group: String(input.group ?? '') })
       console.log(`[mcdev] projects.setGroup ${root}: ${result.from} → ${result.group}（${result.files.length} 个文件）`)
       return result
@@ -169,8 +177,8 @@ export function createApi(options) {
      * @param {unknown} payload
      */
     'projects.detail': async (payload) => {
-      const input = /** @type {{ root?: string }} */ (payload ?? {})
-      const root = await resolveRoot(input.root)
+      const input = /** @type {{ root?: string, workspace?: string }} */ (payload ?? {})
+      const root = await resolveRoot(input.root, input.workspace)
       const { prefs, jdks } = await environment()
       return detectProject(root, { jdks, overrideJavaHome: overrideFor(prefs, root) })
     },
@@ -192,8 +200,8 @@ export function createApi(options) {
      * @param {unknown} payload
      */
     'projects.jdk.set': async (payload) => {
-      const input = /** @type {{ root?: string, home?: string }} */ (payload ?? {})
-      const root = await resolveRoot(input.root)
+      const input = /** @type {{ root?: string, workspace?: string, home?: string }} */ (payload ?? {})
+      const root = await resolveRoot(input.root, input.workspace)
       const home = typeof input.home === 'string' ? input.home.trim() : ''
       let prefs = await loadJdkPrefs(jdkDir)
       /** @type {Record<string, string>} */
@@ -261,7 +269,7 @@ export function createApi(options) {
       const gradleArgs = Array.isArray(input.extraArgs) && input.extraArgs.length > 0 && input.gradle === undefined
         ? input.extraArgs.filter((entry) => typeof entry === 'string')
         : gradleOptionArgs(parseGradleOptions(input.gradle))
-      const root = await resolveRoot(input.root)
+      const root = await resolveRoot(input.root, input.workspace)
       // 工作区可能不止一个（每个会话一个 cwd）：只要落在其中任意一个之内就放行，
       // 否则切到另一个工程的会话后会被误判成"越界"。
       // 调用方（工具）还会带上**它自己**的会话 cwd：会话服务列出的工作区不一定可信——
@@ -323,15 +331,15 @@ export function createApi(options) {
     },
 
     /**
-     * 列实例：`{ root? }`，最新的在前。
+     * 列实例：`{ root?, workspace? }`，最新的在前。
      * @param {unknown} payload
      */
     'launch.list': async (payload) => {
-      const input = /** @type {{ root?: string }} */ (payload ?? {})
+      const input = /** @type {{ root?: string, workspace?: string }} */ (payload ?? {})
       const all = await launches.list()
       if (typeof input.root !== 'string' || input.root === '') return all
-      const root = input.root.toLowerCase()
-      return all.filter((record) => String(record.root).toLowerCase() === root)
+      const root = await resolveRoot(input.root, input.workspace)
+      return all.filter((record) => isInside(record.root, root) && isInside(root, record.root))
     },
 
     /**
@@ -339,8 +347,8 @@ export function createApi(options) {
      * @param {unknown} payload
      */
     'launch.current': async (payload) => {
-      const input = /** @type {{ root?: string }} */ (payload ?? {})
-      const root = await resolveRoot(input.root)
+      const input = /** @type {{ root?: string, workspace?: string }} */ (payload ?? {})
+      const root = await resolveRoot(input.root, input.workspace)
       return (await launches.current(root)) ?? null
     },
 

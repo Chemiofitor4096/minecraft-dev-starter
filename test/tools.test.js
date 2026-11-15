@@ -3,7 +3,7 @@
  * 用假的 ctx.tools 与假 api，不起真进程。
  */
 import assert from 'node:assert/strict'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { test } from 'node:test'
 import { applyTools } from '../src/tools.js'
 
@@ -26,10 +26,22 @@ function fakeCtx() {
   }
 }
 
+/**
+ * 假 api 里的 root 解析：跟真 `api.resolveRoot` 同义——
+ * 显式 root 优先，相对路径按调用方会话的 workspace 解析，都没有才用默认。
+ * @param {{ root?: string, workspace?: string } | undefined} payload
+ */
+function rootOf(payload) {
+  const workspace = payload?.workspace
+  const requested = payload?.root
+  if (requested === undefined) return workspace ?? 'C:/p'
+  return isAbsolute(requested) || workspace === undefined ? requested : join(workspace, requested)
+}
+
 function fakeApi(overrides = {}) {
   return {
     'projects.scan': async (payload) => ({
-      root: payload?.root ?? 'C:/p',
+      root: rootOf(payload),
       truncated: false,
       projects: [
         {
@@ -300,7 +312,8 @@ test('mc_launch 把会话 cwd 作为 workspace 交给宿主（工作区校验用
   })
   await byName.mc_launch.execute({ taskPath: 'runClient', wait: 'detach' }, { agent: { session: { header: { cwd: 'C:/agent' } } } })
   assert.equal(received?.workspace, 'C:/agent')
-  assert.equal(received?.root, 'C:/agent')
+  // 工具不再自己拼路径：相对/缺省 root 的解析统一在 api.resolveRoot 里做
+  assert.equal(received?.root, undefined)
 })
 
 test('两个会话各报自己的 workspace，不会互相串', async () => {
@@ -329,7 +342,7 @@ test('省略 id 的工具把会话 cwd 传给宿主', async () => {
   const exec = { agent: { session: { header: { cwd: 'C:/agent' } } } }
   await byName.mc_launch_logs.execute({}, exec)
   await byName.mc_launch_stop.execute({}, exec)
-  assert.deepEqual(seen.map((payload) => payload.root), ['C:/agent', 'C:/agent'])
+  assert.deepEqual(seen.map((payload) => payload.workspace), ['C:/agent', 'C:/agent'])
 })
 
 // ── 新增：历史列表与工程详情 ──────────────────────────────────────────

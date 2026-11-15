@@ -146,3 +146,13 @@ test('launch.start 接受调用方自带的工作区：会话列表里没有它�
     await rm(dir, { recursive: true, force: true })
   }
 })
+test('相对 root 由 api 按 workspace 解析（工具不再自己拼路径）', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mcdev-api-'))
+  try {
+    const api = build(dir)
+    const scan = await api['projects.scan']({ root: 'fabric', workspace: fixtures })
+    assert.equal(scan.root, join(fixtures, 'fabric'))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
