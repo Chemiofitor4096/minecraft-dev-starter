@@ -14,7 +14,7 @@ import { discoverJdks, readJdk } from './launch/java.js'
 import { javaChoiceFor, loadJdkPrefs, overrideFor, projectKey, saveJdkPrefs, shouldInjectJdk, withExtra } from './launch/jdks.js'
 import { createLaunchService } from './launch/launches.js';
 import { isAbsolute, resolve } from 'node:path'
-import { currentLanguage, t } from './i18n/messages.js'
+import { createTranslator, normalizeLanguage } from './i18n/messages.js'
 import { baseStateDir } from './state.js'
 import { scanWorkspace } from './detect/scanner.js'
 
@@ -87,18 +87,28 @@ export function createApi(options) {
    * `workspace` 是调用方自己的会话 cwd（工具会带上它）：相对 `root`（比如 `"."`）按它解析，
    * 而不是按宿主进程的 cwd。宿主的会话列表不可信（重启后可能只列出一部分会话），
    * 所以"我在哪个工作区"只能由调用方自己说（M26）。
+   * `lang` 只用于这条错误消息：语言是调用参数，不是进程状态（M28）。
    * @param {string | undefined} requested
    * @param {string | undefined} [workspace]
+   * @param {unknown} [lang]
    * @returns {Promise<string>}
    */
-  async function resolveRoot(requested, workspace) {
+  async function resolveRoot(requested, workspace, lang) {
     const root = requested ?? (await options.resolveRoot())
     if (root === undefined || root === '') {
-      throw new Error(t('error.noWorkspace'))
+      throw new Error(createTranslator(lang)('error.noWorkspace'))
     }
     const absolute = isAbsolute(root) || workspace === undefined ? root : resolve(workspace, root)
     // 传进来的是 `.idea`（从 IDE 里复制路径很常见）时退回工程根
     return resolveProjectDir(absolute)
+  }
+
+  /**
+   * 这个请求自己的取词函数：语言来自请求体的 `lang`。
+   * @param {{ lang?: unknown } | undefined} input
+   */
+  function translatorFor(input) {
+    return createTranslator(input?.lang)
   }
 
   /**
@@ -125,15 +135,15 @@ export function createApi(options) {
      */
     'projects.scan': async (payload) => {
       const input = /** @type {{ root?: string, workspace?: string, depth?: number, refresh?: boolean }} */ (payload ?? {})
-      const root = await resolveRoot(input.root, input.workspace)
+      const root = await resolveRoot(input.root, input.workspace, input.lang)
       // 语言进 key：切英文后不能再拿中文那次的缓存顶上去
-      const key = `${root}|${input.depth ?? 3}|${currentLanguage()}`
+      const key = `${root}|${input.depth ?? 3}|${normalizeLanguage(input.lang)}`
       const cached = cache.get(key)
       if (input.refresh !== true && cached !== undefined && Date.now() - cached.at < CACHE_TTL_MS) {
         return cached.value
       }
       const { prefs, jdks } = await environment()
-      const result = await scanWorkspace(root, { depth: input.depth, jdks, overrides: prefs.projects })
+      const result = await scanWorkspace(root, { depth: input.depth, jdks, overrides: prefs.projects, lang: input.lang })
       console.log(`[mcdev] projects.scan ${root} → ${result.projects.length} 个工程（${result.scannedDirs} 个目录）`)
       const value = { ...result, scannedAt: new Date().toISOString() }
       cache.set(key, { at: Date.now(), value })
@@ -166,7 +176,7 @@ export function createApi(options) {
      */
     'projects.setGroup': async (payload) => {
       const input = /** @type {{ root?: string, workspace?: string, group?: string }} */ (payload ?? {})
-      const root = await resolveRoot(input.root, input.workspace)
+      const root = await resolveRoot(input.root, input.workspace, input.lang)
       const result = await setGroup({ root, group: String(input.group ?? '') })
       console.log(`[mcdev] projects.setGroup ${root}: ${result.from} → ${result.group}（${result.files.length} 个文件）`)
       return result
@@ -178,9 +188,9 @@ export function createApi(options) {
      */
     'projects.detail': async (payload) => {
       const input = /** @type {{ root?: string, workspace?: string }} */ (payload ?? {})
-      const root = await resolveRoot(input.root, input.workspace)
+      const root = await resolveRoot(input.root, input.workspace, input.lang)
       const { prefs, jdks } = await environment()
-      return detectProject(root, { jdks, overrideJavaHome: overrideFor(prefs, root) })
+      return detectProject(root, { jdks, overrideJavaHome: overrideFor(prefs, root), lang: input.lang })
     },
 
     /**
@@ -201,7 +211,8 @@ export function createApi(options) {
      */
     'projects.jdk.set': async (payload) => {
       const input = /** @type {{ root?: string, workspace?: string, home?: string }} */ (payload ?? {})
-      const root = await resolveRoot(input.root, input.workspace)
+      const t = translatorFor(input)
+      const root = await resolveRoot(input.root, input.workspace, input.lang)
       const home = typeof input.home === 'string' ? input.home.trim() : ''
       let prefs = await loadJdkPrefs(jdkDir)
       /** @type {Record<string, string>} */
@@ -235,6 +246,7 @@ export function createApi(options) {
      */
     'projects.jdk.add': async (payload) => {
       const input = /** @type {{ path?: string }} */ (payload ?? {})
+      const t = translatorFor(input)
       const path = typeof input.path === 'string' ? input.path.trim() : ''
       if (path === '') throw Object.assign(new Error(t('error.missingJdkDir')), { code: 'BAD_REQUEST' })
       const info = await readJdk(path)
@@ -262,14 +274,15 @@ export function createApi(options) {
      * @param {unknown} payload
      */
     'launch.start': async (payload) => {
-      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, gradleRoot?: string, gradle?: Record<string, any>, extraArgs?: string[], workspace?: string }} */ (payload ?? {})
+      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, gradleRoot?: string, gradle?: Record<string, any>, extraArgs?: string[], workspace?: string, lang?: string }} */ (payload ?? {})
+      const t = translatorFor(input)
       // 自由参数是旧接口，留着是为了兼容；新调用方一律走 gradle 对象。
       // 注意别叫 `options`：那会遮住 createApi 的 options，`options.resolveRoots` 变成
       // undefined，工作区校验就永远退回"最近一个会话"——真实工程被判越界的元凶。
       const gradleArgs = Array.isArray(input.extraArgs) && input.extraArgs.length > 0 && input.gradle === undefined
         ? input.extraArgs.filter((entry) => typeof entry === 'string')
         : gradleOptionArgs(parseGradleOptions(input.gradle))
-      const root = await resolveRoot(input.root, input.workspace)
+      const root = await resolveRoot(input.root, input.workspace, input.lang)
       // 工作区可能不止一个（每个会话一个 cwd）：只要落在其中任意一个之内就放行，
       // 否则切到另一个工程的会话后会被误判成"越界"。
       // 调用方（工具）还会带上**它自己**的会话 cwd：会话服务列出的工作区不一定可信——
@@ -290,7 +303,7 @@ export function createApi(options) {
       }
       const { prefs, jdks } = await environment()
       const overrideJavaHome = overrideFor(prefs, root)
-      const profile = await detectProject(root, { jdks, overrideJavaHome })
+      const profile = await detectProject(root, { jdks, overrideJavaHome, lang: input.lang })
       const targets = /** @type {Array<Record<string, any>>} */ (profile.runTargets ?? [])
       const target = targets.find((entry) => entry.taskPath === input.taskPath)
       if (target === undefined) {
@@ -310,6 +323,8 @@ export function createApi(options) {
         // 子模块工程：任务在聚合根目录里执行（识别结果优先，不由调用方决定）
         gradleRoot: typeof profile.gradleRoot === 'string' && profile.gradleRoot !== root ? profile.gradleRoot : undefined,
         options: gradleArgs,
+        // 记下这次请求的语言：进程退出时（异步）要用它写 summary
+        lang: input.lang,
       })
       console.log(`[mcdev] launch.start ${record.id} ${record.taskPath} @ ${root} (pid ${record.pid}${record.javaHome === null ? '' : `, jdk ${record.javaHome}`})`)
       const notice = await firstRunNotice({ loader: profile.loader, kind: target.kind })
@@ -321,11 +336,12 @@ export function createApi(options) {
      * @param {unknown} payload
      */
     'launch.stop': async (payload) => {
-      const input = /** @type {{ id?: string }} */ (payload ?? {})
+      const input = /** @type {{ id?: string, lang?: string }} */ (payload ?? {})
+      const t = translatorFor(input)
       if (typeof input.id !== 'string' || input.id === '') {
         throw Object.assign(new Error(t('error.missingLaunchId')), { code: 'BAD_REQUEST' })
       }
-      const record = await launches.stop(input.id)
+      const record = await launches.stop(input.id, { lang: input.lang })
       console.log(`[mcdev] launch.stop ${input.id} → ${record.status}/${record.outcome ?? '-'}`)
       return record
     },
@@ -338,7 +354,7 @@ export function createApi(options) {
       const input = /** @type {{ root?: string, workspace?: string }} */ (payload ?? {})
       const all = await launches.list()
       if (typeof input.root !== 'string' || input.root === '') return all
-      const root = await resolveRoot(input.root, input.workspace)
+      const root = await resolveRoot(input.root, input.workspace, input.lang)
       return all.filter((record) => isInside(record.root, root) && isInside(root, record.root))
     },
 
@@ -348,7 +364,7 @@ export function createApi(options) {
      */
     'launch.current': async (payload) => {
       const input = /** @type {{ root?: string, workspace?: string }} */ (payload ?? {})
-      const root = await resolveRoot(input.root, input.workspace)
+      const root = await resolveRoot(input.root, input.workspace, input.lang)
       return (await launches.current(root)) ?? null
     },
 
@@ -357,11 +373,12 @@ export function createApi(options) {
      * @param {unknown} payload
      */
     'launch.logs': async (payload) => {
-      const input = /** @type {{ id?: string, offset?: number, limit?: number }} */ (payload ?? {})
+      const input = /** @type {{ id?: string, offset?: number, limit?: number, lang?: string }} */ (payload ?? {})
+      const t = translatorFor(input)
       if (typeof input.id !== 'string' || input.id === '') {
         throw Object.assign(new Error(t('error.missingLaunchId')), { code: 'BAD_REQUEST' })
       }
-      return launches.logs(input.id, Number.isFinite(input.offset) ? Number(input.offset) : 0, Number.isFinite(input.limit) ? Number(input.limit) : 400)
+      return launches.logs(input.id, Number.isFinite(input.offset) ? Number(input.offset) : 0, Number.isFinite(input.limit) ? Number(input.limit) : 400, input.lang)
     },
 
     /**

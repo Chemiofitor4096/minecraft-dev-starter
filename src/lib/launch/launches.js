@@ -18,7 +18,7 @@ import { createWriteStream } from 'node:fs'
 import { mkdir, readFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { gradlewCommand, isAlive, TASK_PATH_PATTERN } from './argv.js'
-import { t } from '../i18n/messages.js'
+import { createTranslator } from '../i18n/messages.js'
 import { adoptLegacyState, baseStateDir, loadState, logPath, saveState, stateDir } from '../state.js'
 import { modeOf, readVerdict } from './verify.js'
 
@@ -70,9 +70,11 @@ const DIAGNOSES = [
  * `hint` 是给面板显示的一句话；`code` 与 `suggestion` 是给模型的结构化信息，
  * 让它不用解析中文就能决定下一步。
  * @param {string[]} lines
+ * @param {unknown} [lang] 归因文案的语言（调用参数，不是进程状态）
  * @returns {{ code: string, hint: string, suggestion: string, line: string } | undefined}
  */
-export function diagnose(lines) {
+export function diagnose(lines, lang) {
+  const t = createTranslator(lang)
   for (const rule of DIAGNOSES) {
     const hit = lines.find((line) => rule.pattern.test(line))
     if (hit !== undefined) {
@@ -177,6 +179,7 @@ export function createLaunchService(options = {}) {
    * @param {LaunchRequest} request
    */
   async function start(request) {
+    const t = createTranslator(request.lang)
     if (!TASK_PATH_PATTERN.test(request.taskPath)) {
       throw Object.assign(new Error(t('error.unknownTask', { task: request.taskPath })), { code: 'BAD_TASK' })
     }
@@ -205,6 +208,8 @@ export function createLaunchService(options = {}) {
         mode: request.mode ?? modeOf(request.kind),
         javaHome: request.javaHome ?? null,
         module: request.module ?? '.',
+        // 记下启动时的语言：进程退出是在异步回调里写 summary 的，那时已经拿不到请求
+        lang: request.lang,
         pid: null,
         startedAt: new Date().toISOString(),
         endedAt: null,
@@ -267,7 +272,7 @@ export function createLaunchService(options = {}) {
           record.outcome = record.stoppedByUser === true ? 'killed' : crashed ? 'crashed' : 'normal'
           // 只有一次性任务有"过没过"这回事；常驻目标的结局在 outcome 与归因里。
           if (record.mode === 'oneshot') {
-            const verdict = readVerdict({ exitCode: code, outcome: record.outcome, lines: runtime.ring.slice(-600) })
+            const verdict = readVerdict({ exitCode: code, outcome: record.outcome, lines: runtime.ring.slice(-600), lang: record.lang })
             record.verdict = verdict.verdict
             if (verdict.summary !== undefined) record.summary = verdict.summary
             if (verdict.failures !== undefined) record.failures = verdict.failures
@@ -346,6 +351,7 @@ export function createLaunchService(options = {}) {
    * @param {{ graceMs?: number }} [request]
    */
   async function stop(launchId, request = {}) {
+    const t = createTranslator(request.lang)
     const current = await ensureState()
     const record = current.launches.find((entry) => entry.id === launchId)
     if (record === undefined) throw Object.assign(new Error(t('error.unknownLaunch', { id: launchId })), { code: 'UNKNOWN_LAUNCH' })
@@ -389,7 +395,8 @@ export function createLaunchService(options = {}) {
    * @param {number} offset 起始行号（0 起）
    * @param {number} limit
    */
-  async function logs(launchId, offset = 0, limit = 400) {
+  async function logs(launchId, offset = 0, limit = 400, lang) {
+    const t = createTranslator(lang)
     const currentState = await ensureState()
     const record = currentState.launches.find((entry) => entry.id === launchId)
     if (record === undefined) throw Object.assign(new Error(t('error.unknownLaunch', { id: launchId })), { code: 'UNKNOWN_LAUNCH' })
@@ -420,7 +427,7 @@ export function createLaunchService(options = {}) {
       label: record.label,
       taskPath: record.taskPath,
       root: record.root,
-      diagnosis: abnormal ? diagnose(all.slice(-300)) : undefined,
+      diagnosis: abnormal ? diagnose(all.slice(-300), lang) : undefined,
     }
   }
 
@@ -471,7 +478,7 @@ export function createLaunchService(options = {}) {
   function crashSummary(record) {
     if (record.outcome === 'normal') return undefined
     if (record.exitCode === null) return undefined
-    return t('summary.exitCode', { code: record.exitCode })
+    return createTranslator(record.lang)('summary.exitCode', { code: record.exitCode })
   }
 
   return { start, stop, list, current, logs, ensureState, stateDir: dir }

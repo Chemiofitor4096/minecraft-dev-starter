@@ -5,10 +5,10 @@
  * 证据、警告、冲突、归因、错误。它们出现在详情页与日志页，所以同样要跟着语言走。
  *
  * 语言从哪来：宿主插件的 ctx 里**没有** locale 服务（那是网页客户端那一层的），
- * 所以由客户端每次请求带上 `lang`，HTTP 入口收到后调 `setLanguage`。
- * 拿不到就用 zh——与 0.1.12 的行为一致。
+ * 所以由客户端每次请求带上 `lang`，再作为参数一路传进 detect / launch；拿不到就用 zh。
  *
- * 语言是进程级的：DSH 同时只有一个界面语言，并发请求不会各说各话。
+ * 语言是**调用参数**，不是进程状态：中英两个请求并发时，进程级的语言会互相改写
+ * （2026-11-14 之前就是这样，M28 清掉了）。
  *
  * @module minecraft-dev-starter/lib/messages
  */
@@ -179,10 +179,8 @@ export const en = {
   'summary.exitCode': 'exit code {code}',
 }
 
-/** 当前语言：'zh' | 'en'。默认 zh，与 0.1.12 一致。 */
-let language = 'zh'
-
 /**
+ * 认语言：只认 zh / en，其余退回 zh。
  * @param {unknown} value
  * @returns {'zh' | 'en'}
  */
@@ -193,34 +191,17 @@ export function normalizeLanguage(value) {
 }
 
 /**
- * 设置进程语言。传 undefined / 认不出的值都退回 zh。
- * @param {unknown} value
- * @returns {'zh' | 'en'}
+ * 造一个**绑定到某种语言**的取词函数。
+ *
+ * 语言是调用参数，不是进程状态：宿主同时可能收到中英两个请求（客户端各自带 `lang`），
+ * 进程级的 `setLanguage` 会让它们互相改写（M20 记的债，2026-11-15 清掉）。
+ * 拿不到语言就用 zh——与 0.1.12 的行为一致。
+ * @param {unknown} [lang]
+ * @returns {(key: string, params?: Record<string, string | number | undefined | null>) => string}
  */
-export function setLanguage(value) {
-  language = normalizeLanguage(value)
-  return language
-}
-
-/** @returns {'zh' | 'en'} */
-export function currentLanguage() {
-  return language
-}
-
-/** @returns {Record<string, string>} */
-export function dictionary() {
-  return language === 'en' ? en : zh
-}
-
-/**
- * 取词。
- * @param {string} key
- * @param {Record<string, string | number | undefined | null>} [params]
- * @returns {string}
- */
-export function t(key, params) {
-  const text = dictionary()[key] ?? zh[key] ?? key
-  return interpolate(text, params)
+export function createTranslator(lang) {
+  const dictionary = normalizeLanguage(lang) === 'en' ? en : zh
+  return (key, params) => interpolate(dictionary[key] ?? zh[key] ?? key, params)
 }
 
 /**

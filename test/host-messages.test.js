@@ -14,7 +14,7 @@ import { createApi } from '../src/lib/api.js'
 import { detectProject } from '../src/lib/detect/detect.js'
 import { createLaunchService } from '../src/lib/launch/launches.js'
 import { diagnose } from '../src/lib/launch/launches.js'
-import { currentLanguage, en, setLanguage, t, zh } from '../src/lib/i18n/messages.js'
+import { createTranslator, en, normalizeLanguage, zh } from '../src/lib/i18n/messages.js'
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const jdks = [
@@ -73,78 +73,53 @@ test('en 与 zh 的参数占位符一致', () => {
   }
 })
 
-test('语言默认中文，认不出的值也退回中文', () => {
-  try {
-    setLanguage('en-US')
-    assert.equal(currentLanguage(), 'en')
-    setLanguage(undefined)
-    assert.equal(currentLanguage(), 'zh')
-    setLanguage('fr')
-    assert.equal(currentLanguage(), 'zh')
-    setLanguage('en')
-    assert.equal(currentLanguage(), 'en')
-    assert.equal(t('summary.notStarted'), 'The process failed to start')
-  } finally {
-    setLanguage('zh')
-  }
+test('语言是调用参数：认不出的值退回中文', () => {
+  assert.equal(normalizeLanguage('en-US'), 'en')
+  assert.equal(normalizeLanguage(undefined), 'zh')
+  assert.equal(normalizeLanguage('fr'), 'zh')
+  assert.equal(createTranslator('en')('summary.notStarted'), 'The process failed to start')
+  assert.equal(createTranslator('zh')('summary.notStarted'), zh['summary.notStarted'])
+  assert.equal(createTranslator()('summary.notStarted'), zh['summary.notStarted'])
 })
 
 test('中文的标点没有被英文侧带偏', () => {
-  try {
-    setLanguage('zh')
-    // 列举用顿号，句子之间用全角分号——都是 0.1.12 的原样
-    assert.equal(t('list.separator'), '、')
-    assert.equal(t('list.clauseSeparator'), '；')
-    setLanguage('en')
-    assert.equal(t('list.separator'), ', ')
-    assert.equal(t('list.clauseSeparator'), '; ')
-  } finally {
-    setLanguage('zh')
-  }
+  // 列举用顿号，句子之间用全角分号——都是 0.1.12 的原样
+  assert.equal(createTranslator('zh')('list.separator'), '、')
+  assert.equal(createTranslator('zh')('list.clauseSeparator'), '；')
+  assert.equal(createTranslator('en')('list.separator'), ', ')
+  assert.equal(createTranslator('en')('list.clauseSeparator'), '; ')
 })
 
 test('每条归因规则都有中英两版 hint / suggestion', () => {
-  try {
-    for (const [line, code] of DIAGNOSIS_SAMPLES) {
-      setLanguage('zh')
-      const china = diagnose([line])
-      assert.equal(china?.code, code, `没命中 ${code}`)
-      assert.notEqual(china?.hint, `diagnosis.${code}.hint`, `${code} 的 hint 缺失`)
-      assert.notEqual(china?.suggestion, `diagnosis.${code}.suggestion`, `${code} 的 suggestion 缺失`)
+  for (const [line, code] of DIAGNOSIS_SAMPLES) {
+    const china = diagnose([line], 'zh')
+    assert.equal(china?.code, code, `没命中 ${code}`)
+    assert.notEqual(china?.hint, `diagnosis.${code}.hint`, `${code} 的 hint 缺失`)
+    assert.notEqual(china?.suggestion, `diagnosis.${code}.suggestion`, `${code} 的 suggestion 缺失`)
 
-      setLanguage('en')
-      const english = diagnose([line])
-      assert.equal(english?.code, code)
-      assertNoChinese(english?.hint, `${code} hint`)
-      assertNoChinese(english?.suggestion, `${code} suggestion`)
-    }
-  } finally {
-    setLanguage('zh')
+    const english = diagnose([line], 'en')
+    assert.equal(english?.code, code)
+    assertNoChinese(english?.hint, `${code} hint`)
+    assertNoChinese(english?.suggestion, `${code} suggestion`)
   }
 })
 
 test('英文模式下识别结果里零中文，中文模式下与 0.1.12 原文案一致', async () => {
-  try {
-    setLanguage('en')
-    const english = await detectProject(join(fixtures, 'fabric'), { jdks })
-    for (const text of visibleText(english)) assertNoChinese(text, 'fabric 英文证据')
+  const english = await detectProject(join(fixtures, 'fabric'), { jdks, lang: 'en' })
+  for (const text of visibleText(english)) assertNoChinese(text, 'fabric 英文证据')
 
-    const englishMulti = await detectProject(join(fixtures, 'forge'), { jdks })
-    for (const text of visibleText(englishMulti)) assertNoChinese(text, 'forge 英文证据')
+  const englishMulti = await detectProject(join(fixtures, 'forge'), { jdks, lang: 'en' })
+  for (const text of visibleText(englishMulti)) assertNoChinese(text, 'forge 英文证据')
 
-    setLanguage('zh')
-    const china = await detectProject(join(fixtures, 'fabric'), { jdks })
-    // 结构与语言无关：条数一样，只有文字变了
-    assert.equal(china.evidence.length, english.evidence.length)
-    assert.equal(china.warnings.length, english.warnings.length)
-    assert.ok(
-      visibleText(china).some((text) => text.includes('Gradle 构建脚本')),
-      '中文模式下应保留 0.1.12 的原文案',
-    )
-    assert.ok(visibleText(english).some((text) => text.includes('Gradle build script')))
-  } finally {
-    setLanguage('zh')
-  }
+  const china = await detectProject(join(fixtures, 'fabric'), { jdks, lang: 'zh' })
+  // 结构与语言无关：条数一样，只有文字变了
+  assert.equal(china.evidence.length, english.evidence.length)
+  assert.equal(china.warnings.length, english.warnings.length)
+  assert.ok(
+    visibleText(china).some((text) => text.includes('Gradle 构建脚本')),
+    '中文模式下应保留 0.1.12 的原文案',
+  )
+  assert.ok(visibleText(english).some((text) => text.includes('Gradle build script')))
 })
 
 test('扫描缓存按语言分开：切英文后不会拿到中文那份', async () => {
@@ -160,16 +135,40 @@ test('扫描缓存按语言分开：切英文后不会拿到中文那份', async
       ],
     })
 
-    setLanguage('zh')
-    const china = await api['projects.scan']({})
+    const china = await api['projects.scan']({ lang: 'zh' })
     assert.ok(visibleText(china.projects[0]).some((text) => text.includes('Gradle 构建脚本')))
 
     // 不带 refresh：正常会命中缓存。缓存 key 里没有语言的话，这里仍是中文。
-    setLanguage('en')
-    const english = await api['projects.scan']({})
+    const english = await api['projects.scan']({ lang: 'en' })
     for (const text of visibleText(english.projects[0])) assertNoChinese(text, '缓存后的英文证据')
   } finally {
-    setLanguage('zh')
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('两个请求并发时各用各的语言（进程级语言已去掉）', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mcdev-lang-'))
+  try {
+    const api = createApi({
+      resolveRoot: async () => join(fixtures, 'fabric'),
+      version: '0.0.0-test',
+      launchService: createLaunchService({ dir }),
+      jdkDir: dir,
+      listJdks: async () => [
+        { home: 'C:/fake/jdk21', version: '21.0.7', major: 21, source: 'release' },
+      ],
+    })
+
+    const [english, china] = await Promise.all([
+      api['projects.scan']({ lang: 'en', refresh: true }),
+      api['projects.scan']({ lang: 'zh', refresh: true }),
+    ])
+    for (const text of visibleText(english.projects[0])) assertNoChinese(text, '并发英文证据')
+    assert.ok(
+      visibleText(china.projects[0]).some((text) => text.includes('Gradle 构建脚本')),
+      '并发中文请求被英文请求改写了',
+    )
+  } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })

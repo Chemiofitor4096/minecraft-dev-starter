@@ -8,7 +8,7 @@
 
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { t } from '../i18n/messages.js'
+import { createTranslator } from '../i18n/messages.js'
 import { readText } from '../util/text.js'
 
 /**
@@ -52,9 +52,11 @@ const GRADLE_JDK_FLOOR = {
  * 判断 wrapper 的 Gradle 能不能跑这个 JDK。
  * @param {string | undefined} gradleVersion
  * @param {number | undefined} javaMajor
+ * @param {unknown} [lang] 只用于那条 reason 文案
  * @returns {{ ok: boolean, reason?: string }}
  */
-export function gradleSupportsJava(gradleVersion, javaMajor) {
+export function gradleSupportsJava(gradleVersion, javaMajor, lang) {
+  const t = createTranslator(lang)
   if (gradleVersion === undefined || javaMajor === undefined) return { ok: true }
   const floor = GRADLE_JDK_FLOOR[javaMajor]
   if (floor === undefined) return { ok: true }

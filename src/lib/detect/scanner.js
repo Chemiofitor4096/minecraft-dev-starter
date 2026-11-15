@@ -124,7 +124,11 @@ export async function scanWorkspace(root, options = {}) {
   for (const dir of candidates) {
     if (options.signal?.aborted === true) break
     try {
-      projects.push(await detectProject(dir, { jdks, overrideJavaHome: options.overrides?.[projectKey(dir)] }))
+      projects.push(await detectProject(dir, {
+        jdks,
+        overrideJavaHome: options.overrides?.[projectKey(dir)],
+        lang: options.lang,
+      }))
     } catch (error) {
       projects.push({ root: dir, loader: 'unknown', error: error instanceof Error ? error.message : String(error) })
     }

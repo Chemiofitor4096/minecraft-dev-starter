@@ -13,7 +13,7 @@
  * @module minecraft-dev-starter/lib/verify
  */
 
-import { t } from '../i18n/messages.js'
+import { createTranslator } from '../i18n/messages.js'
 
 /** 目标模式：常驻，还是会跑完。 */
 export const MODES = ['daemon', 'oneshot']
@@ -101,6 +101,7 @@ function pick(lines, patterns, limit = 8) {
  * @returns {{ verdict: 'passed' | 'failed' | 'aborted' | 'error' | 'unknown', summary?: string, failures?: string[] }}
  */
 export function readVerdict(input) {
+  const t = createTranslator(input.lang)
   const lines = input.lines ?? []
   if (input.outcome === 'killed') return { verdict: 'aborted' }
   if (input.outcome === 'failed') return { verdict: 'error', summary: t('summary.notStarted') }

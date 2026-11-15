@@ -28,7 +28,7 @@ import { dependencyRanges, locateMetadata, primaryMetadata } from './metadata.js
 import { compareDependencies, parseBuildDependencies, parseVersionCatalog, resolveCatalogRefs, resolveDependencyPlaceholders, toModDependencies } from './deps.js'
 import { readText, resolvePlaceholders, parseProperties } from '../util/text.js'
 import { gradleSupportsJava, pickJdk, requiredJava } from '../launch/java.js'
-import { t } from '../i18n/messages.js'
+import { createTranslator } from '../i18n/messages.js'
 import { describeIdea, findOwningAggregator, loadersFromPlatforms, readIdeaProject, resolveProjectDir } from './idea.js'
 import { modeOf } from '../launch/verify.js'
 
@@ -77,6 +77,8 @@ const DEFAULT_TARGETS = {
  * @returns {Promise<Record<string, unknown>>}
  */
 export async function detectProject(root, options = {}) {
+  // 语言是调用参数：这条链上产出的证据 / 警告 / 冲突都按它取词（M28）
+  const t = createTranslator(options.lang)
   // 传进来的可能是 `.idea` 目录（从 IDE 里复制路径很常见）：退回工程根再识别
   root = resolveProjectDir(root)
   /** @type {Evidence[]} */
@@ -163,7 +165,7 @@ export async function detectProject(root, options = {}) {
     })
   }
   if (ownIdea !== undefined) {
-    evidence.push({ file: '.idea', kind: 'idea-model', detail: t('evidence.ideaModel', { summary: describeIdea(ownIdea) }) })
+    evidence.push({ file: '.idea', kind: 'idea-model', detail: t('evidence.ideaModel', { summary: describeIdea(ownIdea, options.lang) }) })
     if (ownIdea.gradleRoot !== undefined && ownIdea.gradleRoot.toLowerCase() !== root.toLowerCase()) {
       evidence.push({ file: '.idea/gradle.xml', kind: 'idea-gradle', detail: t('evidence.ideaGradleRoot', { root: ownIdea.gradleRoot }) })
     }
@@ -352,7 +354,7 @@ export async function detectProject(root, options = {}) {
   ])
 
   // ── 身份 ────────────────────────────────────────────────────────────
-  const identity = readIdentity(allMetadata, mergedProperties, root, warnings)
+  const identity = readIdentity(allMetadata, mergedProperties, root, warnings, t)
 
   // 聚合工程：根目录没有自己的元数据，元数据全在子模块里。
   // 这时**不能**把第一个子模块的身份当成整个工程的——否则 CTNH-Modules 会顶着
@@ -400,7 +402,7 @@ export async function detectProject(root, options = {}) {
       evidence,
     )
   } else {
-    mergeIdeaTargets(modules, idea, evidence)
+    mergeIdeaTargets(modules, idea, evidence, t)
   }
 
   const hasDeclaredTargets = modules.some((module) => module.targets.length > 0)
@@ -464,7 +466,7 @@ export async function detectProject(root, options = {}) {
   } else if (!picked.exact && javaRequired !== undefined) {
     warnings.push(t('warning.jdkFallback', { version: javaRequired, home: picked.home }))
   }
-  const gradleCheck = gradleSupportsJava(gradleVersion, javaRequired)
+  const gradleCheck = gradleSupportsJava(gradleVersion, javaRequired, options.lang)
   if (!gradleCheck.ok && gradleCheck.reason !== undefined) warnings.push(gradleCheck.reason)
   if (properties['org.gradle.configuration-cache'] === 'true') {
     warnings.push(t('warning.configurationCache'))
@@ -649,7 +651,7 @@ const LABEL_BY_KIND = {
  * @param {import('./idea.js').IdeaProject | undefined} idea
  * @param {Evidence[]} evidence
  */
-function mergeIdeaTargets(modules, idea, evidence) {
+function mergeIdeaTargets(modules, idea, evidence, t) {
   if (idea === undefined) return
   /** @type {Map<string, Array<{ kind: string, name: string }>>} */
   const byModule = new Map()
@@ -798,7 +800,7 @@ async function versionFromMetadata(hits) {
  * @param {string} root
  * @param {string[]} warnings
  */
-function readIdentity(hits, properties, root, warnings) {
+function readIdentity(hits, properties, root, warnings, t) {
   const primary = primaryMetadata(hits)
   const data = primary?.data ?? {}
   /** @type {string[]} */

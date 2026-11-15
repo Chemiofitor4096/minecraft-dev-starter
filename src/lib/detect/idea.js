@@ -7,7 +7,7 @@
 
 import { readdir, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, normalize, relative, sep } from 'node:path'
-import { t } from '../i18n/messages.js'
+import { createTranslator } from '../i18n/messages.js'
 import { readText } from '../util/text.js'
 import { attrOf, childOf, componentOf, findFirst, findAll, optionValue, parseXml, rootOf, textOf } from './xml.js'
 
@@ -740,7 +740,8 @@ function summarizeLibraries(storage, file, entries, syncedAt) {
  * @param {IdeaProject} idea
  * @returns {string}
  */
-export function describeIdea(idea) {
+export function describeIdea(idea, lang) {
+  const t = createTranslator(lang)
   const parts = []
   if (idea.projectName !== undefined) parts.push(idea.projectName)
   if (idea.gradleModules.length > 0) parts.push(t('idea.modules', { count: idea.gradleModules.length }))
