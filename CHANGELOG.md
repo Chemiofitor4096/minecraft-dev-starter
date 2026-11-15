@@ -7,6 +7,28 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
+## [0.2.2] — 2026-11-15
+
+### Changed
+
+- Tool results are now consistently in Chinese. The tool's own rendered text was always Chinese, but the
+  evidence and warnings inside it followed the interface language, so an English UI produced a mixed
+  "Chinese summary + English evidence" result. Tools now use one language, and the interface keeps its
+  own: two requests in different languages can no longer overwrite each other's messages.
+
+### Internal
+
+- Language is a call parameter (`createTranslator(lang)`) instead of process state; the global
+  `setLanguage` is gone, and a run records the language it was started with so the exit summary matches.
+- Workspace resolution has a single entry point, `resolveRoot(root, workspace, lang)`. Tools pass
+  `{ root, workspace }` and no longer resolve paths themselves, so the "who is my workspace" rule lives
+  in one place.
+- `src/tools.js` (1058 lines) split into one file per tool plus `render.js`, `shared.js` and `index.js`;
+  tool definitions are byte-identical to before.
+- `npm run check:release` gates a publish on a clean tree, a version that matches the CHANGELOG, an
+  unpublished version and a green CI for HEAD. A two-session regression test now covers the "shared
+  last session" bug behind 0.2.1.
+
 ## [0.2.1] — 2026-11-14
 
 ### Fixed

@@ -26,7 +26,9 @@ IDEA 风格的运行控件（选中目标 → 启动 / 停止 / 看日志）。
 
 ```
 src/index.js          宿主入口：inject + apply，挂 HTTP 路由与工具
-src/tools.js          八个模型工具（mc_projects / mc_project_detail / mc_mod_init / mc_set_group / mc_launch / mc_launch_logs / mc_launch_list / mc_launch_stop）
+src/tools/            八个模型工具，一个工具一个文件（`mc_*.js`）+ `index.js`（只做注册与挂载）
+  render.js           纯文本渲染：结论、目标、IDE 摘要、状态词（中文）
+  shared.js           工作区身份、按步挂载判定、启动等待、输出值整形
 src/lib/              领域层。跨层依赖单向：detect / launch 可以用 util、i18n，反过来不行
   api.js              /mcdev/api 的方法实现（scan / detail / state / launch.*），唯一聚合点
   state.js            ~/.dsh/mc-dev-starter 下的状态与日志（运行记录按 profile 分目录）
@@ -64,7 +66,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs / check-release.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 237 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 239 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -578,22 +580,46 @@ mmyddd 的 PR #1 合进来：`.idea` 成为第二证据源，聚合工程的子�
   绝对路径一律 `join(process.cwd(), …)` 现算，不写 `C:/…`。
 - 237 个测试。CI 增加守卫生效之后，发版顺序固定为：测试 → `check:pack` → **`check:release`** → `stage publish`。
 
-## 架构边界（2026-11-14 复核）
+### M28 工作区与语言都变成调用参数（2026-11-15）
 
-量过的数字（行数）：`tools.js` 952、`detect/detect.js` 771、`detect/idea.js` 654、
-`client/views/DetailTab.js` 690、`launch/launches.js` 480、`lib/api.js` 377、`scaffold.js` 341。
+P1 的三件事一起做，共同的判断是：**"当前是什么"这类环境状态，要从调用方显式传下来**，
+进程级/全局的默认值正是 M26 那个 bug 的土壤。
 
-- **边界成立**：客户端只 import `client/lib`；`tools.js` 通过 `deps.api` 拿服务，不 import `api.js`；
+- **工作区解析收敛到一处**：`api.resolveRoot(root, workspace, lang)`。调用方（工具）只交出
+  `{ root, workspace }`——`root` 可以是相对路径，`workspace` 是它自己的会话 cwd；工具里不再拼路径
+  （`agentRoot` 删掉，换成 `rootArgs`）。`projects.scan / detail / setGroup / jdk.set / launch.start /
+  launch.current / launch.list` 全部走同一个入口，`launch.list` 也顺带改成"先解析再按 `isInside` 比"，
+  不再拿裸字符串小写比较。
+- **语言参数化**：`setLanguage` / `currentLanguage` 删除，换成 `createTranslator(lang)`。
+  语言从请求体的 `lang` 一路作为参数传到 `scanWorkspace → detectProject → describeIdea /
+  mergeIdeaTargets / readIdentity / gradleSupportsJava`、`launches.start / stop / logs`、`diagnose`、
+  `readVerdict`；宿主入口不再改全局，只把 payload 原样交给方法。
+  **启动记录里存 `lang`**：进程退出是在异步回调里写 summary 的，那时已经拿不到请求，所以
+  `record.lang` 记住"这次是用什么语言起的"。
+- **工具的语言**：工具不带 `lang`，所以工具输出（值里的证据/警告）稳定是中文，与它本来就用中文写死的
+  渲染文案一致——以前是"中文渲染 + 跟着界面变的英文证据"的混排。
+- **回归**：`test/host-messages.test.js` 改写为传 `lang`，并新增一条**并发**用例：同一个 api 实例上
+  同时发 `lang: 'en'` 与 `lang: 'zh'` 两次扫描，断言各自的语言互不影响（这正是旧实现做不到的）。
+- 239 个测试。
+
+## 架构边界（2026-11-15 复核）
+
+量过的数字（行数）：`detect/detect.js` 826、`client/views/DetailTab.js` 732、`detect/idea.js` 708、
+`launch/launches.js` 524、`lib/api.js` 358、`tools/` 11 个文件共 1058（最大 `mc_project_detail.js` 242）。
+
+- **边界成立**：客户端只 import `client/lib`；`tools/` 通过 `deps.api` 拿服务，不 import `api.js`；
   领域层（detect / launch）不 import 门面。
-- **`api.js` 是门面，不是上帝对象**：14 个方法、每个 5–20 行，只做"解析 root → 校验工作区 →
-  调领域服务 → 拼返回"。策略已全部下沉（JDK 选择在 `launch/jdks.js`，资源提示在 `launch/assets.js`）。
-- **真正在长的是 `tools.js`**：八个工具 ×（schema + execute + render）加十来个渲染辅助挤在一个文件里。
+- **`api.js` 是门面，不是上帝对象**：18 个方法、每个 5–20 行，只做"解析 root → 校验工作区 →
+  调领域服务 → 拼返回"。策略已全部下沉（JDK 选择在 `launch/jdks.js`，资源提示在 `launch/assets.js`，
+  工作区解析在 `resolveRoot(root, workspace, lang)`，取词在 `createTranslator(lang)`）。
+- **`tools.js` 已经在 2026-11-15 拆掉**（当时 1058 行）：一个工具一个文件，渲染进 `render.js`，
+  共享件进 `shared.js`，`index.js` 只剩注册表。下一步的增长点是 `mc_project_detail.js`（242 行）与
+  `detect.js`（826 行）。
 - **拆分触发条件**（不到就别拆，拆了只是"更多文件"）：
-  - `tools.js` > 1000 行，或再加第九个工具 → 按工具拆 `src/tools/<name>.js`，
-    渲染辅助进 `src/tools/render.js`，`index.js` 只留 `applyTools` 循环；
+  - `detect/detect.js` > 900 行 → 把 `.idea` 交叉判断与目标合并拆成独立文件（现在 826）；
   - `api.js` > 500 行，或出现第二个入口（CLI / MCP / 独立 route）→ `src/lib/api/` 按
     `projects.*` / `launch.*` / `shared` 拆；
-  - `DetailTab.js` > 800 行 → 再拆子组件（现在还是一个组件的自然长度）。
+  - `DetailTab.js` > 800 行 → 再拆子组件（现在 732，还是一个组件的自然长度）。
 
 ## 发布记录
 
@@ -662,6 +688,3 @@ npm 包页面上会出现两条告警，都来自 peer 依赖图，不是本包�
 ## 还没做的事
 
 - 桌面版目前仍用 `link:` 安装（改代码即时生效）；切到 npm 版本需要每次改完都发版。
-- 宿主语言还是进程级的（`src/lib/i18n/messages.js` 的 `setLanguage`）：界面请求会改全局，工具输出跟着变，
-  两个语言不同的并发请求理论上会串；`src/tools.js` 的渲染文案也还没进词典。要干净解决，得把 `lang`
-  做成 detect / launches 的调用参数，而不是模块级状态。
