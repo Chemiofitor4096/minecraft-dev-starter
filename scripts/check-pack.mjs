@@ -17,7 +17,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const REQUIRED = [
   'lib/client.js',
   'src/index.js',
-  'src/tools.js',
+  'src/tools/index.js',
   'cordis.patch.yml',
   'README.md',
   'README.zh_CN.md',

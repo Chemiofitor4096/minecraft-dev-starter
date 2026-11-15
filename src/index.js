@@ -11,7 +11,7 @@ import { createApi } from './lib/api.js'
 import { createLaunchService } from './lib/launch/launches.js'
 import { setLanguage } from './lib/i18n/messages.js'
 import { profileName, stateDir } from './lib/state.js'
-import { applyTools } from './tools.js'
+import { applyTools } from './tools/index.js'
 
 /** Cordis 插件名。 */
 export const name = 'mcdev-host'

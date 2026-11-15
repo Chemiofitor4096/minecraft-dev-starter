@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { isAbsolute, join } from 'node:path'
 import { test } from 'node:test'
-import { applyTools } from '../src/tools.js'
+import { applyTools } from '../src/tools/index.js'
 
 function fakeCtx() {
   /** @type {Array<any>} */
