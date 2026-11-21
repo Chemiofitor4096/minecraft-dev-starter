@@ -66,7 +66,8 @@ Agent 骨架（loader 无关） ──调用──▶ DataAdapter（每个 loade
 
 ### 3.1 导出格式（线上格式，带版本）
 
-一次导出 = 一个 JSON，tmp + rename 落盘。
+**权威定义是 [dump-v1.schema.json](./schema/dump-v1.schema.json)**（JSON Schema 2020-12）；
+下面是为了让人读得懂的摘要。一次导出 = 一个 JSON，tmp + rename 落盘。
 
 ```jsonc
 {

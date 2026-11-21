@@ -1,6 +1,7 @@
 # 策划：agent 插件（minecraft-dev-starter-agent）
 
 配套文档：[拓展：MC 数据导出](./拓展-MC数据导出.md) 定义了 dump 格式、jar 契约与两包边界；
+**dump 的权威定义是 [dump-v1.schema.json](./schema/dump-v1.schema.json)**。
 本文是**落地计划**——这个插件由哪些东西组成、按什么顺序做、怎么验。
 
 ---

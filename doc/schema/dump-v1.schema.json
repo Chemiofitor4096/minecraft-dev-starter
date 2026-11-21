@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Chemiofitor4096/minecraft-dev-starter/blob/main/doc/schema/dump-v1.schema.json",
+  "title": "minecraft-dev-starter-agent dump v1",
+  "description": "一次运行期导出的快照。允许新增字段（读方忽略未知字段）；删改语义必须把 schema 加一。",
+  "type": "object",
+  "required": [
+    "schema",
+    "generatedAt",
+    "env",
+    "provenance",
+    "truncated",
+    "truncatedSections",
+    "registries",
+    "tags",
+    "recipes",
+    "warnings",
+    "errors"
+  ],
+  "properties": {
+    "schema": { "const": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "env": {
+      "type": "object",
+      "required": ["via", "loader", "mcVersion", "mappings", "adapter", "side"],
+      "properties": {
+        "via": { "enum": ["agent-boot", "agent-attach"] },
+        "loader": { "enum": ["neoforge", "fabric", "forge"] },
+        "loaderVersion": { "type": ["string", "null"] },
+        "mcVersion": { "type": "string" },
+        "mappings": { "enum": ["mojmap", "yarn"] },
+        "adapter": { "type": "string", "description": "用了哪张适配器表，例如 neoforge/mojmap/1.21@1" },
+        "side": { "enum": ["server", "client"] },
+        "java": { "type": ["integer", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["sourceHash", "durationMs"],
+      "properties": {
+        "projectRoot": { "type": ["string", "null"] },
+        "sourceHash": { "type": "string" },
+        "durationMs": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "truncated": { "type": "boolean" },
+    "truncatedSections": { "type": "array", "items": { "enum": ["registries", "tags", "recipes"] } },
+    "registries": {
+      "type": "object",
+      "description": "键是注册表 id（minecraft:item / minecraft:block …）；失败的 section 是 count=0 且 entries=[]，并在 errors 里点名。",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["count", "entries"],
+        "properties": {
+          "count": { "type": "integer", "minimum": 0 },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "owner"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z0-9_.-]+:[a-z0-9_./-]+$" },
+                "owner": { "type": "string", "description": "id 的命名空间，不额外猜来源" },
+                "class": { "type": ["string", "null"] },
+                "props": {
+                  "type": "object",
+                  "description": "跨 loader 同义的字段；读不到是 null，不省略键",
+                  "properties": {
+                    "maxStackSize": { "type": ["integer", "null"] },
+                    "maxDamage": { "type": ["integer", "null"] },
+                    "hardness": { "type": ["number", "null"] },
+                    "burnTime": { "type": ["integer", "null"] }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "tags": {
+      "type": "object",
+      "description": "注册表 id → 标签 id → 成员 id 列表（已排序）。",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "recipes": {
+      "type": "object",
+      "required": ["count", "entries"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "type"],
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "type": "string" },
+              "result": {
+                "type": ["object", "null"],
+                "required": ["item", "count"],
+                "properties": {
+                  "item": { "type": "string" },
+                  "count": { "type": "integer", "minimum": 1 }
+                },
+                "additionalProperties": true
+              },
+              "ingredients": {
+                "type": ["array", "null"],
+                "description": "按层分组；每层是该位置允许的物品集合",
+                "items": { "type": "array", "items": { "type": "string" } }
+              },
+              "json": { "type": ["object", "null"], "description": "v1 固定 null（D17）" }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "warnings": {
+      "type": "array",
+      "description": "读得到但缺字段之类的情况；一条一个具体位置，不写泛泛的“可能不完整”。",
+      "items": { "type": "string" }
+    },
+    "errors": {
+      "type": "array",
+      "description": "section 级失败。空数组表示三类数据都拿到了；有值时对应 section 的 count 为 0。",
+      "items": {
+        "type": "object",
+        "required": ["section", "message"],
+        "properties": {
+          "section": { "enum": ["registries", "tags", "recipes", "env", "write"] },
+          "message": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
