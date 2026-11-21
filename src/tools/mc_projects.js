@@ -1,3 +1,4 @@
+import { basename } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { rootArgs } from './shared.js'
 import { renderProjects } from './render.js'
@@ -32,6 +33,7 @@ export function mcProjectsTool(api) {
                 root: { type: 'string' },
                 loader: { type: 'string' },
                 minecraftVersion: { type: 'string' },
+                error: { type: 'string' },
                 targets: { type: 'array', items: { type: 'string' } },
               },
             },
@@ -47,10 +49,11 @@ export function mcProjectsTool(api) {
         root: scan.root,
         truncated: scan.truncated === true,
         projects: (scan.projects ?? []).map((project) => ({
-          name: project.name,
+          name: project.name ?? basename(project.root),
           root: project.root,
           loader: project.loader,
           minecraftVersion: project.minecraftVersion ?? '',
+          ...(typeof project.error === 'string' ? { error: project.error } : {}),
           targets: (project.runTargets ?? []).map((target) => `${target.taskPath}${target.guessed === true ? ' (guessed)' : ''}`),
         })),
       }

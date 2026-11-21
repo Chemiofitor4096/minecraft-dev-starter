@@ -141,9 +141,27 @@ test('mc_projects 输出紧凑列表并可渲染', async () => {
   const value = await byName.mc_projects.execute({}, {})
   assert.equal(value.root, 'C:/p')
   assert.equal(value.projects[0].targets[0], 'runClient')
+  assertLossless(value)
   const blocks = byName.mc_projects.output.render({}, value)
   assert.match(blocks[0].text, /demo/)
   assert.match(blocks[0].text, /neoforge/)
+})
+
+test('mc_projects 保留扫描失败的子模块，输出仍是无损 JSON', async () => {
+  const root = join(process.cwd(), 'modules', 'broken')
+  const { byName } = build({
+    'projects.scan': async () => ({
+      root: process.cwd(),
+      truncated: false,
+      projects: [{ root, loader: 'unknown', error: 'detection failed' }],
+    }),
+  })
+  const value = await byName.mc_projects.execute({}, {})
+  assertLossless(value)
+  assert.equal(value.projects[0].name, 'broken')
+  assert.equal(value.projects[0].error, 'detection failed')
+  assert.deepEqual(value.projects[0].targets, [])
+  assert.match(byName.mc_projects.output.render({}, value)[0].text, /broken · 识别失败：detection failed/)
 })
 
 test('mc_launch 默认等到运行态', async () => {

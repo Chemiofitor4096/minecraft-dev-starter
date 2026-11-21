@@ -2,7 +2,9 @@
  * 扫描器回归：只找出真工程，不把 build/、reference/ 下的干扰项算进来。
  */
 import assert from 'node:assert/strict'
-import { join, dirname, basename, relative } from 'node:path'
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import { scanWorkspace } from '../src/lib/detect/scanner.js'
@@ -49,4 +51,35 @@ test('没有 .idea 时用 settings.gradle 的 include 拆子工程', async () =>
     ['modules/alpha', 'modules/beta'],
   )
   assert.ok(result.projects.every((project) => project.idea === undefined))
+})
+
+test('IDEA 运行配置补出的子模块目标继承父工程 wrapper', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'mcdev-scan-idea-run-'))
+  const demo = join(scratch, 'demo')
+  const fixture = join(dirname(fileURLToPath(import.meta.url)), 'fixtures-multi', 'demo')
+  try {
+    await cp(fixture, demo, { recursive: true })
+    const moduleRoot = join(demo, 'modules', 'core')
+    await writeFile(
+      join(moduleRoot, 'build.gradle'),
+      [
+        "plugins { id 'net.neoforged.moddev' version '2.0.147' }",
+        "neoForge { version = '21.1.251' }",
+      ].join('\n'),
+    )
+
+    const result = await scanWorkspace(demo, { jdks: [] })
+    const core = result.projects.find((project) => project.root === moduleRoot)
+    assert.ok(core, '扫描结果应保留 core 子模块')
+    assert.equal(core.error, undefined)
+    assert.equal(core.modulePath, 'modules/core')
+    assert.equal(core.loader, 'neoforge')
+    assert.equal(core.gradleRoot, demo)
+    assert.equal(core.wrapper, true)
+    assert.deepEqual(core.runTargets.map((target) => target.taskPath), [':modules:core:runClient'])
+    assert.equal(core.runTargets[0].source, 'idea-run-config')
+    assert.ok(core.evidence.some((entry) => entry.kind === 'idea-run-config' && entry.detail.includes('Core Client')))
+  } finally {
+    await rm(scratch, { recursive: true, force: true })
+  }
 })

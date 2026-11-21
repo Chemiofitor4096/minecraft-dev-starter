@@ -55,6 +55,10 @@ export function renderProjects(value) {
   if (projects.length === 0) return `工作区 ${value.root} 里没有识别到 Minecraft 工程。`
   const lines = [`工作区 ${value.root}：${projects.length} 个工程`]
   for (const project of projects) {
+    if (typeof project.error === 'string') {
+      lines.push(`- ${project.name} · 识别失败：${project.error}`)
+      continue
+    }
     const targets = /** @type {string[]} */ (project.targets ?? [])
     const version = project.minecraftVersion === undefined || project.minecraftVersion === '' ? '' : ` ${project.minecraftVersion}`
     lines.push(

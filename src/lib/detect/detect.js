@@ -400,6 +400,7 @@ export async function detectProject(root, options = {}) {
           .map((config) => ({ ...config, modulePath: '.' })),
       },
       evidence,
+      t,
     )
   } else {
     mergeIdeaTargets(modules, idea, evidence, t)
@@ -650,6 +651,7 @@ const LABEL_BY_KIND = {
  * @param {ModuleInfo[]} modules
  * @param {import('./idea.js').IdeaProject | undefined} idea
  * @param {Evidence[]} evidence
+ * @param {ReturnType<typeof createTranslator>} t
  */
 function mergeIdeaTargets(modules, idea, evidence, t) {
   if (idea === undefined) return

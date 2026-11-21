@@ -80,7 +80,8 @@ export function DetailTab() {
   const compared = /** @type {Array<Record<string, any>>} */ (dependencies.compared ?? [])
   const comparedByModule = new Map(compared.map((entry) => [String(entry.module), entry]))
   const syncedAt = typeof idea?.libraries?.syncedAt === 'string' ? idea.libraries.syncedAt : undefined
-  const wrapper = project.wrapper === true
+  const wrapper = project.wrapper
+  const detectionError = typeof project.error === 'string' ? project.error : undefined
 
   return h(
     'div',
@@ -107,9 +108,14 @@ export function DetailTab() {
       'div',
       { className: 'mcdev-status' },
       statusChip(running === undefined ? t('detail.status.idle') : launchState(running), running === undefined ? 'muted' : 'ok'),
-      statusChip(wrapper ? `Gradle ${text(project.gradleVersion)}` : t('detail.status.noWrapper'), wrapper ? 'muted' : 'warn'),
+      wrapper === true ? statusChip(`Gradle ${text(project.gradleVersion)}`, 'muted') : undefined,
+      wrapper === false ? statusChip(t('detail.status.noWrapper'), 'warn') : undefined,
       statusChip(jdkChipText(java), jdkTone(java)),
     ),
+
+    detectionError === undefined
+      ? undefined
+      : h('div', { className: 'mcdev-sec mcdev-error' }, t('detail.detectionFailed', { error: detectionError })),
 
     warnings.length === 0 && conflicts.length === 0
       ? undefined

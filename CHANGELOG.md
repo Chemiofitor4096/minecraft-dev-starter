@@ -32,6 +32,15 @@ break installations that look unrelated.
 - `projects.scan` / `ctx.mcdev.projects()` now treat `workspace` as the scan root when `root` is
   omitted. It used to only resolve a relative `root` against it and fall back to the host's default
   directory, so a caller passing just its own workspace silently scanned somewhere else.
+- A submodule of a multi-module aggregate project could fail detection with `t is not a function`
+  whenever the parent IDE had a run configuration for it, which dropped the whole profile down to an
+  "unrecognized project" — the panel then reported "no gradle wrapper" for a module whose wrapper lives
+  at the aggregate root. The translator was missing on the subproject branch of `mergeIdeaTargets`.
+- `mc_projects` returned `name: undefined` for a project whose detection threw, which the host rejected
+  as "value is not lossless JSON" and took the whole scan down with it; one broken module no longer hides
+  the rest, and the original error is reported per project instead.
+- The panel no longer claims "no gradle wrapper" when it does not know: the chip appears only for a
+  positive `false`, and a detection error is shown as its own line rather than as missing data.
 
 ### Internal
 
