@@ -6,6 +6,7 @@
  */
 
 import { modeOf } from '../lib/launch/verify.js'
+import { waitForLaunch } from '../lib/launch/wait.js'
 
 /**
  * 调用方会话的工作区（就是它的 cwd）。
@@ -90,19 +91,14 @@ export async function projectToolVisible(api, agent) {
  * @returns {Promise<Record<string, any> | undefined>}
  */
 export async function waitForSettle(api, launchId, timeoutMs, signal, until = 'ready') {
-  const done = until === 'exit'
-    ? (status) => status === 'exited' || status === 'unknown'
-    : (status) => status === 'running' || status === 'exited' || status === 'unknown'
-  const started = Date.now()
-  while (Date.now() - started < timeoutMs) {
-    if (signal?.aborted === true) return undefined
-    const list = await api['launch.list']({})
-    const entry = list.find((item) => item.id === launchId)
-    if (entry === undefined) return undefined
-    if (done(entry.status)) return entry
-    await new Promise((resolve) => setTimeout(resolve, 400))
-  }
-  return undefined
+  const settled = await waitForLaunch({
+    list: () => api['launch.list']({}),
+    id: launchId,
+    until,
+    timeoutMs,
+    signal,
+  })
+  return settled.entry
 }
 
 /**

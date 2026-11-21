@@ -100,7 +100,29 @@ export function diagnose(lines, lang) {
  * @property {string} [module]
  * @property {string} [gradleRoot] 聚合工程根：子模块工程的任务要在这里跑
  * @property {string[]} [options] 已经格式化好的 Gradle 选项（放在任务名之前）
+ * @property {Record<string, string>} [env] 额外环境变量（如 JAVA_TOOL_OPTIONS 注入 javaagent）
  */
+
+/**
+ * 合并 spawn 环境：基础环境 ← 调用方给的 env ← 我们选的 JAVA_HOME。
+ *
+ * 顺序就是优先级：调用方可以加变量，但不能把 JDK 换掉——JDK 由 jdk.json / 面板决定，
+ * 那是本插件的契约。非字符串值直接丢弃，不让环境变量变成任意 JSON 的垃圾桶。
+ * @param {{ baseEnv?: NodeJS.ProcessEnv, requestEnv?: Record<string, string>, javaHome?: string }} input
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function composeEnv({ baseEnv = process.env, requestEnv, javaHome } = {}) {
+  const env = { ...baseEnv }
+  if (requestEnv !== undefined && requestEnv !== null && typeof requestEnv === 'object') {
+    for (const [key, value] of Object.entries(requestEnv)) {
+      if (typeof key === 'string' && key !== '' && typeof value === 'string') env[key] = value
+    }
+  }
+  // 指定了 JDK 就一起接管 JAVA_HOME：gradlew 自己要用它找 java，
+  // 只传 -Dorg.gradle.java.home 在"默认 java 太老"的机器上连 wrapper 都起不来。
+  if (typeof javaHome === 'string' && javaHome !== '') env.JAVA_HOME = javaHome
+  return env
+}
 
 /**
  * @param {{ dir?: string, legacyDir?: string, platform?: string, spawnImpl?: typeof spawn, maxLogLines?: number, readyTimeoutMs?: number, commandFor?: typeof gradlewCommand, env?: NodeJS.ProcessEnv }} [options]
@@ -234,7 +256,8 @@ export function createLaunchService(options = {}) {
           windowsVerbatimArguments: command.windowsVerbatimArguments,
           // 指定了 JDK 就一起接管 JAVA_HOME：gradlew 自己要用它找 java，
           // 只传 -Dorg.gradle.java.home 在"默认 java 太老"的机器上连 wrapper 都起不来。
-          env: javaHome === undefined ? baseEnv : { ...baseEnv, JAVA_HOME: javaHome },
+          // 调用方（插件服务）的 env 在中间层：能加变量，不能换 JDK。
+          env: composeEnv({ baseEnv, requestEnv: request.env, javaHome }),
           // Windows 上不能 detached：DETACHED_PROCESS 与 CREATE_NO_WINDOW 组合后
           // 子进程的标准输出会整个丢掉（实测同一命令 detached 拿到 0 字节、
           // attached 拿到完整输出），顺带还会让 java 自己新开一个可见控制台。

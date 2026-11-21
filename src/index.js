@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { createApi } from './lib/api.js'
 import { createLaunchService } from './lib/launch/launches.js'
+import { createMcdevService } from './lib/service.js'
 import { profileName, stateDir } from './lib/state.js'
 import { applyTools } from './tools/index.js'
 
@@ -147,6 +148,15 @@ export function apply(ctx, config = {}) {
 
   // 面板与模型共用同一套服务；工具只是薄封装（M5）
   applyTools(ctx, { api })
+
+  // 给别的 DSH 插件用的窄接口（M29）：只暴露"带 env 跑目标"所需的那一小撮。
+  // 消费方 `inject: ['mcdev']` 拿到 ctx.mcdev；我们这里不认识任何消费方（单向依赖）。
+  const mcdev = createMcdevService({ api, version: VERSION })
+  if (typeof ctx.provide === 'function') {
+    ctx.provide('mcdev', mcdev)
+  } else {
+    console.warn('[mcdev] ctx.provide 不可用，插件间服务未暴露')
+  }
 
   // webServer 是**可选**的：纯 CLI / headless profile 里没有它，
   // 这时插件应当照常激活（工具可用），只是没有 HTTP 路由。

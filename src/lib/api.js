@@ -274,7 +274,7 @@ export function createApi(options) {
      * @param {unknown} payload
      */
     'launch.start': async (payload) => {
-      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, gradleRoot?: string, gradle?: Record<string, any>, extraArgs?: string[], workspace?: string, lang?: string }} */ (payload ?? {})
+      const input = /** @type {{ root?: string, taskPath?: string, label?: string, kind?: string, module?: string, gradleRoot?: string, gradle?: Record<string, any>, extraArgs?: string[], workspace?: string, lang?: string, env?: Record<string, string> }} */ (payload ?? {})
       const t = translatorFor(input)
       // 自由参数是旧接口，留着是为了兼容；新调用方一律走 gradle 对象。
       // 注意别叫 `options`：那会遮住 createApi 的 options，`options.resolveRoots` 变成
@@ -325,6 +325,8 @@ export function createApi(options) {
         options: gradleArgs,
         // 记下这次请求的语言：进程退出时（异步）要用它写 summary
         lang: input.lang,
+        // 额外环境变量（插件服务用它注入 javaagent）；不落盘，别把工程属性写进状态文件
+        ...(input.env === undefined ? {} : { env: input.env }),
       })
       console.log(`[mcdev] launch.start ${record.id} ${record.taskPath} @ ${root} (pid ${record.pid}${record.javaHome === null ? '' : `, jdk ${record.javaHome}`})`)
       const notice = await firstRunNotice({ loader: profile.loader, kind: target.kind })

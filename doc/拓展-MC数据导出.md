@@ -168,9 +168,43 @@ manifest:
 **退出码**：`0` 已写出；`10` 找不到游戏类（进程不对）；`11` 无可用 adapter；`12` 写盘失败。
 宿主**不单看退出码**：以 dump 文件是否存在 + `errors[]` 为准，退出码只用于归因。
 
-### 3.3 npm 包与宿主侧工具
+### 3.3 两个插件：starter 给服务，agent 插件给工具
 
-独立包 `minecraft-dev-starter-agent`（决策 D16），自带 jar，导出**纯函数 + 一个可选的 cordis 服务**：
+**决策（D22 修订）**：`mc_data_dump` / `mc_data_query` **不进 starter**。starter 的定位是"识别 + 托管启动"，
+数据导出是另一个能力；两者通过一个**服务**相连：
+
+```
+minecraft-dev-starter（本仓库）
+  ctx.provide('mcdev', { version, capabilities, launch, stop, list, resolveJava })
+        ▲
+        │ inject: ['mcdev']
+        │
+minecraft-dev-starter-agent（新包：DSH bundle + jar + 查询引擎）
+  注册 mc_data_dump / mc_data_query、自己的面板 tab、自己带 jar
+```
+
+starter 侧的服务（已在 0.2.2 之后落地，见 AGENTS M29）：
+
+```js
+// 消费方：export const inject = ['mcdev', 'tools']
+{
+  version: '0.3.0',
+  capabilities: ['launch', 'stop', 'list', 'resolve-java'],
+
+  // 复用单实例锁、JDK 选择、argv 顺序、就绪/结论、日志落盘
+  launch({ root, workspace, taskPath, env, wait, timeoutMs }): Promise<LaunchRecord>,
+  stop({ id?, root?, workspace? }): Promise<LaunchRecord>,
+  list({ root?, workspace? }): Promise<LaunchRecord[]>,
+  resolveJava({ root?, workspace? }): Promise<{ home, major, required } | undefined>,
+}
+```
+
+- `env` 是这条边界的核心：agent 插件把 `JAVA_TOOL_OPTIONS=-javaagent:…` 放进去，starter 负责合并到
+  spawn 环境（**JDK 仍然由 starter 决定，调用方换不掉**）。
+- `resolveJava` 给 attach 用（要按工程那个 JDK 起小程序）。
+- 依赖单向：starter **不认识** agent 插件；没装 agent 插件时，starter 一切照常。
+
+agent 插件内部的形状（细节见 `doc/策划-agent插件.md`）：
 
 ```js
 // 纯函数（可在测试里直接用，不碰进程）
@@ -179,24 +213,15 @@ AGENT_CAPABILITIES                    // ['dump', 'attach', 'sections:registries
 javaAgentOption({ out, sections, timeoutMs, loader, mappings, stop })  // → '-javaagent:…=out=…'
 parseDump(text)                       // → Dump；schema 不匹配抛 AGENT_SCHEMA_MISMATCH
 readLogMarkers(line)                  // → { kind: 'ready'|'section'|'wrote'|'failed'|'inert', … }
-
-// 服务（主包可选注入；没装就明确报错，不静默降级）
-ctx.mcdevAgent = {
-  version: '0.1.0',
-  schema: 1,
-  capabilities: [...],
-  jarPath,                             // 绝对路径，供 attach 用
-  attach({ pid, out, sections, timeoutMs }): Promise<DumpSummary>,
-}
+indexDump(dump) / query(index, …) / digest(index)   // 查询引擎
 ```
 
-主包**只依赖这个服务与纯函数**，不自己拼 `-javaagent` 字符串、不知道 jar 在哪。版本耦合靠：
+版本耦合靠：
 
-- `peerDependencies`：`minecraft-dev-starter-agent >= 0.1`；
-- 握手：`schema === 1` 且 `capabilities` 含所需项，否则 `AGENT_VERSION_MISMATCH`（要求升级探针包，
-  不是"凑合用"）。
+- `peerDependencies`：`minecraft-dev-starter >= 0.3`（要 `ctx.mcdev` 服务）；
+- 握手：`ctx.mcdev.capabilities` 含所需项，否则 `SERVICE_VERSION_MISMATCH`（要求升级，不"凑合用"）。
 
-宿主侧两个工具：
+**工具面只在上面的 agent 插件里**（这也是两个包的分工）：
 
 ```jsonc
 // mc_data_dump：起一次 headless 服务端（带 Agent），导出一份
@@ -204,14 +229,17 @@ ctx.mcdevAgent = {
 // → { path, cached, env, counts, warnings, errors, launch: { id, verdict } }
 
 // mc_data_query：只读，不启动任何东西
-{ "root": "…", "kind": "registry|tag|recipe", "registry": "minecraft:item",
-  "tag": "minecraft:planks", "filter": "coal", "limit": 200 }
-// → { matched, items, truncated, stale }
+{ "root": "…", "kind": "digest|registry|tag|recipe", "registry": "minecraft:item",
+  "tag": "minecraft:planks", "filter": "coal", "limit": 50 }
+// → { matched, items, truncated, nextOffset, stale }
 ```
 
 约定与现有工具一致：描述英文一到两句、`render` 中文、值里不放 `undefined`；没有数据时
 `mc_data_query` 报 `NO_DATA` 并提示先 `mc_data_dump`（不替调用方起进程）；`stale: true` 表示
 `sourceHash` 与当前工程不符（仍返回旧数据，但要说清楚）。
+
+**为什么不塞进 starter**：工具 schema 每步都要付 token（M25），数据能力是可选装；塞进去等于让
+所有 starter 用户替一个他们可能不用的功能付上下文，而且 starter 会变成"识别 + 启动 + 数据"三合一。
 
 ---
 
@@ -347,15 +375,17 @@ ctx.mcdevAgent = {
 
 ---
 
-## 7. 两个包的边界
+## 7. 三个产物的边界
 
-| 归属 | 内容 |
-|---|---|
-| **本仓库**（`minecraft-dev-starter`） | dump 的**消费侧**：`mc_data_dump` / `mc_data_query` 两个工具、缓存、面板「数据」区块、`parseDump` 的用法、失败码与文案 |
-| **新工作区**（`minecraft-dev-starter-agent`） | Agent jar（骨架 + adapter 表 + NeoForge/Fabric/Forge 适配器）、attach 入口、`javaAgentOption` / `parseDump` / `readLogMarkers`、jar 的构建与发布 |
+| 归属 | 内容 | 不做什么 |
+|---|---|---|
+| **本仓库**（`minecraft-dev-starter`） | `ctx.provide('mcdev')` 服务：`launch` / `stop` / `list` / `resolveJava`（含 `env` 合并与 JDK 决定权） | 不含 Java、不注册数据工具、不认识 agent 插件 |
+| **新工作区**（`minecraft-dev-starter-agent`，DSH bundle） | 两个工具（`mc_data_dump` / `mc_data_query`）、面板「数据」区块、缓存、查询引擎、失败码与文案 | 不自己 spawn Gradle（走 `ctx.mcdev`） |
+| **同上包内的 jar** | Agent 骨架 + adapter 表 + 各 loader 适配器 + attach 入口 | 不做查询、不碰宿主 |
 
-本仓库**不**包含任何 Java 源码，也不在 `prepack` 里构建 jar——这是选独立包的目的（主包照发，
-Agent 自己用 Gradle + 自己的 CI）。两边的唯一耦合是：`schema=1` + `capabilities` + 本文。
+本仓库**不**包含任何 Java 源码，也不在 `prepack` 里构建 jar——这是选独立包的目的（starter 照发，
+agent 插件自己用 Gradle + 自己的 CI）。两边的耦合只有两处：`ctx.mcdev` 服务（starter 已提供）
+与 dump 的 `schema=1` / `capabilities` 握手。
 
 ---
 
@@ -363,9 +393,10 @@ Agent 自己用 Gradle + 自己的 CI）。两边的唯一耦合是：`schema=1`
 
 | | 内容 | 判据 |
 |---|---|---|
-| M29 | Agent `boot` 骨架 + NeoForge/mojmap adapter + `mc_data_dump`（消费侧） | 真机 `C:\Projects\Test` 导出 item/block/tags/recipe 索引，条数与游戏内 `/give` 对得上 |
-| M30 | 缓存 + `mc_data_query` + 面板「数据」区块（只读表格 + 搜索） | 第二次调用 `cached: true` 且 < 100ms |
-| M31 | `attach` 模式 + Fabric/yarn adapter + 配方完整 JSON | attach 到手动启动的客户端能产出同格式 dump。**可选/低频**：M29/M30 交付后按需要再排，attach 可以先不做 |
+| M29 | **本仓库**：`ctx.mcdev` 服务（`launch` 带 `env`、`resolveJava`）✅ 已完成 | `test/service.test.js` 覆盖形状与 env 合并；starter 照常启动 |
+| M-A1 | **agent 插件**：Agent `boot` 骨架 + NeoForge/mojmap adapter + `mc_data_dump` | 真机 `C:\Projects\Test` 导出 item/block/tags/recipe 索引，条数与游戏内 `/give` 对得上 |
+| M-A2 | 缓存 + `mc_data_query` + 面板「数据」区块（只读表格 + 搜索） | 第二次调用 `cached: true` 且 < 100ms |
+| M-A3 | `attach` 模式 + Fabric/yarn adapter + 配方完整 JSON | attach 到手动启动的客户端能产出同格式 dump。**可选/低频**：M-A1/M-A2 之后按需再排 |
 
 先 NeoForge 是因为本机验证工程就是 NeoForge 1.21.1；接口不因 loader 而变。
 
@@ -382,5 +413,5 @@ Agent 自己用 Gradle + 自己的 CI）。两边的唯一耦合是：`schema=1`
 | D19 | 数据落点 | 插件 state 目录（按 profile + sourceHash） |
 | D20 | attach 的目标怎么选 | **面板列候选 JVM + 人点选**；模型只能读列表，不能对任意 pid 发起 attach（M31 落） |
 | D21 | 要不要数据库 | **不要**：JSON + 内存索引；1 MB、30–50ms、零依赖（见 §5.1） |
-| D22 | 查询工具归属 | 引擎在 agent 包（纯函数），工具面只在主包（一份 schema/描述/渲染，见 §3.4） |
+| D22 | 查询工具归属 | **工具面在 agent 插件**，starter 只提供 `ctx.mcdev` 服务（M29 已落）；查询引擎也在 agent 插件（见 §3.3） |
 | D23 | 待定 | 要不要做跨版本 diff 历史？建议先不做，真的需要时用追加式 sidecar，不引入数据库 |

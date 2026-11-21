@@ -21,7 +21,8 @@ IDEA 风格的运行控件（选中目标 → 启动 / 停止 / 看日志）。
 - 客户端侧：React 组件用 `h()` 手写（不用 JSX），由 esbuild 打成 CJS，再包一层
   `window.__ModuleLoader__.load({ id, factory })`。
 - 设计文档：[策划](./doc/策划.md)（架构、规则、里程碑）、[DSH 插件机制调研](./doc/调研-DSH插件机制.md)、
-  [拓展：MC 数据导出](./doc/拓展-MC数据导出.md)（注册表 / 标签 / 配方的 Agent 接口与两包边界，M29 起）。
+  [拓展：MC 数据导出](./doc/拓展-MC数据导出.md)（dump 格式、jar 契约、两包边界）、
+  [策划：agent 插件](./doc/策划-agent插件.md)（另一个工作区的落地计划，M-A1 起）。
 
 ## 目录
 
@@ -32,6 +33,7 @@ src/tools/            八个模型工具，一个工具一个文件（`mc_*.js`�
   shared.js           工作区身份、按步挂载判定、启动等待、输出值整形
 src/lib/              领域层。跨层依赖单向：detect / launch 可以用 util、i18n，反过来不行
   api.js              /mcdev/api 的方法实现（scan / detail / state / launch.*），唯一聚合点
+  service.js          给别的 DSH 插件用的窄服务（ctx.provide('mcdev')：launch/stop/list/resolveJava）
   state.js            ~/.dsh/mc-dev-starter 下的状态与日志（运行记录按 profile 分目录）
   versions.js         版本解析：调用时向上游取 (loader, MC) 的精确版本，失败退回 seed
   scaffold.js         工程脚手架：校验参数、渲染 templates/、写盘；setGroup 改包名（移动目录 + 改写引用）
@@ -45,6 +47,7 @@ src/lib/              领域层。跨层依赖单向：detect / launch 可以用
     xml.js            极简 XML 解析（零依赖，只服务 .idea）
   launch/             把一个工程跑起来并拿到结论
     launches.js       启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
+    wait.js           等实例落到 ready / exit（工具与服务共用同一份语义）
     assets.js         首次运行检查：Minecraft 资源没下过时给一个提示码
     verify.js         目标分类（daemon / oneshot）与一次性任务的裁决（verdict）
     argv.js           gradlew 命令行构造（Gradle 选项在任务名之前、Windows 引号规则）
@@ -67,7 +70,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs / check-release.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 239 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 249 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -603,19 +606,41 @@ P1 的三件事一起做，共同的判断是：**"当前是什么"这类环境�
   同时发 `lang: 'en'` 与 `lang: 'zh'` 两次扫描，断言各自的语言互不影响（这正是旧实现做不到的）。
 - 239 个测试。
 
-## 架构边界（2026-11-15 复核）
+### M29 插件间服务：ctx.mcdev（2026-11-21）
+
+数据导出那位（另一个工作区）需要一个"带着额外环境变量跑一个目标"的能力。判断是：**starter 只提供服务，
+工具归数据插件**——工具 schema 每步都要付 token（M25），把可选能力塞进常用插件，等于让所有人替它付账。
+
+- **`src/lib/service.js`**：`createMcdevService({ api, version })` 给出 `{ version, capabilities,
+  launch, stop, list, resolveJava }`。`launch` 复用 api 的全部策略（工作区校验、JDK、单实例、verdict），
+  只是多了 `env`；`wait` 语义（auto/ready/exit/detach）由 `launch/mode` 决定。
+- **`env` 合并有优先级**：`baseEnv ← request.env ← 我们选的 JAVA_HOME`（`composeEnv`，在 launches.js）。
+  调用方能加变量，但**换不掉 JDK**——那是 jdk.json / 面板的契约。env 不写进运行记录（别把工程属性落盘）。
+- **`launch/wait.js`**：把等 ready/exit 的语义从 `tools/shared.js` 抽出来，工具与插件服务共用一份，
+  不复制"什么时候算跑起来了"。
+- **宿主入口**：`ctx.provide('mcdev', service)`；不认识任何消费方（单向依赖）。没装数据插件时一切照常。
+- **测试**：`test/service.test.js` 覆盖服务形状、env 透传与合并优先级、stop 的 id/current 两条路、
+  resolveJava 的 selected→major 映射；`test/api.test.js` 钉住 `env` 从 api 到启动服务。
+- 249 个测试。客户端与面板不受影响（服务只给宿主插件用）。
+
+## 架构边界（2026-11-21 复核）
 
 量过的数字（行数）：`detect/detect.js` 826、`client/views/DetailTab.js` 732、`detect/idea.js` 708、
-`launch/launches.js` 524、`lib/api.js` 358、`tools/` 11 个文件共 1058（最大 `mc_project_detail.js` 242）。
+`launch/launches.js` 540、`lib/api.js` 359、`lib/service.js` 111、`tools/` 11 个文件共 1054
+（最大 `mc_project_detail.js` 242）。
 
 - **边界成立**：客户端只 import `client/lib`；`tools/` 通过 `deps.api` 拿服务，不 import `api.js`；
-  领域层（detect / launch）不 import 门面。
+  领域层（detect / launch）不 import 门面；`service.js` 只依赖 `api`（门面）与 `launch/wait.js`，
+  不认识任何消费方。
 - **`api.js` 是门面，不是上帝对象**：18 个方法、每个 5–20 行，只做"解析 root → 校验工作区 →
   调领域服务 → 拼返回"。策略已全部下沉（JDK 选择在 `launch/jdks.js`，资源提示在 `launch/assets.js`，
-  工作区解析在 `resolveRoot(root, workspace, lang)`，取词在 `createTranslator(lang)`）。
+  工作区解析在 `resolveRoot(root, workspace, lang)`，取词在 `createTranslator(lang)`，
+  等就绪在 `launch/wait.js`）。
 - **`tools.js` 已经在 2026-11-15 拆掉**（当时 1058 行）：一个工具一个文件，渲染进 `render.js`，
   共享件进 `shared.js`，`index.js` 只剩注册表。下一步的增长点是 `mc_project_detail.js`（242 行）与
   `detect.js`（826 行）。
+- **插件间只有一条通道**：`ctx.provide('mcdev')` 的那四个方法。加第五个方法之前先问"是不是调用方
+  该自己做的事"——starter 不替消费方编排，只提供能力。
 - **拆分触发条件**（不到就别拆，拆了只是"更多文件"）：
   - `detect/detect.js` > 900 行 → 把 `.idea` 交叉判断与目标合并拆成独立文件（现在 826）；
   - `api.js` > 500 行，或出现第二个入口（CLI / MCP / 独立 route）→ `src/lib/api/` 按
@@ -689,3 +714,5 @@ npm 包页面上会出现两条告警，都来自 peer 依赖图，不是本包�
 ## 还没做的事
 
 - 桌面版目前仍用 `link:` 安装（改代码即时生效）；切到 npm 版本需要每次改完都发版。
+- **数据导出（agent 插件）在另一个工作区**：本仓库只提供 `ctx.mcdev` 服务，工具 / 面板 / Java Agent
+  都在 `minecraft-dev-starter-agent`（见 `doc/策划-agent插件.md`）。

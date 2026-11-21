@@ -156,3 +156,35 @@ test('相对 root 由 api 按 workspace 解析（工具不再自己拼路径）'
     await rm(dir, { recursive: true, force: true })
   }
 })
+test('launch.start 把 env 透传给启动服务，且不写进返回记录', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mcdev-api-'))
+  try {
+    /** @type {Array<Record<string, any>>} */
+    const seen = []
+    const api = createApi({
+      resolveRoot: async () => fabricRoot,
+      version: '0.0.0-test',
+      launchService: {
+        start: async (request) => {
+          seen.push(request)
+          return { id: 'launch-1', status: 'starting', taskPath: request.taskPath, pid: 1, logPath: 'C:/l.log' }
+        },
+        stop: async () => ({ id: 'launch-1', status: 'exited' }),
+        list: async () => [],
+        current: async () => undefined,
+      },
+      jdkDir: dir,
+      listJdks: fakeListJdks,
+    })
+    const record = await api['launch.start']({
+      root: fabricRoot,
+      workspace: fabricRoot,
+      taskPath: 'runClient',
+      env: { JAVA_TOOL_OPTIONS: '-javaagent:mcdev.jar=out=x' },
+    })
+    assert.deepEqual(seen[0]?.env, { JAVA_TOOL_OPTIONS: '-javaagent:mcdev.jar=out=x' })
+    assert.equal(Object.hasOwn(record, 'env'), false)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

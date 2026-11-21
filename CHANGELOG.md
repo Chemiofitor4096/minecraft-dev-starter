@@ -7,6 +7,24 @@ The host is still pre-1.0, so **raising the supported DSH range counts as a brea
 plugin rides on host slots, the module loader and `@deepseek-ai/dsh-tools`, and a change there can
 break installations that look unrelated.
 
+## [0.3.0] — 2026-11-21
+
+### Added
+
+- A host-side service for other plugins: `ctx.mcdev` with `launch`, `stop`, `list` and `resolveJava`.
+  `launch` accepts `env`, so a companion plugin can inject `JAVA_TOOL_OPTIONS=-javaagent:…` without
+  touching the project's `build.gradle`, and it still goes through the same workspace check, JDK choice,
+  one-instance lock and verdict as the panel. `env` merges over the base environment but cannot replace
+  the chosen `JAVA_HOME`; it is never written into the run record.
+
+### Internal
+
+- Waiting for a run to reach `ready` / `exit` moved into `src/lib/launch/wait.js`, shared by the tools
+  and the new service instead of duplicating the semantics.
+- New `doc/拓展-MC数据导出.md` (dump format, agent contract, the two-plugin split) and
+  `doc/策划-agent插件.md` (the companion plugin's plan), so the data-export work can happen in a
+  separate workspace against a fixed interface.
+
 ## [0.2.2] — 2026-11-15
 
 ### Changed
