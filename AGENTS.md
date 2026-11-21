@@ -20,7 +20,8 @@ IDEA 风格的运行控件（选中目标 → 启动 / 停止 / 看日志）。
 - 宿主侧：ESM、无 TypeScript、JSDoc 注解；Node ≥ 20。
 - 客户端侧：React 组件用 `h()` 手写（不用 JSX），由 esbuild 打成 CJS，再包一层
   `window.__ModuleLoader__.load({ id, factory })`。
-- 设计文档：[策划](./doc/策划.md)（架构、规则、里程碑）、[DSH 插件机制调研](./doc/调研-DSH插件机制.md)。
+- 设计文档：[策划](./doc/策划.md)（架构、规则、里程碑）、[DSH 插件机制调研](./doc/调研-DSH插件机制.md)、
+  [拓展：MC 数据导出](./doc/拓展-MC数据导出.md)（注册表 / 标签 / 配方的探针与 Agent 接口，M29 起）。
 
 ## 目录
 
