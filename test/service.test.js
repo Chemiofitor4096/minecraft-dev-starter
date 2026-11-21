@@ -49,6 +49,33 @@ function fakeApi(overrides = {}) {
         },
       }
     },
+    'projects.scan': async (payload) => {
+      calls.push({ method: 'projects.scan', payload })
+      return {
+        root: 'C:/p',
+        scannedDirs: 4,
+        truncated: false,
+        projects: [
+          {
+            root: 'C:/p',
+            name: 'Coal Craft',
+            kind: 'mod',
+            loader: 'neoforge',
+            gradleRoot: 'C:/p',
+            minecraftVersion: '1.21.1',
+            confidence: 95,
+            // 下面这些是面板用的文案，服务不该往外传
+            evidence: [{ file: 'build.gradle', detail: '插件 net.neoforged.moddev' }],
+            warnings: ['未解析占位符'],
+            conflicts: [],
+            java: { required: 21, toolchain: 'C:/jdk21', source: 'gradle.properties' },
+            runTargets: [
+              { task: 'runServer', taskPath: 'runServer', label: 'Server', kind: 'server', mode: 'daemon', source: 'build-script', guessed: false },
+            ],
+          },
+        ],
+      }
+    },
     ...overrides,
   }
   return api
@@ -82,13 +109,34 @@ test('composeEnv：没有 javaHome 时保留基础环境里的 JAVA_HOME', () =>
   assert.equal(env.A, 'b')
 })
 
-test('服务形状：版本 + 能力列表 + 四个方法', () => {
+test('服务形状：版本 + 能力列表 + 五个方法', () => {
   const service = createMcdevService({ api: fakeApi(), version: '0.2.2' })
   assert.equal(service.version, '0.2.2')
-  assert.deepEqual(service.capabilities, ['launch', 'stop', 'list', 'resolve-java'])
-  for (const name of ['launch', 'stop', 'list', 'resolveJava']) {
+  assert.deepEqual(service.capabilities, ['projects', 'launch', 'stop', 'list', 'resolve-java'])
+  for (const name of ['projects', 'launch', 'stop', 'list', 'resolveJava']) {
     assert.equal(typeof service[name], 'function', `缺方法 ${name}`)
   }
+})
+
+test('projects：转发 root / workspace / refresh，压成语言中立的视图', async () => {
+  const api = fakeApi()
+  const service = createMcdevService({ api, version: 't' })
+  const result = await service.projects({ root: 'C:/p', workspace: 'C:/p', refresh: true })
+  const call = api.calls.find((entry) => entry.method === 'projects.scan')
+  assert.deepEqual(call?.payload, { root: 'C:/p', workspace: 'C:/p', refresh: true })
+  assert.equal(result.scannedDirs, 4)
+  assert.equal(result.truncated, false)
+  const project = result.projects[0]
+  assert.equal(project.root, 'C:/p')
+  assert.equal(project.loader, 'neoforge')
+  assert.equal(project.mcVersion, '1.21.1')
+  assert.equal(project.gradleRoot, 'C:/p')
+  assert.equal(project.runTargets[0].taskPath, 'runServer')
+  assert.equal(project.runTargets[0].mode, 'daemon')
+  // 证据 / 警告是给人看的中文文案，插件间不传
+  assert.doesNotMatch(JSON.stringify(result), /[\u4e00-\u9fff]/)
+  // 没有的字段不出现（undefined 会让工具返回值变成非无损 JSON）
+  assert.equal(Object.hasOwn(project, 'loaderVersion'), false)
 })
 
 test('launch 把 env 透传给 api，并按 mode 等到就绪', async () => {

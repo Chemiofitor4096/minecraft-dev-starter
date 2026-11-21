@@ -13,7 +13,49 @@
 import { waitForLaunch } from './launch/wait.js'
 
 /** 服务暴露的能力：消费方据此决定要不要展示入口（版本/能力握手）。 */
-const CAPABILITIES = ['launch', 'stop', 'list', 'resolve-java']
+const CAPABILITIES = ['projects', 'launch', 'stop', 'list', 'resolve-java']
+
+/**
+ * 把识别结果压成"插件间"的视图：只留语言中立的事实。
+ *
+ * 证据、警告、冲突这些是给人看的文案（会跟着 `lang` 变），服务不往外传——
+ * 消费方要的是"这个工程是什么、能不能跑"，不是"我们怎么判断的"。要那些就去看面板。
+ * @param {Record<string, any>} project
+ */
+export function projectView(project) {
+  const targets = Array.isArray(project.runTargets) ? project.runTargets : []
+  const java = project.java ?? {}
+  /** @type {Record<string, any>} */
+  const view = {
+    root: project.root,
+    name: project.name,
+    kind: project.kind,
+    loader: project.loader,
+    gradleRoot: project.gradleRoot ?? project.root,
+    runTargets: targets.map((target) => ({
+      taskPath: target.taskPath ?? target.task,
+      label: target.label,
+      kind: target.kind,
+      mode: target.mode,
+      source: target.source,
+      guessed: target.guessed === true,
+    })),
+    java: {},
+    confidence: project.confidence,
+  }
+  // 可选字段只在有值时出现：`undefined` 会把整条工具返回值判成非无损 JSON
+  for (const key of ['loaderVersion', 'modId', 'modName']) {
+    const value = project[key]
+    if (typeof value === 'string' && value !== '') view[key] = value
+  }
+  if (typeof project.minecraftVersion === 'string' && project.minecraftVersion !== '') {
+    view.mcVersion = project.minecraftVersion
+  }
+  if (typeof java.required === 'number') view.java.required = java.required
+  const selected = java.selected ?? java.toolchain
+  if (typeof selected === 'string' && selected !== '') view.java.selected = selected
+  return view
+}
 
 /**
  * 只保留"字符串到字符串"的键值，其余丢弃——环境变量不是任意 JSON 的垃圾桶。
@@ -40,6 +82,29 @@ export function createMcdevService({ api, version }) {
   return {
     version,
     capabilities: [...CAPABILITIES],
+
+    /**
+     * 这个工作区里有哪些工程、是不是 Minecraft 工程、能不能跑。
+     *
+     * 返回的是压缩视图（见 `projectView`）：语言中立、不带证据文案，够消费方判断
+     * "有没有 MC 工程 / 该用哪个 root / 有没有 runServer"，细节仍然在面板里。
+     * @param {{ root?: string, workspace?: string, depth?: number, refresh?: boolean }} [input]
+     */
+    async projects(input) {
+      const request = /** @type {{ root?: string, workspace?: string, depth?: number, refresh?: boolean }} */ (input ?? {})
+      const scanned = await api['projects.scan']({
+        root: request.root,
+        workspace: request.workspace,
+        ...(Number.isFinite(request.depth) ? { depth: Number(request.depth) } : {}),
+        ...(request.refresh === true ? { refresh: true } : {}),
+      })
+      return {
+        root: scanned?.root,
+        scannedDirs: scanned?.scannedDirs ?? 0,
+        truncated: scanned?.truncated === true,
+        projects: (scanned?.projects ?? []).map(projectView),
+      }
+    },
 
     /**
      * 起一个目标，按 mode 等它"就绪"或"跑完"。

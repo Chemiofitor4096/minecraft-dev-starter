@@ -34,6 +34,7 @@ export const inject = ['mcdev', 'tools']      // mcdev = starter 0.3+ 提供；�
 
 | 方法 | 本插件用它做什么 |
 |---|---|
+| `ctx.mcdev.projects({ root, workspace, refresh })` | 判断"这个 root 是不是 MC 工程、有没有 `runServer`"；拿名字 / loader / MC 版本 / JDK 填进 dump 的 `env` |
 | `ctx.mcdev.launch({ root, workspace, taskPath, env, wait, timeoutMs })` | 起 `runServer`，把 `JAVA_TOOL_OPTIONS=-javaagent:…` 放进 `env` |
 | `ctx.mcdev.stop({ id })` | 导出超时/取消时收尾（正常情况下 Agent 自己 `stop`） |
 | `ctx.mcdev.list({ root })` | 判"这个工程是不是已经在跑"（一个工程只允许一个实例） |

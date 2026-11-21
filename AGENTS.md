@@ -33,7 +33,7 @@ src/tools/            八个模型工具，一个工具一个文件（`mc_*.js`�
   shared.js           工作区身份、按步挂载判定、启动等待、输出值整形
 src/lib/              领域层。跨层依赖单向：detect / launch 可以用 util、i18n，反过来不行
   api.js              /mcdev/api 的方法实现（scan / detail / state / launch.*），唯一聚合点
-  service.js          给别的 DSH 插件用的窄服务（ctx.provide('mcdev')：launch/stop/list/resolveJava）
+  service.js          给别的 DSH 插件用的窄服务（ctx.provide('mcdev')：projects/launch/stop/list/resolveJava）
   state.js            ~/.dsh/mc-dev-starter 下的状态与日志（运行记录按 profile 分目录）
   versions.js         版本解析：调用时向上游取 (loader, MC) 的精确版本，失败退回 seed
   scaffold.js         工程脚手架：校验参数、渲染 templates/、写盘；setGroup 改包名（移动目录 + 改写引用）
@@ -614,8 +614,11 @@ P1 的三件事一起做，共同的判断是：**"当前是什么"这类环境�
 工具归数据插件**——工具 schema 每步都要付 token（M25），把可选能力塞进常用插件，等于让所有人替它付账。
 
 - **`src/lib/service.js`**：`createMcdevService({ api, version })` 给出 `{ version, capabilities,
-  launch, stop, list, resolveJava }`。`launch` 复用 api 的全部策略（工作区校验、JDK、单实例、verdict），
+  projects, launch, stop, list, resolveJava }`。`launch` 复用 api 的全部策略（工作区校验、JDK、单实例、verdict），
   只是多了 `env`；`wait` 语义（auto/ready/exit/detach）由 `launch/mode` 决定。
+- **`projects()` 是压缩视图**（`projectView`）：只给语言中立的事实（root / kind / loader / mcVersion /
+  runTargets / 选中的 JDK / confidence），**不带 evidence / warnings / conflicts**——那些是跟着界面语言变
+  的文案，插件间传了就会逼消费方也传 `lang`，还会因语言不同生成两份缓存。可选字段没值时不出现。
 - **`env` 合并有优先级**：`baseEnv ← request.env ← 我们选的 JAVA_HOME`（`composeEnv`，在 launches.js）。
   调用方能加变量，但**换不掉 JDK**——那是 jdk.json / 面板的契约。env 不写进运行记录（别把工程属性落盘）。
 - **`launch/wait.js`**：把等 ready/exit 的语义从 `tools/shared.js` 抽出来，工具与插件服务共用一份，
@@ -664,8 +667,8 @@ P1 的三件事一起做，共同的判断是：**"当前是什么"这类环境�
 - **`tools.js` 已经在 2026-11-15 拆掉**（当时 1058 行）：一个工具一个文件，渲染进 `render.js`，
   共享件进 `shared.js`，`index.js` 只剩注册表。下一步的增长点是 `mc_project_detail.js`（242 行）与
   `detect.js`（826 行）。
-- **插件间只有一条通道**：`ctx.provide('mcdev')` 的那四个方法。加第五个方法之前先问"是不是调用方
-  该自己做的事"——starter 不替消费方编排，只提供能力。
+- **插件间只有一条通道**：`ctx.provide('mcdev')` 的那五个方法（projects / launch / stop / list /
+  resolveJava）。加第六个方法之前先问"是不是调用方该自己做的事"——starter 不替消费方编排，只提供能力。
 - **拆分触发条件**（不到就别拆，拆了只是"更多文件"）：
   - `detect/detect.js` > 900 行 → 把 `.idea` 交叉判断与目标合并拆成独立文件（现在 826）；
   - `api.js` > 500 行，或出现第二个入口（CLI / MCP / 独立 route）→ `src/lib/api/` 按

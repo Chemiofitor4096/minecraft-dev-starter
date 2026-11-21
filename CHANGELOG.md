@@ -16,6 +16,9 @@ break installations that look unrelated.
   touching the project's `build.gradle`, and it still goes through the same workspace check, JDK choice,
   one-instance lock and verdict as the panel. `env` merges over the base environment but cannot replace
   the chosen `JAVA_HOME`; it is never written into the run record.
+- `ctx.mcdev.projects()` answers "is this a Minecraft project, and can it run" from another plugin:
+  a compact, language-neutral view (root, kind, loader, MC version, run targets, chosen JDK) without the
+  evidence/warning text the panel shows.
 
 ### Fixed
 

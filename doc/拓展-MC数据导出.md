@@ -190,7 +190,10 @@ starter 侧的服务（已在 0.2.2 之后落地，见 AGENTS M29）：
 // 消费方：export const inject = ['mcdev', 'tools']
 {
   version: '0.3.0',
-  capabilities: ['launch', 'stop', 'list', 'resolve-java'],
+  capabilities: ['projects', 'launch', 'stop', 'list', 'resolve-java'],
+
+  // 工作区里有哪些工程、是不是 MC 工程、有没有 runServer —— 语言中立，不带证据文案
+  projects({ root, workspace, refresh }): Promise<{ root, scannedDirs, truncated, projects: ProjectView[] }>,
 
   // 复用单实例锁、JDK 选择、argv 顺序、就绪/结论、日志落盘
   launch({ root, workspace, taskPath, env, wait, timeoutMs }): Promise<LaunchRecord>,
@@ -199,6 +202,24 @@ starter 侧的服务（已在 0.2.2 之后落地，见 AGENTS M29）：
   resolveJava({ root?, workspace? }): Promise<{ home, major, required } | undefined>,
 }
 ```
+
+`ProjectView` 是压缩视图，atlas 用它就能判断"这个 root 是不是 MC 工程、能不能导"：
+
+```jsonc
+{
+  "root": "C:\\Projects\\Test", "name": "Coal Craft", "kind": "mod",
+  "loader": "neoforge", "loaderVersion": "21.1.80", "mcVersion": "1.21.1",
+  "modId": "coalcraft", "gradleRoot": "C:\\Projects\\Test", "confidence": 95,
+  "runTargets": [{ "taskPath": "runServer", "label": "Server", "kind": "server", "mode": "daemon", "source": "build-script", "guessed": false }],
+  "java": { "required": 21, "selected": "C:\\Program Files\\Microsoft\\jdk-21.0.7.6-hotspot" }
+}
+```
+
+- **不带证据 / 警告 / 冲突**：那些是给人看的中文（或英文）文案，跟着界面语言变；插件间只传事实。
+  消费方因此**不需要传 `lang`**，也不会因为界面语言不同拿到两份缓存。
+- `kind` 是工程种类（`mod` / `multi-loader` / `server-plugin` / `library` / `unknown`），
+  `runTargets` 为空就是"能识别但跑不了"（库工程），跟面板的判据一致。
+- 可选字段在没值时**不出现**（不是 `null`），避免把消费方的返回值变成非无损 JSON。
 
 - `env` 是这条边界的核心：atlas 插件把 `JAVA_TOOL_OPTIONS=-javaagent:…` 放进去，starter 负责合并到
   spawn 环境（**JDK 仍然由 starter 决定，调用方换不掉**）。
