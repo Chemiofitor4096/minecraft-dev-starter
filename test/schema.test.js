@@ -1,7 +1,7 @@
 /**
  * dump schema 的护栏：文件必须能解析，且关键约束没被改坏。
  *
- * 真校验（用 JSON Schema 库）不在这里做——本包零依赖，validator 由 agent 插件那边带；
+ * 真校验（用 JSON Schema 库）不在这里做——本包零依赖，validator 由 atlas 插件那边带；
  * 这份测试只保证"契约文件本身没写错"。
  */
 import assert from 'node:assert/strict'

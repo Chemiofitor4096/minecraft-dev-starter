@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Chemiofitor4096/minecraft-dev-starter/blob/main/doc/schema/dump-v1.schema.json",
-  "title": "minecraft-dev-starter-agent dump v1",
+  "title": "minecraft-dev-atlas dump v1",
   "description": "一次运行期导出的快照。允许新增字段（读方忽略未知字段）；删改语义必须把 schema 加一。",
   "type": "object",
   "required": [

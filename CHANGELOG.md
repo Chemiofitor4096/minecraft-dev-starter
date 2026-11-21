@@ -22,8 +22,8 @@ break installations that look unrelated.
 - Waiting for a run to reach `ready` / `exit` moved into `src/lib/launch/wait.js`, shared by the tools
   and the new service instead of duplicating the semantics.
 - New `doc/拓展-MC数据导出.md` (dump format, agent contract, the two-plugin split) and
-  `doc/策划-agent插件.md` (the companion plugin's plan), so the data-export work can happen in a
-  separate workspace against a fixed interface.
+  `doc/策划-atlas插件.md` (the companion plugin's plan), so the data-export work can happen in a
+  separate workspace against a fixed interface. The companion plugin is `minecraft-dev-atlas`.
 
 ## [0.2.2] — 2026-11-15
 

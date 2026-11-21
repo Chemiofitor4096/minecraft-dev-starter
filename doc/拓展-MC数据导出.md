@@ -53,7 +53,7 @@ Agent 骨架（loader 无关） ──调用──▶ DataAdapter（每个 loade
 - adapter 用一张表登记：`key = <loader>/<mappings>/<MC 小版本线>`，例如
   `neoforge/mojmap/1.21`、`fabric/yarn/1.21`、`forge/mojmap/1.20.1`。表随 jar 走
   （`adapters.properties`），新增支持只需加一行 + 一个类。
-- **没有 adapter 就不假装能导**：直接报 `AGENT_UNSUPPORTED`，而不是导出一堆 `null`。
+- **没有 adapter 就不假装能导**：直接报 `ATLAS_UNSUPPORTED`，而不是导出一堆 `null`。
 - 反射取不到的字段写 `null` 并在 `warnings[]` 里点名（`"item.<field> 在 mojmap-1.21.1 上未找到"`），
   绝不猜。
 
@@ -130,12 +130,12 @@ Agent 骨架（loader 无关） ──调用──▶ DataAdapter（每个 loade
 
 ```
 manifest:
-  Premain-Class:  dev.mcdev.agent.Premain        # -javaagent 用（mode=boot）
-  Agent-Class:    dev.mcdev.agent.AgentMain      # attach 用（mode=attach）
+  Premain-Class:  dev.mcdev.atlas.Premain        # -javaagent 用（mode=boot）
+  Agent-Class:    dev.mcdev.atlas.AgentMain      # attach 用（mode=attach）
   Implementation-Version: 0.1.0
   MCDEV-Schema: 1
 
-参数（-javaagent:mcdev-agent.jar=k1=v1,k2=v2）：
+参数（-javaagent:mcdev-atlas.jar=k1=v1,k2=v2）：
   out=/abs/dump.json        必填；没有它 Agent 不动作
   sections=registries,tags,recipes   默认三类全导
   stop=true                 导出后 server.stop()；默认 true
@@ -157,19 +157,19 @@ manifest:
 **日志标记**（宿主用它做进度与超时判定，也会出现在我们的日志标签里）：
 
 ```
-[mcdev-agent] ready schema=1 loader=neoforge mappings=mojmap adapter=neoforge/mojmap/1.21@1
-[mcdev-agent] section registries count=1240
-[mcdev-agent] wrote /abs/dump.json bytes=123456
-[mcdev-agent] failed section=recipes error=…
-[mcdev-agent] inert reason=no-game-classes          # 在 daemon 里被加载时的唯一输出
+[mcdev-atlas] ready schema=1 loader=neoforge mappings=mojmap adapter=neoforge/mojmap/1.21@1
+[mcdev-atlas] section registries count=1240
+[mcdev-atlas] wrote /abs/dump.json bytes=123456
+[mcdev-atlas] failed section=recipes error=…
+[mcdev-atlas] inert reason=no-game-classes          # 在 daemon 里被加载时的唯一输出
 ```
 
-前缀固定 `[mcdev-agent]`，一行一个事件，值里不带空格（便于 grep 与解析）。
+前缀固定 `[mcdev-atlas]`，一行一个事件，值里不带空格（便于 grep 与解析）。
 
 **退出码**：`0` 已写出；`10` 找不到游戏类（进程不对）；`11` 无可用 adapter；`12` 写盘失败。
 宿主**不单看退出码**：以 dump 文件是否存在 + `errors[]` 为准，退出码只用于归因。
 
-### 3.3 两个插件：starter 给服务，agent 插件给工具
+### 3.3 两个插件：starter 给服务，atlas 插件给工具
 
 **决策（D22 修订）**：`mc_data_dump` / `mc_data_query` **不进 starter**。starter 的定位是"识别 + 托管启动"，
 数据导出是另一个能力；两者通过一个**服务**相连：
@@ -180,7 +180,7 @@ minecraft-dev-starter（本仓库）
         ▲
         │ inject: ['mcdev']
         │
-minecraft-dev-starter-agent（新包：DSH bundle + jar + 查询引擎）
+minecraft-dev-atlas（新包：DSH bundle + jar + 查询引擎）
   注册 mc_data_dump / mc_data_query、自己的面板 tab、自己带 jar
 ```
 
@@ -200,19 +200,19 @@ starter 侧的服务（已在 0.2.2 之后落地，见 AGENTS M29）：
 }
 ```
 
-- `env` 是这条边界的核心：agent 插件把 `JAVA_TOOL_OPTIONS=-javaagent:…` 放进去，starter 负责合并到
+- `env` 是这条边界的核心：atlas 插件把 `JAVA_TOOL_OPTIONS=-javaagent:…` 放进去，starter 负责合并到
   spawn 环境（**JDK 仍然由 starter 决定，调用方换不掉**）。
 - `resolveJava` 给 attach 用（要按工程那个 JDK 起小程序）。
-- 依赖单向：starter **不认识** agent 插件；没装 agent 插件时，starter 一切照常。
+- 依赖单向：starter **不认识** atlas 插件；没装 atlas 插件时，starter 一切照常。
 
-agent 插件内部的形状（细节见 `doc/策划-agent插件.md`）：
+atlas 插件内部的形状（细节见 `doc/策划-atlas插件.md`）：
 
 ```js
 // 纯函数（可在测试里直接用，不碰进程）
-AGENT_SCHEMA                          // 1
-AGENT_CAPABILITIES                    // ['dump', 'attach', 'sections:registries', ...]
+ATLAS_SCHEMA                          // 1
+ATLAS_CAPABILITIES                    // ['dump', 'attach', 'sections:registries', ...]
 javaAgentOption({ out, sections, timeoutMs, loader, mappings, stop })  // → '-javaagent:…=out=…'
-parseDump(text)                       // → Dump；schema 不匹配抛 AGENT_SCHEMA_MISMATCH
+parseDump(text)                       // → Dump；schema 不匹配抛 ATLAS_SCHEMA_MISMATCH
 readLogMarkers(line)                  // → { kind: 'ready'|'section'|'wrote'|'failed'|'inert', … }
 indexDump(dump) / query(index, …) / digest(index)   // 查询引擎
 ```
@@ -222,7 +222,7 @@ indexDump(dump) / query(index, …) / digest(index)   // 查询引擎
 - `peerDependencies`：`minecraft-dev-starter >= 0.3`（要 `ctx.mcdev` 服务）；
 - 握手：`ctx.mcdev.capabilities` 含所需项，否则 `SERVICE_VERSION_MISMATCH`（要求升级，不"凑合用"）。
 
-**工具面只在上面的 agent 插件里**（这也是两个包的分工）：
+**工具面只在上面的 atlas 插件里**（这也是两个包的分工）：
 
 ```jsonc
 // mc_data_dump：起一次 headless 服务端（带 Agent），导出一份
@@ -268,7 +268,7 @@ indexDump(dump) / query(index, …) / digest(index)   // 查询引擎
 面板不受这条限制：它是本地文件 + 本地索引，浏览 2700 条物品不花一个模型 token。**同一个文件，
 人自由翻，模型只拿摘要与命中行。**
 
-分工也据此确定（回答"要不要给 agent 插件也提供查询工具"）：
+分工也据此确定（回答"要不要给 atlas 插件也提供查询工具"）：
 
 | 层 | 谁拥有 | 内容 |
 |---|---|---|
@@ -297,7 +297,7 @@ indexDump(dump) / query(index, …) / digest(index)   // 查询引擎
 **attach 的机制**（JDK Attach API，Arthas / JFR / JProfiler 都走这条路）：
 
 1. 宿主发现目标进程的 `pid`；
-2. 跑 `java -jar mcdev-agent.jar attach --pid <pid> --out <dump> --sections …`；
+2. 跑 `java -jar mcdev-atlas.jar attach --pid <pid> --out <dump> --sections …`；
 3. 这个小程序（不是 Agent）调用 `VirtualMachine.attach("<pid>")` → `loadAgent(jarPath, options)`；
 4. 目标 JVM 载入 jar 里的 `Agent-Class`，调用 `agentmain(args, inst)`；
 5. `agentmain` 里做的和 `premain` 一样：等数据就绪 → 序列化 → 写盘 → 回复。
@@ -310,7 +310,7 @@ indexDump(dump) / query(index, …) / digest(index)   // 查询引擎
   需要时给目标加 `-XX:+EnableDynamicAgentLoading`——而"给目标加参数"又要求重启它，于是
   attach 的价值就没了。所以 **attach 只当兜底**，不作为默认路径。
 - **只支持开发期运行**：adapter 的类名表是按 mojmap / yarn 写的；对着混淆过的生产客户端 attach
-  只会拿到 `AGENT_UNSUPPORTED`，不猜。
+  只会拿到 `ATLAS_UNSUPPORTED`，不猜。
 - **客户端上配方可能不全**：注册表在 bootstrap 之后就有，但配方/标签是数据包加载后才齐的——
   客户端停在主菜单时 `recipes` 基本是空的。**attach 到客户端时默认只导 `registries`**，
   要配方得先进世界，或 `sections` 显式要求并接受"可能为空"。
@@ -366,8 +366,8 @@ indexDump(dump) / query(index, …) / digest(index)   // 查询引擎
 | 情况 | 结果 |
 |---|---|
 | 服务端没起来（构建失败、端口占用） | 不产出 dump；`LAUNCH_FAILED` + 日志尾巴 |
-| 起来了但 Agent 没生效 | `AGENT_NOT_LOADED`（日志里找不到 `[mcdev-agent] ready`，通常能看到 `inert`） |
-| 无可用 adapter | `AGENT_UNSUPPORTED`，值里带 `env.loader/mappings/mcVersion`，方便补表 |
+| 起来了但 Agent 没生效 | `ATLAS_NOT_LOADED`（日志里找不到 `[mcdev-atlas] ready`，通常能看到 `inert`） |
+| 无可用 adapter | `ATLAS_UNSUPPORTED`，值里带 `env.loader/mappings/mcVersion`，方便补表 |
 | 导到一半异常 | 已完成 section 有效，失败的进 `errors`；整体 `partial` |
 | 超时 | 已写出的部分保留（tmp + rename 保证不半截），`verdict: 'aborted'` |
 | 不是 Gradle 工程 / 没有 runServer | `NO_RUN_TARGET`，不猜 |
@@ -380,12 +380,12 @@ indexDump(dump) / query(index, …) / digest(index)   // 查询引擎
 
 | 归属 | 内容 | 不做什么 |
 |---|---|---|
-| **本仓库**（`minecraft-dev-starter`） | `ctx.provide('mcdev')` 服务：`launch` / `stop` / `list` / `resolveJava`（含 `env` 合并与 JDK 决定权） | 不含 Java、不注册数据工具、不认识 agent 插件 |
-| **新工作区**（`minecraft-dev-starter-agent`，DSH bundle） | 两个工具（`mc_data_dump` / `mc_data_query`）、面板「数据」区块、缓存、查询引擎、失败码与文案 | 不自己 spawn Gradle（走 `ctx.mcdev`） |
+| **本仓库**（`minecraft-dev-starter`） | `ctx.provide('mcdev')` 服务：`launch` / `stop` / `list` / `resolveJava`（含 `env` 合并与 JDK 决定权） | 不含 Java、不注册数据工具、不认识 atlas 插件 |
+| **新工作区**（`minecraft-dev-atlas`，DSH bundle） | 两个工具（`mc_data_dump` / `mc_data_query`）、面板「数据」区块、缓存、查询引擎、失败码与文案 | 不自己 spawn Gradle（走 `ctx.mcdev`） |
 | **同上包内的 jar** | Agent 骨架 + adapter 表 + 各 loader 适配器 + attach 入口 | 不做查询、不碰宿主 |
 
 本仓库**不**包含任何 Java 源码，也不在 `prepack` 里构建 jar——这是选独立包的目的（starter 照发，
-agent 插件自己用 Gradle + 自己的 CI）。两边的耦合只有两处：`ctx.mcdev` 服务（starter 已提供）
+atlas 插件自己用 Gradle + 自己的 CI）。两边的耦合只有两处：`ctx.mcdev` 服务（starter 已提供）
 与 dump 的 `schema=1` / `capabilities` 握手。
 
 ---
@@ -395,7 +395,7 @@ agent 插件自己用 Gradle + 自己的 CI）。两边的耦合只有两处：`
 | | 内容 | 判据 |
 |---|---|---|
 | M29 | **本仓库**：`ctx.mcdev` 服务（`launch` 带 `env`、`resolveJava`）✅ 已完成 | `test/service.test.js` 覆盖形状与 env 合并；starter 照常启动 |
-| M-A1 | **agent 插件**：Agent `boot` 骨架 + NeoForge/mojmap adapter + `mc_data_dump` | 真机 `C:\Projects\Test` 导出 item/block/tags/recipe 索引，条数与游戏内 `/give` 对得上 |
+| M-A1 | **atlas 插件**：Agent `boot` 骨架 + NeoForge/mojmap adapter + `mc_data_dump` | 真机 `C:\Projects\Test` 导出 item/block/tags/recipe 索引，条数与游戏内 `/give` 对得上 |
 | M-A2 | 缓存 + `mc_data_query` + 面板「数据」区块（只读表格 + 搜索） | 第二次调用 `cached: true` 且 < 100ms |
 | M-A3 | `attach` 模式 + Fabric/yarn adapter + 配方完整 JSON | attach 到手动启动的客户端能产出同格式 dump。**可选/低频**：M-A1/M-A2 之后按需再排 |
 
@@ -414,5 +414,5 @@ agent 插件自己用 Gradle + 自己的 CI）。两边的耦合只有两处：`
 | D19 | 数据落点 | 插件 state 目录（按 profile + sourceHash） |
 | D20 | attach 的目标怎么选 | **面板列候选 JVM + 人点选**；模型只能读列表，不能对任意 pid 发起 attach（M31 落） |
 | D21 | 要不要数据库 | **不要**：JSON + 内存索引；1 MB、30–50ms、零依赖（见 §5.1） |
-| D22 | 查询工具归属 | **工具面在 agent 插件**，starter 只提供 `ctx.mcdev` 服务（M29 已落）；查询引擎也在 agent 插件（见 §3.3） |
+| D22 | 查询工具归属 | **工具面在 atlas 插件**，starter 只提供 `ctx.mcdev` 服务（M29 已落）；查询引擎也在 atlas 插件（见 §3.3） |
 | D23 | 待定 | 要不要做跨版本 diff 历史？建议先不做，真的需要时用追加式 sidecar，不引入数据库 |

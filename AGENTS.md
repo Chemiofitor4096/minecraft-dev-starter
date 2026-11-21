@@ -22,7 +22,7 @@ IDEA 风格的运行控件（选中目标 → 启动 / 停止 / 看日志）。
   `window.__ModuleLoader__.load({ id, factory })`。
 - 设计文档：[策划](./doc/策划.md)（架构、规则、里程碑）、[DSH 插件机制调研](./doc/调研-DSH插件机制.md)、
   [拓展：MC 数据导出](./doc/拓展-MC数据导出.md)（dump 格式、jar 契约、两包边界）、
-  [策划：agent 插件](./doc/策划-agent插件.md)（另一个工作区的落地计划，M-A1 起）。
+  [策划：atlas 插件](./doc/策划-atlas插件.md)（另一个工作区的落地计划，M-A1 起）。
 
 ## 目录
 
@@ -714,5 +714,5 @@ npm 包页面上会出现两条告警，都来自 peer 依赖图，不是本包�
 ## 还没做的事
 
 - 桌面版目前仍用 `link:` 安装（改代码即时生效）；切到 npm 版本需要每次改完都发版。
-- **数据导出（agent 插件）在另一个工作区**：本仓库只提供 `ctx.mcdev` 服务，工具 / 面板 / Java Agent
-  都在 `minecraft-dev-starter-agent`（见 `doc/策划-agent插件.md`）。
+- **数据导出（atlas 插件）在另一个工作区**：本仓库只提供 `ctx.mcdev` 服务，工具 / 面板 / Java Agent
+  都在 `minecraft-dev-atlas`（见 `doc/策划-atlas插件.md`）。

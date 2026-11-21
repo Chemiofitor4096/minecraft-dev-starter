@@ -1,4 +1,4 @@
-# 策划：agent 插件（minecraft-dev-starter-agent）
+# 策划：atlas 插件（minecraft-dev-atlas）
 
 配套文档：[拓展：MC 数据导出](./拓展-MC数据导出.md) 定义了 dump 格式、jar 契约与两包边界；
 **dump 的权威定义是 [dump-v1.schema.json](./schema/dump-v1.schema.json)**。
@@ -54,7 +54,7 @@ if (!caps.includes('launch')) throw error('SERVICE_VERSION_MISMATCH', '需要 mi
 ## 3. 包结构
 
 ```
-minecraft-dev-starter-agent/
+minecraft-dev-atlas/
   package.json            # dsh.bundle.patch → cordis.patch.yml；peerDependencies: minecraft-dev-starter ≥ 0.3
   cordis.patch.yml        # 一行：挂 host 入口 + client 入口
   src/index.js            # 宿主：inject: ['mcdev','tools']，注册两个工具，provide 缓存服务（可选）
@@ -66,20 +66,20 @@ minecraft-dev-starter-agent/
     build.gradle.kts      # 一个 fat jar，含骨架与各 adapter
     src/main/java/dev/mcdev/agent/…        # 骨架：premain/agentmain/参数/超时/序列化/写盘
     src/main/resources/adapters.properties # key = <loader>/<mappings>/<mcLine> → adapter 类名
-  assets/                 # 构建产物 mcdev-agent.jar 进 npm 包（files 里显式列出）
+  assets/                 # 构建产物 mcdev-atlas.jar 进 npm 包（files 里显式列出）
   test/                   # Node 侧测试（engine + jar 契约 + 工具）
   README.md / README.zh_CN.md / docs/DETAIL.md
 ```
 
-**jar 怎么进 npm 包**：`agent/build.gradle.kts` 产出 `build/libs/mcdev-agent.jar`，`prepack` 把它拷到
-`assets/mcdev-agent.jar`；`files` 里显式列出 `assets/`。发布机需要 JDK 21（只在这个包里，不牵连 starter）。
+**jar 怎么进 npm 包**：`agent/build.gradle.kts` 产出 `build/libs/mcdev-atlas.jar`，`prepack` 把它拷到
+`assets/mcdev-atlas.jar`；`files` 里显式列出 `assets/`。发布机需要 JDK 21（只在这个包里，不牵连 starter）。
 
 ---
 
 ## 4. Java 侧
 
 **骨架（loader 无关，零游戏类名）**：`premain` / `agentmain` → 解析参数 → 判断"我在游戏进程里吗"
-（不是就 `[mcdev-agent] inert` 后返回）→ 选 adapter → 等数据就绪 → 逐 section 取 → 写 tmp+rename →
+（不是就 `[mcdev-atlas] inert` 后返回）→ 选 adapter → 等数据就绪 → 逐 section 取 → 写 tmp+rename →
 按需 `stop` → 打标记。
 
 **adapter（映射知识的唯一容器）**：
@@ -174,7 +174,7 @@ public interface DataAdapter {
 
 | 风险 | 影响 | 对策 |
 |---|---|---|
-| 映射漂移（MC 小版本升级） | 某个 section 静默空 | adapter 表按 `mcLine` 分；无表即 `AGENT_UNSUPPORTED`；`warnings[]` 点名缺字段 |
+| 映射漂移（MC 小版本升级） | 某个 section 静默空 | adapter 表按 `mcLine` 分；无表即 `ATLAS_UNSUPPORTED`；`warnings[]` 点名缺字段 |
 | 服务端启动慢（30–60s） | 每次导出都等 | 缓存 + `refresh` 才重导；面板显示"导出中" |
 | `JAVA_TOOL_OPTIONS` 污染 daemon | 日志噪音、daemon 里空转 | `premain` 先判断；只打一行 `inert` |
 | 两个包版本错位 | 契约不符 | 启动时握手 `capabilities`；jar 版本 == npm 版本 |
