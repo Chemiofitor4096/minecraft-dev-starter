@@ -251,6 +251,10 @@ ctx.mcdevAgent = {
 
 ### 3.5 attach 模式：能做什么、不能做什么
 
+> **v1 不做。** 这是 M31 的内容，场景低频（用户已经手动开着客户端、又临时想看一眼）。
+> 接口先留口子：`capabilities` 里不含 `attach` 时，面板不显示入口、工具不提供该参数；
+> M29/M30 做完之后，这一节可以按需砍掉，不影响前面两级。
+
 先说两种模式的分工：
 
 | | `boot`（M29） | `attach`（M31） |
@@ -361,7 +365,7 @@ Agent 自己用 Gradle + 自己的 CI）。两边的唯一耦合是：`schema=1`
 |---|---|---|
 | M29 | Agent `boot` 骨架 + NeoForge/mojmap adapter + `mc_data_dump`（消费侧） | 真机 `C:\Projects\Test` 导出 item/block/tags/recipe 索引，条数与游戏内 `/give` 对得上 |
 | M30 | 缓存 + `mc_data_query` + 面板「数据」区块（只读表格 + 搜索） | 第二次调用 `cached: true` 且 < 100ms |
-| M31 | `attach` 模式 + Fabric/yarn adapter + 配方完整 JSON | attach 到手动启动的客户端能产出同格式 dump |
+| M31 | `attach` 模式 + Fabric/yarn adapter + 配方完整 JSON | attach 到手动启动的客户端能产出同格式 dump。**可选/低频**：M29/M30 交付后按需要再排，attach 可以先不做 |
 
 先 NeoForge 是因为本机验证工程就是 NeoForge 1.21.1；接口不因 loader 而变。
 
