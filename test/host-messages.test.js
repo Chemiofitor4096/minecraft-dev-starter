@@ -26,6 +26,8 @@ const CJK = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]
 
 /** 每条归因规则各给一行能命中的日志。 */
 const DIAGNOSIS_SAMPLES = [
+  ['Execution failed for task \':cacheVersionExtractedServer1.21.1\'.\n> java.util.zip.ZipException: zip END header not found', 'CACHE_TRUNCATED'],
+  ['Failed to download the file from: https://piston-meta.mojang.com/mc/game/version_manifest.json', 'ASSET_DOWNLOAD_FAILED'],
   ['Failed to download the file: https://resources.download.minecraft.net/ce/cec25b0246d77e6f1dcef0d051ccb328ba39227a', 'ASSET_DOWNLOAD_FAILED'],
   ['Could not resolve net.fabricmc:fabric-loader', 'DEPENDENCY_UNRESOLVED'],
   ['java.lang.UnsupportedClassVersionError: Unsupported class file major version 65', 'JDK_VERSION_MISMATCH'],
@@ -104,8 +106,30 @@ test('每条归因规则都有中英两版 hint / suggestion', () => {
   }
 })
 
-test('英文模式下识别结果里零中文，中文模式下与 0.1.12 原文案一致', async () => {
-  const english = await detectProject(join(fixtures, 'fabric'), { jdks, lang: 'en' })
+test('真实日志：截断的 server.jar 报缓存损坏，而不是泛化的构建失败', () => {
+  // 取自 2026-11-21 的真机会话：`.gradle/caches/minecraft/versions/1.21.1/server.jar`
+  // 只有 30,146,560 / 51,627,615 字节（zip 头在、结尾目录没了）。
+  const log = [
+    '> Task :cacheVersionExecutableServer1.21.1 UP-TO-DATE',
+    '> Task :cacheVersionExtractedServer1.21.1 FAILED',
+    '',
+    'FAILURE: Build failed with an exception.',
+    '',
+    '* What went wrong:',
+    "Execution failed for task ':cacheVersionExtractedServer1.21.1'.",
+    '> java.util.zip.ZipException: zip END header not found',
+    '',
+    'BUILD FAILED in 1s',
+  ]
+  const china = diagnose(log, 'zh')
+  assert.equal(china?.code, 'CACHE_TRUNCATED')
+  // hint 要指向具体的东西，suggestion 要能照着做
+  assert.match(china.hint, /jar/)
+  assert.match(china.suggestion, /删掉/)
+  assert.equal(diagnose(log, 'en')?.code, 'CACHE_TRUNCATED')
+})
+
+test('英文模式下识别结果里零中文，中文模式下与 0.1.12 原文案一致', async () => {  const english = await detectProject(join(fixtures, 'fabric'), { jdks, lang: 'en' })
   for (const text of visibleText(english)) assertNoChinese(text, 'fabric 英文证据')
 
   const englishMulti = await detectProject(join(fixtures, 'forge'), { jdks, lang: 'en' })

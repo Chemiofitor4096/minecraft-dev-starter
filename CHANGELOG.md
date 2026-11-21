@@ -17,6 +17,16 @@ break installations that look unrelated.
   one-instance lock and verdict as the panel. `env` merges over the base environment but cannot replace
   the chosen `JAVA_HOME`; it is never written into the run record.
 
+### Fixed
+
+- A truncated cached jar now gets its own attribution (`CACHE_TRUNCATED`, "the zip has no
+  end-of-central-directory, delete the jar and re-download") instead of the generic
+  "Gradle build failed: scroll up to the first error". Version-manifest downloads
+  (`piston-meta.mojang.com`) also count as a download failure now.
+- A daemon target that crashes within the same second as its ready marker is reported as crashed
+  instead of running: launch waits now observe a 2-second window after ready and return the exit
+  record if the process died in it.
+
 ### Internal
 
 - Waiting for a run to reach `ready` / `exit` moved into `src/lib/launch/wait.js`, shared by the tools

@@ -40,6 +40,7 @@ const CRASH_MARKERS = [
   /No matching toolchains found/i,
   /Could not resolve/i,
   /Cannot download asset|Failed to download the file/i,
+  /zip END header not found/i,
   /BUILD FAILED/i,
 ]
 
@@ -50,9 +51,15 @@ const CRASH_MARKERS = [
  * 文案不写在这里：`hint` / `suggestion` 按 `code` 从词典取，读日志时决定语言。
  */
 const DIAGNOSES = [
+  // 缓存里的 jar 不完整：zip 头在、结尾目录没了。下载中断留下的半个文件，
+  // 报的是 "zip END header not found"，不是"不是 zip"，所以单列一条，别落到 Gradle 泛化里。
+  {
+    code: 'CACHE_TRUNCATED',
+    pattern: /zip END header not found|BadZipFile|File is not a zip file|Could not unzip|invalid END header/i,
+  },
   {
     code: 'ASSET_DOWNLOAD_FAILED',
-    pattern: /Cannot download asset|DownloadAssets[^\n]*FAILED|resources\.download\.minecraft\.net|Failed to download the file/i,
+    pattern: /Cannot download asset|DownloadAssets[^\n]*FAILED|resources\.download\.minecraft\.net|piston-meta\.mojang\.com|launcher_metadata\.json|Failed to download the file/i,
   },
   { code: 'DEPENDENCY_UNRESOLVED', pattern: /Could not resolve|Could not find [\w.:-]+:/ },
   { code: 'JDK_VERSION_MISMATCH', pattern: /Unsupported class file major version/ },

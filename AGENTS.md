@@ -47,7 +47,7 @@ src/lib/              领域层。跨层依赖单向：detect / launch 可以用
     xml.js            极简 XML 解析（零依赖，只服务 .idea）
   launch/             把一个工程跑起来并拿到结论
     launches.js       启动服务：spawn、就绪判定、日志环形缓冲、停止、状态对账
-    wait.js           等实例落到 ready / exit（工具与服务共用同一份语义）
+    wait.js           等实例落到 ready / exit（就绪后还有 2 秒观察窗，抓"起来就崩"）
     assets.js         首次运行检查：Minecraft 资源没下过时给一个提示码
     verify.js         目标分类（daemon / oneshot）与一次性任务的裁决（verdict）
     argv.js           gradlew 命令行构造（Gradle 选项在任务名之前、Windows 引号规则）
@@ -70,7 +70,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs / check-release.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 249 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 259 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -135,6 +135,8 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 用户生成的工程在 Linux/macOS 上 `./gradlew` 报 `bad interpreter` | Windows 的 `core.autocrlf` 把模板里的 `gradlew` 转成 CRLF，生成时又被原样复制 | `.gitattributes` 里 `templates/** text eol=lf`、`templates/**/*.bat text eol=crlf`、`*.jar binary`；改完用 `git check-attr eol` 核对 |
 | 传了 `-Dfoo=bar` 却报 `Task '.foo=bar' not found` | Gradle 的选项必须写在任务名**之前**；写在后面会被当成任务选项 | `argv.js` 里选项排在 `<taskPath>` 前面；`test/argv.test.js` 钉住这个顺序 |
 | `mc_launch` 说"工程不在当前工作区内"，但 `mc_projects` 同一个路径识别正常 | 两个原因叠加：`launch.start` 里 `const options = …`（Gradle 选项数组）**遮住了** `createApi` 的 `options`，`options.resolveRoots` 永远是 undefined，工作区校验退回"最近一个会话的 cwd"；工具也没把调用方自己的会话 cwd 传下去 | 局部变量改名 `gradleArgs`；`mc_launch` 带上 `workspace`（调用方 cwd）；错误里列出允许的工作区；回归见 `test/api.test.js`、`test/tools.test.js` |
+| 构建失败报 `java.util.zip.ZipException: zip END header not found` | 缓存里的 jar 被截断（下载中断留下的半个文件）：zip 头还在、结尾目录没了，所以不是"不是 zip"而是"没有结尾"。真机实测 `server.jar` 30,146,560 / 51,627,615 字节 | 删掉 `<工程>/.gradle/caches/minecraft/versions/<版本>/<jar>` 与 `~/.gradle/caches/ng_execute/` 里的同名坏 jar，重跑；归因已进 `CACHE_TRUNCATED` |
+| 工具报"运行中"，两秒后模型再查发现已崩 | 就绪标记和崩溃在同一秒（`Backend library: LWJGL` 后六行就是崩溃报告） | `waitForLaunch` 在 `ready` 后观察 2 秒（`READY_GRACE_MS`），期间退出就返回退出记录；别把这段延迟当成 bug |
 
 其他约定：
 
@@ -623,11 +625,34 @@ P1 的三件事一起做，共同的判断是：**"当前是什么"这类环境�
   resolveJava 的 selected→major 映射；`test/api.test.js` 钉住 `env` 从 api 到启动服务。
 - 249 个测试。客户端与面板不受影响（服务只给宿主插件用）。
 
+### M30 真机日志驱动的两处修正（2026-11-21）
+
+用户回放了一个真实会话（`C:\Projects\Test`，NeoForge 1.21.1，同一个 `c89b04ad` 会话的后半段）：
+`mc_mod_init` 建工程、`mc_set_group` 改包名、`mc_launch` 起 `runServer` 都正常，但客户端连着四次起不来，
+模型只能自己翻日志、手跑 `gradlew`、比对 sha1 与文件大小。
+
+- **根因不在插件**：`<工程>/.gradle/caches/minecraft/versions/1.21.1/server.jar` 只有
+  30,146,560 / 51,627,615 字节（sha1 `58b6861c…` vs 期望 `59353fb4…`）——zip 头在、结尾目录没了，
+  所以报的是 `zip END header not found`（不是"不是 zip"），卡在 `:cacheVersionExtractedServer1.21.1`。
+  同一条坏 jar 在 `~/.gradle/caches/ng_execute/` 里还存了一份。
+- **归因补一条 `CACHE_TRUNCATED`**：以前落到 `GRADLE_BUILD_FAILED`（"往上翻第一条 error"），
+  模型得自己从头找。现在直接说"缓存里的 jar 不完整，删掉重下"。顺手把
+  `piston-meta.mojang.com` / `launcher_metadata.json` 并进下载失败规则（那次第二个失败是版本清单抖动），
+  `CRASH_MARKERS` 也加上 zip 那条——截断不能被当成正常退出。
+- **ready 后的 2 秒观察窗**：`launch-44` 的就绪标记（`Backend library: LWJGL`，日志第 97 行）与崩溃报告
+  （第 103 行）**在同一秒**。工具如实报"运行中"，调用方两秒后再查才发现已崩，白多一轮。
+  现在 `waitForLaunch` 在 `until: 'ready'` 且状态是 `running` 时多观察 `READY_GRACE_MS`（2s）：
+  期间退出就返回那份退出记录；`until: 'exit'` 不受影响，已经退出的也不多等。
+- 259 个测试；`test/wait.test.js` 钉住观察窗四条路径（起来就崩 / 一直跑 / 已退出不等 / exit 不走窗口），
+  `test/host-messages.test.js` 用真实日志片段钉住 `CACHE_TRUNCATED`，并给全部归因规则各加了一条样本。
+- 顺带确认：会话 T3 那次「工程不在当前工作区内」是 0.2.0 的老 bug（错误里没有工作区列表），
+  0.2.1 的修法在真机上确实生效了。
+
 ## 架构边界（2026-11-21 复核）
 
 量过的数字（行数）：`detect/detect.js` 826、`client/views/DetailTab.js` 732、`detect/idea.js` 708、
-`launch/launches.js` 540、`lib/api.js` 359、`lib/service.js` 111、`tools/` 11 个文件共 1054
-（最大 `mc_project_detail.js` 242）。
+`launch/launches.js` 545、`lib/api.js` 359、`lib/service.js` 111、`launch/wait.js` 51、
+`tools/` 11 个文件共 1054（最大 `mc_project_detail.js` 242）。
 
 - **边界成立**：客户端只 import `client/lib`；`tools/` 通过 `deps.api` 拿服务，不 import `api.js`；
   领域层（detect / launch）不 import 门面；`service.js` 只依赖 `api`（门面）与 `launch/wait.js`，
@@ -678,6 +703,8 @@ P1 的三件事一起做，共同的判断是：**"当前是什么"这类环境�
   工具按步挂载（非 MC 工作区不再付 1k token）。71 个文件，757 KiB。
 - `0.2.1` → M26：修 `mc_launch` 把真实工程判成"不在工作区内"（变量遮蔽让"任一活跃会话"的放宽从未生效），
   工具改为把调用方会话 cwd 传给宿主，相对 `root` 按会话 cwd 解析，越界错误列出允许的工作区。
+- `0.2.2` → M28：工作区解析收敛到 `resolveRoot(root, workspace, lang)`、语言改成调用参数（并发请求不再
+  互相改写）、`tools.js` 拆成一个工具一个文件、新增 `check:release` 发版守卫。81 个文件。
 
 发版注意：
 
