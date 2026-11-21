@@ -29,6 +29,9 @@ break installations that look unrelated.
 - A daemon target that crashes within the same second as its ready marker is reported as crashed
   instead of running: launch waits now observe a 2-second window after ready and return the exit
   record if the process died in it.
+- `projects.scan` / `ctx.mcdev.projects()` now treat `workspace` as the scan root when `root` is
+  omitted. It used to only resolve a relative `root` against it and fall back to the host's default
+  directory, so a caller passing just its own workspace silently scanned somewhere else.
 
 ### Internal
 

@@ -94,7 +94,10 @@ export function createApi(options) {
    * @returns {Promise<string>}
    */
   async function resolveRoot(requested, workspace, lang) {
-    const root = requested ?? (await options.resolveRoot())
+    // 三者依次退化：**调用方显式给的 root → 调用方自己的工作区 → 宿主默认（最近一个会话）**。
+    // `workspace` 就是"调用方自己的 cwd"，只给它的插件/工具本来想扫的就是自己的目录；
+    // 以前这里只把它当相对路径的基准，于是 { workspace } 会静默扫到宿主默认目录（atlas 踩过）。
+    const root = requested ?? (typeof workspace === 'string' && workspace !== '' ? workspace : await options.resolveRoot())
     if (root === undefined || root === '') {
       throw new Error(createTranslator(lang)('error.noWorkspace'))
     }

@@ -70,7 +70,7 @@ src/client/
 lib/client.js         构建产物（.gitignore 忽略；靠 package.json 的 files 打进 npm 包，运行时直接加载）
 scripts/              构建与发布：build-client.mjs / check-pack.mjs / check-release.mjs
 tools/                开发期辅助：inspect-project / scan-catalog / seed-versions / make-banner.py
-test/                 259 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
+test/                 261 个测试 + fixtures（真实工程形态的假仓库；fixtures-multi 是多模块聚合工程）
 doc/                  策划、调研与工具描述术语表（doc/tool-vocabulary.md）
 data/versions.json    只有两样：seed（抓不到上游时的离线兜底）与 verified（真跑通过的组合）
 templates/            脚手架模板，按 loader 分目录；占位符用 {{name}}（Gradle 自己用 ${...}）
@@ -136,6 +136,7 @@ node <npm>/@deepseek-ai/dsh/lib/bin.js --profile m0test --port 3499 --no-open
 | 传了 `-Dfoo=bar` 却报 `Task '.foo=bar' not found` | Gradle 的选项必须写在任务名**之前**；写在后面会被当成任务选项 | `argv.js` 里选项排在 `<taskPath>` 前面；`test/argv.test.js` 钉住这个顺序 |
 | `mc_launch` 说"工程不在当前工作区内"，但 `mc_projects` 同一个路径识别正常 | 两个原因叠加：`launch.start` 里 `const options = …`（Gradle 选项数组）**遮住了** `createApi` 的 `options`，`options.resolveRoots` 永远是 undefined，工作区校验退回"最近一个会话的 cwd"；工具也没把调用方自己的会话 cwd 传下去 | 局部变量改名 `gradleArgs`；`mc_launch` 带上 `workspace`（调用方 cwd）；错误里列出允许的工作区；回归见 `test/api.test.js`、`test/tools.test.js` |
 | 构建失败报 `java.util.zip.ZipException: zip END header not found` | 缓存里的 jar 被截断（下载中断留下的半个文件）：zip 头还在、结尾目录没了，所以不是"不是 zip"而是"没有结尾"。真机实测 `server.jar` 30,146,560 / 51,627,615 字节 | 删掉 `<工程>/.gradle/caches/minecraft/versions/<版本>/<jar>` 与 `~/.gradle/caches/ng_execute/` 里的同名坏 jar，重跑；归因已进 `CACHE_TRUNCATED` |
+| 只传 `{ workspace }` 调 `ctx.mcdev.projects()` / `projects.scan`，结果扫的是宿主默认目录 | `resolveRoot` 以前只把 `workspace` 当**相对 `root` 的基准**：`requested ?? resolveRoot()`，不传 `root` 就退回"最近一个会话" | 改成 `requested ?? workspace ?? resolveRoot()`：**调用方的 cwd 本身就是扫描根**。回归见 `test/api.test.js`（默认根指到另一个 fixture，断言扫出来的是 `workspace`） |
 | 工具报"运行中"，两秒后模型再查发现已崩 | 就绪标记和崩溃在同一秒（`Backend library: LWJGL` 后六行就是崩溃报告） | `waitForLaunch` 在 `ready` 后观察 2 秒（`READY_GRACE_MS`），期间退出就返回退出记录；别把这段延迟当成 bug |
 
 其他约定：

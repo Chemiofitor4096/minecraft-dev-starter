@@ -188,3 +188,25 @@ test('launch.start 把 env 透传给启动服务，且不写进返回记录', as
     await rm(dir, { recursive: true, force: true })
   }
 })
+test('只给 workspace 时它就是扫描根，不再退回宿主默认目录', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'mcdev-api-'))
+  try {
+    // 默认根指向另一个 fixture：如果 workspace 没被当成扫描根，扫出来的就是它
+    const api = createApi({
+      resolveRoot: async () => join(fixtures, 'forge'),
+      version: '0.0.0-test',
+      launchService: createLaunchService({ dir }),
+      jdkDir: dir,
+      listJdks: fakeListJdks,
+    })
+    const scanned = await api['projects.scan']({ workspace: fabricRoot })
+    assert.equal(scanned.root, fabricRoot)
+    assert.equal(scanned.projects[0]?.root, fabricRoot)
+
+    // 什么都不给才回落到宿主默认根
+    const fallback = await api['projects.scan']({})
+    assert.equal(fallback.root, join(fixtures, 'forge'))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
