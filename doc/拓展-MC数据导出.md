@@ -215,6 +215,77 @@ ctx.mcdevAgent = {
 
 ---
 
+### 3.4 查询接口与 token 预算
+
+**dump 永远不进上下文。** 先算一笔账（1.21.1 原版量级，模组会更多）：
+
+| 数据 | 条数 | JSON 体积 | 折合 token（约 4 字符/token） |
+|---|---|---|---|
+| item + block + entity_type + effect + enchantment + fluid | ~2700 | ~380 KB | ~95k |
+| 配方索引 | ~1200 | ~260 KB | ~65k |
+| 标签（item/block/fluid，含成员） | ~5600 成员 | ~200 KB | ~50k |
+| **合计** | | **~0.85–1 MB** | **~210k** |
+
+也就是说，**整份 dump 比整个上下文窗口还大两倍**。任何"把 dump 塞给模型/让模型自己 grep"的做法
+都会立刻爆掉。所以查询必须满足三条：
+
+1. **先摘要再钻取**。`kind: 'digest'` 返回按 `owner` 分组的一行一条：
+   `minecraft 1400 · coalcraft 12 · c 8`（约 250 token），模型据此决定看哪一段。
+2. **硬上限 + 分页**。`limit` 默认 50、上限 200；返回 `truncated` 与 `nextOffset`。
+   单行渲染成"id · owner · 关键属性"（约 60 字符），200 条 ≈ 3k token，默认 50 条 ≈ 750 token。
+3. **只读工具不启动进程**。`mc_data_query` 只读缓存文件；要新数据是 `mc_data_dump` 的事，
+   两者分开，模型不会为了查一条物品把服务端再起一遍。
+
+面板不受这条限制：它是本地文件 + 本地索引，浏览 2700 条物品不花一个模型 token。**同一个文件，
+人自由翻，模型只拿摘要与命中行。**
+
+分工也据此确定（回答"要不要给 agent 插件也提供查询工具"）：
+
+| 层 | 谁拥有 | 内容 |
+|---|---|---|
+| 查询**引擎** | Agent 包 | `indexDump(dump)` / `query(index, { kind, … })` / `digest(index)` 纯函数，零依赖 |
+| 查询**工具面** | 主包（本仓库） | `mc_data_query` 的 schema、描述、中文渲染、错误码、挂载条件 |
+
+工具面必须只有一处：工具的 schema 与描述是模型契约（要过 M25 那套 token 预算），
+不能两个包各注册一套。Agent 包只提供引擎，主包只做tool，两边都不复制查询逻辑。
+
+### 3.5 attach 模式：能做什么、不能做什么
+
+先说两种模式的分工：
+
+| | `boot`（M29） | `attach`（M31） |
+|---|---|---|
+| 谁启动 JVM | 我们（`mc_launch` spawn 的 Gradle 任务） | **用户**（IDEA、面板、命令行，早就在跑了） |
+| `-javaagent` 怎么进 | 启动时就在 argv 里（经 `JAVA_TOOL_OPTIONS`） | 事后注入（下面讲） |
+| 确定性 | 高：从 `premain` 到退出全程可见 | 中：只在 `agentmain` 那一刻起可见 |
+| 代价 | 必须新起一个服务端（~30–60s） | 无需重启，但目标必须是**开发期、未混淆**的运行时 |
+| 用在哪 | 默认路径、可复现的导出 | 用户已经在客户端里、临时想看一眼 |
+
+**attach 的机制**（JDK Attach API，Arthas / JFR / JProfiler 都走这条路）：
+
+1. 宿主发现目标进程的 `pid`；
+2. 跑 `java -jar mcdev-agent.jar attach --pid <pid> --out <dump> --sections …`；
+3. 这个小程序（不是 Agent）调用 `VirtualMachine.attach("<pid>")` → `loadAgent(jarPath, options)`；
+4. 目标 JVM 载入 jar 里的 `Agent-Class`，调用 `agentmain(args, inst)`；
+5. `agentmain` 里做的和 `premain` 一样：等数据就绪 → 序列化 → 写盘 → 回复。
+
+`attach` 模式必须遵守的约束：
+
+- **同 JDK 大版本**：Attach API 要求发起方与目标的 JVM 兼容（一般同版本最稳），所以要按工程
+  实际使用的 JDK 去起那个小程序（我们有 `jdks.js`，已经知道每个工程用哪个）。
+- **JDK 21 起动态加载有告警**：JEP 451 之后 attach 加载 Agent 会打警告，未来版本默认关闭；
+  需要时给目标加 `-XX:+EnableDynamicAgentLoading`——而"给目标加参数"又要求重启它，于是
+  attach 的价值就没了。所以 **attach 只当兜底**，不作为默认路径。
+- **只支持开发期运行**：adapter 的类名表是按 mojmap / yarn 写的；对着混淆过的生产客户端 attach
+  只会拿到 `AGENT_UNSUPPORTED`，不猜。
+- **客户端上配方可能不全**：注册表在 bootstrap 之后就有，但配方/标签是数据包加载后才齐的——
+  客户端停在主菜单时 `recipes` 基本是空的。**attach 到客户端时默认只导 `registries`**，
+  要配方得先进世界，或 `sections` 显式要求并接受"可能为空"。
+- **绝不默认停游戏**：`stop` 在 attach 模式下默认 `false`——把用户正在玩的客户端关掉不是我们的权力。
+- **谁来选 pid**：这是 D20。建议：面板列出候选 JVM（命令行里含 `devlaunchinjector` / `neoforge`
+  / 工程 `run/` 目录的 java 进程）让**人**点选；模型侧只能读这份列表，不能自己对任意 pid 发起 attach。
+  这条不是洁癖：attach 等于往别人的进程里注入代码，模型不该有这种能力。
+
 ## 4. v1 导什么（D17：先索引）
 
 | 段落 | v1 | 说明 |
@@ -235,6 +306,25 @@ ctx.mcdevAgent = {
   不够再加内容哈希作为开关）。
 - `mc_data_dump` 默认 `refresh: false`：`sourceHash` 相同直接返回缓存并标 `cached: true`
   （< 100ms）；不同就重导。
+
+### 5.1 要不要上数据库：不（决策 D21）
+
+同一份数据 0.85–1 MB，查询只有四类：按 id 子串、按 `owner`、按 tag 成员、按配方产物。
+这些用"一个 JSON + 内存索引"就够：
+
+| 方案 | 结论 | 理由 |
+|---|---|---|
+| SQLite（`better-sqlite3`） | ✗ | 原生模块，要跨平台预编译；主包的 `dependencies: []` 是硬卖的（见 SECURITY），装不上就整包挂 |
+| `node:sqlite` | ✗ | Node 22.5+ 才有且仍是实验特性；本插件要求 Node ≥ 20 |
+| DuckDB / LevelDB | ✗ | 更重的依赖，收益为零 |
+| **JSON + 内存索引** | ✓ | 解析 1 MB 约 30–50 ms；`Map<id, entry>` / `Map<tag, Set>` / `Map<result, recipes[]>` 建成后查询是 O(1)–O(n) 过滤，常驻内存几 MB |
+
+而且数据库会**多一个写方**：agent 包要么也写 SQLite（耦合两个包的文件格式），要么主包负责导入
+（多一步、没有收益）。dump 是"某个 sourceHash 的快照"，不是可变库，天然适合一个文件。
+
+只有一种情况值得回头再议：将来要做**跨版本 / 跨时间的 diff 历史**（这次导出 vs 上周），
+那时用**追加式**的 sidecar 文件（`history/<hash>.json`）也比数据库简单；真要 SQL，也放在 agent 包
+那一侧（它有 JDK，不怕原生依赖），主包不引入。
 
 ---
 
@@ -286,4 +376,7 @@ Agent 自己用 Gradle + 自己的 CI）。两边的唯一耦合是：`schema=1`
 | D17 | v1 配方范围 | **先索引**（id/type/result/ingredients），完整 JSON 留 M31 |
 | D18 | 运行环境 | 默认 headless 服务端；客户端只在 `attach` 时用 |
 | D19 | 数据落点 | 插件 state 目录（按 profile + sourceHash） |
-| D20 | 待定 | attach 的目标怎么选：按 pid、按工程 run 目录、还是列 JVM 让用户挑？建议 M31 再定 |
+| D20 | attach 的目标怎么选 | **面板列候选 JVM + 人点选**；模型只能读列表，不能对任意 pid 发起 attach（M31 落） |
+| D21 | 要不要数据库 | **不要**：JSON + 内存索引；1 MB、30–50ms、零依赖（见 §5.1） |
+| D22 | 查询工具归属 | 引擎在 agent 包（纯函数），工具面只在主包（一份 schema/描述/渲染，见 §3.4） |
+| D23 | 待定 | 要不要做跨版本 diff 历史？建议先不做，真的需要时用追加式 sidecar，不引入数据库 |
